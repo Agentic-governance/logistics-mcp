@@ -340,6 +340,7 @@ svg.world-map { width: 100%; height: 100%; }
   <div class="meta">
     v1.5.0 &middot; 40 countries &middot; 22 dim<br>
     <span id="update-time">Updated: --</span>
+    <span id="dataSource" style="margin-left:6px;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;background:rgba(139,143,168,0.2);color:#8b8fa8">--</span>
   </div>
 </div>
 
@@ -420,8 +421,8 @@ const iso3ToIso2 = {
   USA:"US",UZB:"UZ",VEN:"VE",VNM:"VN",YEM:"YE",ZAF:"ZA",ZMB:"ZM",ZWE:"ZW"
 };
 
-// 40カ国リスクデータ
-const RISK_DATA = {
+// 40カ国リスクデータ（フォールバック）
+const RISK_DATA_FALLBACK = {
   JPN: { name:"Japan", iso2:"JP", lat:36.2, lon:139.7, overall:18,
     sanctions:0, conflict:2, disaster:45, maritime:15, political:8, trade:12,
     economic:10, cyber_risk:22, climate_risk:35, geo_risk:5, health:8,
@@ -623,6 +624,8 @@ const RISK_DATA = {
     humanitarian:45, weather:15, compliance:28, food_security:48, labor:42,
     port_congestion:45, aviation:35, energy:55, currency:80 },
 };
+// APIデータで上書き可能なリスクデータ
+let RISK_DATA = {...RISK_DATA_FALLBACK};
 
 // ===== 海路データ（チョークポイント情報付き） =====
 const SEA_ROUTES = [
@@ -693,8 +696,8 @@ const AIR_ROUTES = [
   {id:"tyo-dxb", name:"東京→ドバイ(シベリア回避)", points:[[139.77,35.65],[100.0,20.0],[103.82,1.35],[55.27,25.2]], risk:30, type:"air", chokepoints:[], alternative:null},
 ];
 
-// ===== チョークポイントデータ =====
-const CHOKEPOINTS = [
+// ===== チョークポイントデータ（フォールバック） =====
+const CHOKEPOINTS_FALLBACK = [
   {id:"bab", name:"バベルマンデブ", lat:12.58, lon:43.47, risk:82, status:"フーシ派攻撃", color:"#ff4d4d"},
   {id:"suez", name:"スエズ運河", lat:30.42, lon:32.35, risk:67, status:"通航制限", color:"#ffa94d"},
   {id:"hormuz", name:"ホルムズ海峡", lat:26.57, lon:56.25, risk:74, status:"イラン緊張", color:"#ffa94d"},
@@ -703,6 +706,7 @@ const CHOKEPOINTS = [
   {id:"taiwan", name:"台湾海峡", lat:24.5, lon:119.5, risk:55, status:"監視強化", color:"#74c0fc"},
   {id:"cape", name:"喜望峰", lat:-34.35, lon:18.47, risk:28, status:"迂回航路利用増", color:"#51cf66"},
 ];
+let CHOKEPOINTS = [...CHOKEPOINTS_FALLBACK];
 
 // 次元表示名
 const DIMENSION_LABELS = {
@@ -1291,20 +1295,81 @@ function zoomToChokepoint(lat, lon) {
 // ============================================================
 async function loadRealData() {
   try {
-    const resp = await fetch('/api/v1/dashboard/global');
-    if (resp.ok) {
-      const data = await resp.json();
-      console.log('API data loaded:', data);
-      document.getElementById("update-time").textContent =
-        `Updated: ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC (Live)`;
+    const resp = await fetch('/api/v1/dashboard/global-risk');
+    if (!resp.ok) throw new Error('API error ' + resp.status);
+    const json = await resp.json();
+
+    // APIデータでRISK_DATAを上書き（フォールバックをベースに）
+    RISK_DATA = {...RISK_DATA_FALLBACK};
+    for (const c of json.countries || []) {
+      const iso3 = c.iso3;
+      if (!iso3) continue;
+      // 既存エントリがあればマージ、なければ新規作成
+      if (RISK_DATA[iso3]) {
+        RISK_DATA[iso3].overall = Math.round(c.overall_score || RISK_DATA[iso3].overall || 0);
+        const dims = c.dimensions || {};
+        for (const [k, v] of Object.entries(dims)) {
+          RISK_DATA[iso3][k] = Math.round(v || 0);
+        }
+      } else {
+        const entry = {
+          name: c.name || iso3,
+          iso2: c.iso2 || '',
+          lat: 0, lon: 0,
+          overall: Math.round(c.overall_score || 0),
+        };
+        const dims = c.dimensions || {};
+        for (const [k, v] of Object.entries(dims)) {
+          entry[k] = Math.round(v || 0);
+        }
+        RISK_DATA[iso3] = entry;
+      }
+    }
+
+    console.log('API: ' + Object.keys(RISK_DATA).length + ' countries loaded');
+    document.getElementById("update-time").textContent =
+      'Updated: ' + new Date().toISOString().slice(0, 16).replace("T", " ") + ' UTC';
+    const dsEl = document.getElementById("dataSource");
+    dsEl.textContent = 'LIVE';
+    dsEl.style.background = 'rgba(81,207,102,0.2)';
+    dsEl.style.color = '#51cf66';
+  } catch(e) {
+    console.warn('API fallback:', e.message);
+    RISK_DATA = {...RISK_DATA_FALLBACK};
+    document.getElementById("update-time").textContent =
+      'Updated: 2026-04-02 (Static Data)';
+    const dsEl = document.getElementById("dataSource");
+    dsEl.textContent = 'STATIC';
+    dsEl.style.background = 'rgba(255,169,77,0.2)';
+    dsEl.style.color = '#ffa94d';
+  }
+
+  // 地図を再描画
+  updateMap();
+}
+
+// チョークポイントもAPI取得
+async function loadChokepoints() {
+  try {
+    const resp = await fetch('/api/v1/dashboard/chokepoints');
+    if (!resp.ok) throw new Error('CP API error ' + resp.status);
+    const json = await resp.json();
+    CHOKEPOINTS.length = 0;
+    for (const cp of json.chokepoints || []) {
+      CHOKEPOINTS.push(cp);
     }
   } catch(e) {
-    console.log('API unavailable, using static data');
-    document.getElementById("update-time").textContent =
-      `Updated: 2026-04-02 (Static Data)`;
+    console.warn('Chokepoint API fallback:', e.message);
+    CHOKEPOINTS.length = 0;
+    CHOKEPOINTS.push(...CHOKEPOINTS_FALLBACK);
   }
+  drawChokepoints();
+  buildChokepointPanel();
 }
-loadRealData();
+
+// 初回ロード + 30分間隔の自動更新
+loadRealData().then(() => loadChokepoints());
+setInterval(() => { loadRealData().then(() => loadChokepoints()); }, 30 * 60 * 1000);
 
 // ウィンドウリサイズ対応
 window.addEventListener("resize", () => {

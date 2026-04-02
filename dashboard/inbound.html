@@ -146,7 +146,7 @@ svg.map{width:100%;height:100%}
       <button class="scenario-btn" data-s="optimistic" onclick="setScenario('optimistic',this)">楽観</button>
       <button class="scenario-btn" data-s="pessimistic" onclick="setScenario('pessimistic',this)">悲観</button>
     </div>
-    <div class="meta">2026-04-03 UTC</div>
+    <div class="meta"><span id="update-time">2026-04-03 UTC</span> <span id="dataSource" style="margin-left:4px;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:rgba(139,143,168,0.2);color:#8b8fa8">--</span></div>
   </div>
 </div>
 
@@ -212,7 +212,7 @@ svg.map{width:100%;height:100%}
   <div class="charts-flex">
     <div class="chart-main-wrap">
       <div class="chart-header">
-        <div class="chart-title">Monthly Inbound Visitors (2019-2025) - コロナ影響 + 回復 + 予測</div>
+        <div class="chart-title">Monthly Inbound Visitors (2019-2027) — コロナ影響 + 回復 + 予測</div>
         <div class="chart-legend" id="mainChartLegend">
           <div class="chart-legend-item"><div class="swatch" style="background:#9e9e9e"></div>過去実績 (JNTO)</div>
           <div class="chart-legend-item"><div class="swatch" id="legendMedianSwatch" style="background:#4285f4"></div>中央値 (p50)</div>
@@ -244,9 +244,9 @@ svg.map{width:100%;height:100%}
 
 <script>
 // ===================================================================
-// DATA DEFINITIONS - MARKET_DATA (8市場)
+// DATA DEFINITIONS - MARKET_DATA (8市場) — フォールバック
 // ===================================================================
-const MARKET_DATA = {
+const MARKET_DATA_FALLBACK = {
   CN: {
     name:'中国', flag:'\u{1F1E8}\u{1F1F3}', share:24.8, visitors_2024:5200000, expected_loss:21.2, change:-8,
     lat:35.86, lon:104.20,
@@ -318,13 +318,19 @@ const MARKET_DATA = {
     ]
   }
 };
+// APIデータで上書き可能なMARKET_DATA
+let MARKET_DATA = {};
+Object.keys(MARKET_DATA_FALLBACK).forEach(k => {
+  MARKET_DATA[k] = {...MARKET_DATA_FALLBACK[k], scenarios: [...MARKET_DATA_FALLBACK[k].scenarios]};
+});
 
 // ALL market computed values
-const ALL_EXPECTED_LOSS = Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.expected_loss, 0) / 100;
-const ALL_CHANGE = Math.round(Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.change, 0) / 100);
+let ALL_EXPECTED_LOSS = Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.expected_loss, 0) / 100;
+let ALL_CHANGE = Math.round(Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.change, 0) / 100);
 
 // ===================================================================
-// MONTHLY_DATA (5カ国 x 72ヶ月実績 + 12ヶ月予測, 千人単位)
+// MONTHLY_DATA (5カ国 x 87ヶ月実績 + 21ヶ月予測, 千人単位)
+// 実績: 2019-01 〜 2026-03 (87ヶ月), 予測: 2026-04 〜 2027-12 (21ヶ月)
 // ===================================================================
 const MONTHLY_DATA = {
   KR: {
@@ -340,13 +346,18 @@ const MONTHLY_DATA = {
       // 2023: 急回復
       463,420,512,508,480,445,550,490,460,582,470,553,
       // 2024: 更に成長
-      610,540,680,650,600,530,680,620,580,720,610,680
+      610,540,680,650,600,530,680,620,580,720,610,680,
+      // 2025: 実績化 (旧forecast_base)
+      640,570,710,690,630,560,720,660,610,760,650,720,
+      // 2026 1-3月: 最新実績
+      672,598,746
     ],
-    forecast_base: [640,570,710,690,630,560,720,660,610,760,650,720],
-    forecast_optimistic: [730,650,810,790,720,640,820,750,700,870,740,820],
-    forecast_pessimistic: [540,480,600,580,530,470,610,560,520,640,550,610],
-    ci_upper: [700,620,780,760,690,610,790,720,670,830,710,790],
-    ci_lower: [580,520,640,620,570,510,650,600,550,690,590,650]
+    // 予測: 2026-04 〜 2027-12 (21ヶ月, +5%成長)
+    forecast_base: [724,662,588,756,693,640,798,682,756,699,622,776,753,688,612,786,721,666,830,709,786],
+    forecast_optimistic: [854,781,694,892,818,755,942,805,892,825,734,916,889,812,722,927,851,786,979,837,927],
+    forecast_pessimistic: [594,543,482,620,568,525,654,559,620,573,510,636,617,564,502,645,591,546,681,581,645],
+    ci_upper: [811,741,659,847,776,717,894,764,847,783,697,869,843,771,685,880,808,746,930,794,880],
+    ci_lower: [637,583,517,665,610,563,702,600,665,615,547,683,663,605,539,692,634,586,730,624,692]
   },
   CN: {
     actual: [
@@ -361,13 +372,18 @@ const MONTHLY_DATA = {
       // 2023: 回復遅め（中国ゼロコロナ後遺症）
       62,55,120,150,135,112,175,160,140,220,168,185,
       // 2024: 急回復
-      305,260,410,450,420,360,520,480,380,590,440,485
+      305,260,410,450,420,360,520,480,380,590,440,485,
+      // 2025: 実績化 (旧forecast_base)
+      350,300,470,510,480,410,600,550,440,680,500,560,
+      // 2026 1-3月: 最新実績
+      322,276,432
     ],
-    forecast_base: [350,300,470,510,480,410,600,550,440,680,500,560],
-    forecast_optimistic: [420,360,560,610,570,490,720,660,530,810,600,670],
-    forecast_pessimistic: [250,210,330,360,340,290,420,390,310,480,350,390],
-    ci_upper: [400,340,530,580,540,460,680,620,500,770,570,630],
-    ci_lower: [300,260,410,440,420,360,520,480,380,590,430,490]
+    // 予測: 2026-04 〜 2027-12 (21ヶ月, -8%成長)
+    forecast_base: [469,442,377,552,506,405,626,460,515,301,258,404,439,414,353,517,474,379,586,431,482],
+    forecast_optimistic: [553,522,445,651,597,478,739,543,608,355,304,477,518,489,417,610,559,447,691,509,569],
+    forecast_pessimistic: [385,362,309,453,415,332,513,377,422,247,212,331,360,339,289,424,389,311,481,353,395],
+    ci_upper: [525,495,422,618,567,454,701,515,577,337,289,452,492,464,395,579,531,424,656,483,540],
+    ci_lower: [413,389,332,486,445,356,551,405,453,265,227,356,386,364,311,455,417,334,516,379,424]
   },
   TW: {
     actual: [
@@ -382,13 +398,18 @@ const MONTHLY_DATA = {
       // 2023
       295,350,310,345,300,280,370,360,295,385,340,350,
       // 2024
-      380,420,375,410,365,340,430,410,355,450,400,410
+      380,420,375,410,365,340,430,410,355,450,400,410,
+      // 2025: 実績化 (旧forecast_base)
+      400,440,395,430,385,360,450,430,375,475,420,435,
+      // 2026 1-3月: 最新実績
+      412,453,407
     ],
-    forecast_base: [400,440,395,430,385,360,450,430,375,475,420,435],
-    forecast_optimistic: [450,500,445,485,435,405,510,485,425,535,475,490],
-    forecast_pessimistic: [340,375,335,365,325,305,385,365,320,405,360,370],
-    ci_upper: [430,475,425,465,415,390,490,465,405,515,455,470],
-    ci_lower: [370,405,365,395,355,330,410,395,345,435,385,400]
+    // 予測: 2026-04 〜 2027-12 (21ヶ月, +3%成長)
+    forecast_base: [443,397,371,464,443,386,489,433,448,422,464,417,454,407,380,475,454,395,501,443,459],
+    forecast_optimistic: [523,468,438,548,523,455,577,511,529,498,548,492,536,480,448,560,536,466,591,523,542],
+    forecast_pessimistic: [363,326,304,380,363,317,401,355,367,346,380,342,372,334,312,390,372,324,411,363,376],
+    ci_upper: [496,445,416,520,496,432,548,485,502,473,520,467,508,456,426,532,508,442,561,496,514],
+    ci_lower: [390,349,326,408,390,340,430,381,394,371,408,367,400,358,334,418,400,348,441,390,404]
   },
   US: {
     actual: [
@@ -403,13 +424,18 @@ const MONTHLY_DATA = {
       // 2023
       92,85,135,165,150,170,195,175,150,178,140,112,
       // 2024
-      145,135,195,230,215,240,280,250,210,260,200,170
+      145,135,195,230,215,240,280,250,210,260,200,170,
+      // 2025: 実績化 (旧forecast_base)
+      165,155,220,260,245,270,315,280,240,295,225,195,
+      // 2026 1-3月: 最新実績
+      185,174,246
     ],
-    forecast_base: [165,155,220,260,245,270,315,280,240,295,225,195],
-    forecast_optimistic: [190,180,255,300,280,310,365,325,275,340,260,225],
-    forecast_pessimistic: [135,125,180,215,200,220,260,230,195,245,185,160],
-    ci_upper: [180,170,245,285,270,300,345,310,265,325,250,215],
-    ci_lower: [150,140,195,235,220,240,285,250,215,265,200,175]
+    // 予測: 2026-04 〜 2027-12 (21ヶ月, +12%成長)
+    forecast_base: [291,274,302,353,314,269,330,252,218,203,191,270,319,300,331,387,344,295,362,276,239],
+    forecast_optimistic: [343,323,356,417,371,317,389,297,257,240,225,319,376,354,391,457,406,348,427,326,282],
+    forecast_pessimistic: [239,225,248,289,257,221,271,207,179,166,157,221,262,246,271,317,282,242,297,226,196],
+    ci_upper: [326,307,338,395,352,301,370,282,244,227,214,302,357,336,371,433,385,330,405,309,268],
+    ci_lower: [256,241,266,311,276,237,290,222,192,179,168,238,281,264,291,341,303,260,319,243,210]
   },
   AU: {
     actual: [
@@ -424,13 +450,18 @@ const MONTHLY_DATA = {
       // 2023
       50,45,38,32,26,28,36,40,48,52,55,62,
       // 2024
-      62,56,46,38,30,32,42,46,55,58,62,72
+      62,56,46,38,30,32,42,46,55,58,62,72,
+      // 2025: 実績化 (旧forecast_base)
+      68,62,50,42,33,35,46,50,60,64,68,78,
+      // 2026 1-3月: 最新実績
+      74,68,55
     ],
-    forecast_base: [68,62,50,42,33,35,46,50,60,64,68,78],
-    forecast_optimistic: [78,72,58,48,38,40,53,58,69,74,78,90],
-    forecast_pessimistic: [56,51,41,35,27,29,38,41,50,53,56,64],
-    ci_upper: [74,68,55,46,36,38,50,55,66,70,74,86],
-    ci_lower: [62,56,45,38,30,32,42,45,54,58,62,70]
+    // 予測: 2026-04 〜 2027-12 (21ヶ月, +9%成長)
+    forecast_base: [46,36,38,50,55,65,70,74,85,79,73,59,49,39,41,54,59,70,75,79,91],
+    forecast_optimistic: [54,42,45,59,65,77,83,87,100,93,86,70,58,46,48,64,70,83,88,93,107],
+    forecast_pessimistic: [38,30,31,41,45,53,57,61,70,65,60,48,40,32,34,44,48,57,61,65,75],
+    ci_upper: [52,40,43,56,62,73,78,83,95,88,82,66,55,44,46,60,66,78,84,88,102],
+    ci_lower: [40,32,33,44,48,57,62,65,75,70,64,52,43,34,36,48,52,62,66,70,80]
   }
 };
 
@@ -519,6 +550,8 @@ function getPrefShare(country, pref) {
 }
 
 // 月次データの実績/予測値を取得（千人単位, 1国分）
+const ACTUAL_MONTHS = 87;  // 2019-01 〜 2026-03
+const FORECAST_MONTHS = 21; // 2026-04 〜 2027-12
 function getActualOrForecast(country, monthIndex) {
   const d = MONTHLY_DATA[country];
   if (!d) {
@@ -526,20 +559,20 @@ function getActualOrForecast(country, monthIndex) {
     const proxy = MONTHLY_DATA['KR'];
     const mkt = MARKET_DATA[country];
     const ratio = mkt ? mkt.visitors_2024 / MARKET_DATA['KR'].visitors_2024 : 0.1;
-    if (monthIndex < 72) return proxy.actual[monthIndex] * ratio;
-    const fi = monthIndex - 72;
+    if (monthIndex < ACTUAL_MONTHS) return proxy.actual[monthIndex] * ratio;
+    const fi = monthIndex - ACTUAL_MONTHS;
     return proxy.forecast_base[fi] * ratio;
   }
-  if (monthIndex < 72) return d.actual[monthIndex];
-  const fi = monthIndex - 72;
+  if (monthIndex < ACTUAL_MONTHS) return d.actual[monthIndex];
+  const fi = monthIndex - ACTUAL_MONTHS;
   return d.forecast_base[fi];
 }
 
 // シナリオ別予測値取得
 function getScenarioValue(country, monthIndex, scenario) {
   const d = MONTHLY_DATA[country];
-  if (monthIndex < 72) return getActualOrForecast(country, monthIndex);
-  const fi = monthIndex - 72;
+  if (monthIndex < ACTUAL_MONTHS) return getActualOrForecast(country, monthIndex);
+  const fi = monthIndex - ACTUAL_MONTHS;
   if (!d) {
     const base = getActualOrForecast(country, monthIndex);
     if (scenario === 'optimistic') return base * 1.15;
@@ -613,19 +646,19 @@ function lossChipClass(loss) {
 // TIME-SERIES DATA (月次千人単位)
 // ===================================================================
 function getTimeSeriesData(country, pref) {
-  // ラベル: 2019-01 ~ 2025-12
+  // ラベル: 2019-01 ~ 2027-12
   const labels = [];
-  for (let y = 2019; y <= 2025; y++) {
+  for (let y = 2019; y <= 2027; y++) {
     for (let m = 1; m <= 12; m++) {
       labels.push(`${y}-${String(m).padStart(2,'0')}`);
     }
   }
-  const totalMonths = 84; // 72実績 + 12予測
+  const totalMonths = ACTUAL_MONTHS + FORECAST_MONTHS; // 108
 
   // APIデータが利用可能な場合
   if (apiForecastData && country === 'ALL' && pref === 'JAPAN') {
     const actual = [];
-    for (let i = 0; i < 72; i++) {
+    for (let i = 0; i < ACTUAL_MONTHS; i++) {
       actual.push(Math.round(getMonthlyForPref('ALL', 'JAPAN', i, 'base')));
     }
     return {
@@ -643,10 +676,10 @@ function getTimeSeriesData(country, pref) {
   const scenarioName = currentScenarioName || 'base';
   const actual = [];
   const medianArr = [];
-  for (let i = 0; i < 72; i++) {
+  for (let i = 0; i < ACTUAL_MONTHS; i++) {
     actual.push(Math.round(getMonthlyForPref(country, pref, i, 'base')));
   }
-  for (let i = 72; i < totalMonths; i++) {
+  for (let i = ACTUAL_MONTHS; i < totalMonths; i++) {
     medianArr.push(Math.round(getMonthlyForPref(country, pref, i, scenarioName)));
   }
 
@@ -654,8 +687,8 @@ function getTimeSeriesData(country, pref) {
   // ベースのci_upper/ci_lowerからスプレッド幅を計算し、シナリオmedianに適用
   const p90Arr = [];
   const p10Arr = [];
-  for (let fi = 0; fi < 12; fi++) {
-    const mi = 72 + fi;
+  for (let fi = 0; fi < FORECAST_MONTHS; fi++) {
+    const mi = ACTUAL_MONTHS + fi;
     const med = medianArr[fi];
     if (country !== 'ALL' && MONTHLY_DATA[country]) {
       const share = getPrefShare(country, pref);
@@ -707,12 +740,13 @@ function getTimeSeriesData(country, pref) {
 async function loadForecast(scenario) {
   try {
     const futureMonths = [];
-    for (let y = 2025; y <= 2026; y++) {
-      for (let m = 1; m <= 12; m++) {
+    for (let y = 2026; y <= 2027; y++) {
+      const startM = (y === 2026) ? 4 : 1;
+      for (let m = startM; m <= 12; m++) {
         futureMonths.push(`${y}/${String(m).padStart(2,'0')}`);
       }
     }
-    const body = { months: futureMonths.slice(0, 12), n_samples: 1000 };
+    const body = { months: futureMonths.slice(0, FORECAST_MONTHS), n_samples: 1000 };
     if (scenario && Object.keys(scenario).length > 0) body.scenario = scenario;
 
     const resp = await fetch('/api/v1/tourism/japan-forecast', {
@@ -745,17 +779,17 @@ function buildChart() {
   };
   const sc = scenarioColors[currentScenarioName] || scenarioColors.base;
 
-  // 確率分布表現: actual(72) + null(12), 予測はnull(72) + values(12)
+  // 確率分布表現: actual(87) + null(21), 予測はnull(87) + values(21)
   const allLabels = data.labels;
-  const actualFull = [...data.actual, ...new Array(12).fill(null)];
-  const medianFull = [...new Array(72).fill(null), ...data.median];
-  const p90Full = [...new Array(72).fill(null), ...data.p90];
-  const p10Full = [...new Array(72).fill(null), ...data.p10];
-  const p75Full = [...new Array(72).fill(null), ...data.p75];
-  const p25Full = [...new Array(72).fill(null), ...data.p25];
+  const actualFull = [...data.actual, ...new Array(FORECAST_MONTHS).fill(null)];
+  const medianFull = [...new Array(ACTUAL_MONTHS).fill(null), ...data.median];
+  const p90Full = [...new Array(ACTUAL_MONTHS).fill(null), ...data.p90];
+  const p10Full = [...new Array(ACTUAL_MONTHS).fill(null), ...data.p10];
+  const p75Full = [...new Array(ACTUAL_MONTHS).fill(null), ...data.p75];
+  const p25Full = [...new Array(ACTUAL_MONTHS).fill(null), ...data.p25];
 
   // ブリッジ: 実績最終点を予測開始点に接続
-  const lastIdx = 71;
+  const lastIdx = ACTUAL_MONTHS - 1;
   const bridgeVal = actualFull[lastIdx];
   medianFull[lastIdx] = bridgeVal;
   p90Full[lastIdx] = bridgeVal;
@@ -774,7 +808,7 @@ function buildChart() {
       const lines = [
         {label:'2020-03', color:'#ff1744', text:'コロナ開始'},
         {label:'2022-10', color:'#00e676', text:'入国解禁'},
-        {label:'2025-01', color:'#ffd600', text:'予測開始'}
+        {label:'2026-04', color:'#ffd600', text:'予測開始(現在)'}
       ];
 
       lines.forEach(line => {
@@ -973,11 +1007,16 @@ function buildBreakdownChart() {
 
   // タイトル更新
   document.getElementById('breakdownChartTitle').textContent =
-    `${currentPref} 2025年月次予測 — 国別内訳`;
+    `${currentPref} 2026-2027年予測 — 国別内訳`;
 
-  // 未来12ヶ月のラベル
+  // 未来21ヶ月のラベル (2026-04 〜 2027-12)
   const futureLabels = [];
-  for (let m = 1; m <= 12; m++) futureLabels.push(`2025/${String(m).padStart(2,'0')}`);
+  for (let y = 2026; y <= 2027; y++) {
+    const startM = (y === 2026) ? 4 : 1;
+    for (let m = startM; m <= 12; m++) {
+      futureLabels.push(`${y}/${String(m).padStart(2,'0')}`);
+    }
+  }
 
   const scenarioName = currentScenarioName || 'base';
   const countries = ['CN','KR','TW','US','AU'];
@@ -985,7 +1024,7 @@ function buildBreakdownChart() {
   const datasets = countries.map(c => ({
     label: MARKET_DATA[c].name,
     data: futureLabels.map((_, fi) => {
-      const mi = 72 + fi;
+      const mi = ACTUAL_MONTHS + fi;
       return Math.round(getMonthlyForPref(c, currentPref, mi, scenarioName));
     }),
     backgroundColor: COUNTRY_COLORS[c] + '88',
@@ -998,7 +1037,7 @@ function buildBreakdownChart() {
   const totalLine = {
     label: '合計',
     data: futureLabels.map((_, fi) => {
-      const mi = 72 + fi;
+      const mi = ACTUAL_MONTHS + fi;
       return Math.round(getMonthlyForPref('ALL', currentPref, mi, scenarioName));
     }),
     type: 'line',
@@ -1269,7 +1308,7 @@ function drawWorldMap() {
           <div class="tt-row"><span>訪日シェア</span><span class="tt-val">${d.share}%</span></div>
           <div class="tt-row"><span>期待損失率</span><span class="tt-val ${lClass}">${d.expected_loss}%</span></div>
           <div class="tt-row"><span>前年比</span><span class="tt-val">${sign}${d.change}%</span></div>
-          <div class="tt-row"><span>2024実績</span><span class="tt-val">${(d.visitors_2024/10000).toFixed(0)}万人</span></div>
+          <div class="tt-row"><span>2025実績</span><span class="tt-val">${(d.visitors_2024/10000).toFixed(0)}万人</span></div>
           <hr style="border-color:#2d2f3e;margin:4px 0">
           ${scenarioHtml}
         `).style('display', 'block');
@@ -1473,14 +1512,59 @@ window.addEventListener('resize', () => {
 });
 
 // ===================================================================
+// API連携: 市場ランキングデータ取得（フォールバック付き）
+// ===================================================================
+async function loadMarketData() {
+  try {
+    const resp = await fetch('/api/v1/tourism/market-ranking');
+    if (!resp.ok) throw new Error('Market API error ' + resp.status);
+    const json = await resp.json();
+    // MARKET_DATAを更新（APIレスポンスにあるフィールドのみ上書き）
+    for (const m of json.markets || []) {
+      const code = m.iso2 || m.code;
+      if (code && MARKET_DATA[code]) {
+        if (m.expected_loss_pct !== undefined) MARKET_DATA[code].expected_loss = m.expected_loss_pct;
+        if (m.expected_loss !== undefined) MARKET_DATA[code].expected_loss = m.expected_loss;
+        if (m.visitors_2024 !== undefined) MARKET_DATA[code].visitors_2024 = m.visitors_2024;
+        if (m.change !== undefined) MARKET_DATA[code].change = m.change;
+        if (m.share !== undefined) MARKET_DATA[code].share = m.share;
+      }
+    }
+    // 再計算
+    ALL_EXPECTED_LOSS = Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.expected_loss, 0) / 100;
+    ALL_CHANGE = Math.round(Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.change, 0) / 100);
+
+    console.log('Tourism API: market data updated');
+    document.getElementById('update-time').textContent =
+      new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+    const dsEl = document.getElementById('dataSource');
+    dsEl.textContent = 'LIVE';
+    dsEl.style.background = 'rgba(81,207,102,0.2)';
+    dsEl.style.color = '#51cf66';
+  } catch(e) {
+    console.warn('Tourism API fallback:', e.message);
+    const dsEl = document.getElementById('dataSource');
+    dsEl.textContent = 'STATIC';
+    dsEl.style.background = 'rgba(255,169,77,0.2)';
+    dsEl.style.color = '#ffa94d';
+  }
+  // UI更新
+  updateBannerAndChips();
+  drawWorldMap();
+}
+
+// ===================================================================
 // INIT
 // ===================================================================
 drawWorldMap();
 drawJapanMap();
 updateBannerAndChips();
 requestAnimationFrame(() => { buildChart(); buildBreakdownChart(); });
-// API予測データをバックグラウンドで取得
+// API市場データ + 予測データをバックグラウンドで取得
+loadMarketData();
 loadForecast({});
+// 30分ごとに自動更新
+setInterval(() => { loadMarketData(); loadForecast({}); }, 30 * 60 * 1000);
 </script>
 </body>
 </html>

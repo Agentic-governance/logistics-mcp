@@ -144,6 +144,13 @@ app.include_router(bom_router)
 app.include_router(internal_router)
 app.include_router(twin_router)
 
+# --- STREAM v1.4.0: Dashboard API Router ---
+try:
+    from api.routes.dashboard_api import router as dashboard_api_router
+    app.include_router(dashboard_api_router)
+except ImportError:
+    pass  # dashboard_api モジュール未インストール
+
 # --- STREAM v1.3.0: Tourism Router (ROLE-E) ---
 try:
     from api.routes.tourism import router as tourism_router
