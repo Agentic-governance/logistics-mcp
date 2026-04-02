@@ -904,3 +904,393 @@ class TourismGravityModel:
             lines.append(str(self._glm_result.summary()))
 
         return "\n".join(lines)
+
+
+# ===========================================================================
+# TASK 4: TFI統合PPML — TFIを距離変数として使用する拡張モデル
+# ===========================================================================
+
+@dataclass
+class ExcessDemandRecord:
+    """超過需要（ブランド効果）レコード"""
+    source_country: str
+    year_month: str
+    excess_demand: float        # actual - predicted (千人)
+    interpretation: str         # "BRAND_PREMIUM" / "BRAND_DEFICIT" / "NEUTRAL"
+
+
+class TFIEnrichedGravityModel(TourismGravityModel):
+    """
+    TFIを距離変数として使用するPPML拡張モデル。
+
+    従来のln_distanceの代わりにTFI列を使用し、
+    文化距離 + 実効距離 + ビザ障壁を統合した摩擦指標で推定する。
+
+    excess_demand = actual - predicted → ブランド効果（正=ブランドプレミアム）
+    """
+
+    # 説明変数（TFI版: ln_exr, ln_flight の代わりに tfi を使用）
+    _TFI_FEATURE_NAMES = [
+        "ln_gdp_source", "ln_exr", "ln_flight", "tfi",
+        "bilateral_risk", "leave_utilization", "outbound_propensity",
+        "travel_momentum", "ln_restaurant", "ln_lang_learners",
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._tfi_index = None   # TravelFrictionIndex インスタンス
+        self._tfi_cache = {}     # 国別TFIキャッシュ
+        self._load_tfi()
+
+    def _load_tfi(self) -> None:
+        """TFIモジュールをロード"""
+        try:
+            from features.tourism.travel_friction_index import TravelFrictionIndex
+            self._tfi_index = TravelFrictionIndex()
+            # 全国のTFIをキャッシュ
+            all_tfi = self._tfi_index.calculate_all_countries()
+            for country, result in all_tfi.items():
+                self._tfi_cache[country] = result.tfi
+            logger.info("TFI ロード完了: %d カ国", len(self._tfi_cache))
+        except Exception as e:
+            logger.warning("TFI ロード失敗: %s → プリコンピュートを使用", e)
+            from features.tourism.travel_friction_index import TFI_PRECOMPUTED
+            for country, data in TFI_PRECOMPUTED.items():
+                self._tfi_cache[country] = data["tfi"]
+
+    def _get_tfi(self, country_iso2: str) -> float:
+        """国のTFI値を取得"""
+        return self._tfi_cache.get(country_iso2, 40.0)
+
+    # -----------------------------------------------------------------------
+    # TFI版デザイン行列
+    # -----------------------------------------------------------------------
+    def _build_design_matrix_tfi(
+        self,
+        panel,
+        ref_country="CN",
+        ref_year=2019,
+    ):
+        """TFI列を追加したデザイン行列を構築"""
+        countries = sorted(set(r["country"] for r in panel))
+        years = sorted(set(r["year"] for r in panel))
+
+        fe_countries = [c for c in countries if c != ref_country]
+        fe_years = [y for y in years if y != ref_year]
+
+        y_list = []
+        X_list = []
+
+        for row in panel:
+            vis = row["visitors"]
+            if vis < 0:
+                continue
+            gdp = max(row["gdp_source"], 1.0)
+            exr = max(row["exr"], 0.001)
+            flt = max(row["flight"], 1.0)
+
+            ctry_iso2 = row["country"]
+            ctry_iso3 = _ISO2_TO_ISO3.get(ctry_iso2, ctry_iso2)
+
+            # TFI値の取得
+            tfi = self._get_tfi(ctry_iso2) / 100.0  # 0-1に正規化
+
+            # v1.4.0 拡張変数
+            leave_util = row.get("leave_utilization",
+                                 LEAVE_UTILIZATION.get(ctry_iso3, 0.70))
+            outbound_prop = row.get("outbound_propensity",
+                                    OUTBOUND_PROPENSITY.get(ctry_iso3, 0.50))
+            tmi = row.get("travel_momentum",
+                          TRAVEL_MOMENTUM_DEFAULT.get(ctry_iso3, 0.70))
+            restaurant = row.get("restaurant_index",
+                                 RESTAURANT_INDEX.get(ctry_iso3, 100))
+            lang_learners = row.get("lang_learners",
+                                    LANGUAGE_LEARNERS.get(ctry_iso3, 50))
+
+            features = [
+                1.0,                                  # 定数項
+                math.log(gdp),                        # ln_gdp_source
+                math.log(exr),                        # ln_exr
+                math.log(flt),                        # ln_flight
+                tfi,                                  # TFI (0-1)
+                row["bilateral_risk"] / 100.0,        # bilateral_risk (0-1)
+                leave_util,
+                outbound_prop,
+                tmi,
+                math.log(max(restaurant, 1.0)),
+                math.log(max(lang_learners, 1.0)),
+            ]
+
+            # ソース国固定効果
+            for c in fe_countries:
+                features.append(1.0 if row["country"] == c else 0.0)
+            # 年固定効果
+            for yr in fe_years:
+                features.append(1.0 if row["year"] == yr else 0.0)
+
+            y_list.append(float(vis))
+            X_list.append(features)
+
+        col_names = ["const", "ln_gdp_source", "ln_exr", "ln_flight", "tfi",
+                      "bilateral_risk", "leave_utilization", "outbound_propensity",
+                      "travel_momentum", "ln_restaurant", "ln_lang_learners"]
+        col_names += [f"fe_{c}" for c in fe_countries]
+        col_names += [f"fe_{yr}" for yr in fe_years]
+
+        return (np.array(y_list), np.array(X_list), col_names, countries, years)
+
+    # -----------------------------------------------------------------------
+    # fit() — TFI版
+    # -----------------------------------------------------------------------
+    def fit(self, panel_data=None) -> FitResult:
+        """
+        TFI列を含むPPML推定。
+
+        従来のfit()をオーバーライドし、TFI変数を追加。
+        statsmodelsがない場合は拡張フォールバック。
+        """
+        data = panel_data if panel_data is not None else _BUILTIN_PANEL
+
+        if len(data) < 10:
+            logger.warning("訓練データ不足 (N=%d) — TFI拡張フォールバック", len(data))
+            return self._fallback_priors_tfi()
+
+        y, X, col_names, countries, years = self._build_design_matrix_tfi(
+            data, self._ref_country, self._ref_year
+        )
+        self._source_countries = list(countries)
+        self._years = list(years)
+
+        if len(y) < 10:
+            return self._fallback_priors_tfi()
+
+        try:
+            import statsmodels.api as sm
+            from statsmodels.genmod.families import Poisson
+
+            model = sm.GLM(y, X, family=Poisson())
+            result = model.fit(cov_type="HC3", maxiter=100)
+
+            self._glm_result = result
+            self._param_names = col_names
+            self._n_obs = len(y)
+
+            params = result.params
+            self._intercept = float(params[0])
+            self._coefficients = {}
+            for i, name in enumerate(col_names):
+                self._coefficients[name] = float(params[i])
+
+            self._vcov = np.array(result.cov_params())
+            self._pseudo_r2 = self._calc_pseudo_r2(y, X, result)
+            self._model_method = "PPML_TFI_HC3"
+            self._fitted = True
+
+            se_dict = {col_names[i]: float(result.bse[i]) for i in range(len(col_names))}
+            pv_dict = {col_names[i]: float(result.pvalues[i]) for i in range(len(col_names))}
+
+            logger.info(
+                "TFI-PPML推定完了: pseudo-R²=%.4f, N=%d, tfi_coef=%.4f",
+                self._pseudo_r2, len(y), self._coefficients.get("tfi", 0.0),
+            )
+
+            return FitResult(
+                method="PPML_TFI_HC3",
+                n_obs=len(y),
+                coefficients=dict(self._coefficients),
+                std_errors=se_dict,
+                p_values=pv_dict,
+                pseudo_r2=self._pseudo_r2,
+                aic=float(result.aic),
+                bic=float(result.bic),
+                converged=True,
+                summary_text=str(result.summary()),
+            )
+
+        except Exception as e:
+            logger.error("TFI-PPML推定失敗: %s → フォールバック", e)
+            return self._fallback_priors_tfi()
+
+    def _fallback_priors_tfi(self) -> FitResult:
+        """TFI版フォールバック（TFI係数=負を追加）"""
+        self._coefficients = {"const": 3.5}
+        self._coefficients.update(COEFFICIENT_PRIORS)
+        self._coefficients["tfi"] = -1.20  # TFI増→訪日減（負）
+        self._intercept = 3.5
+        self._pseudo_r2 = 0.0
+        self._model_method = "prior_fallback_tfi"
+        self._fitted = True
+        self._param_names = list(self._coefficients.keys())
+
+        n_params = len(self._param_names)
+        self._vcov = np.eye(n_params) * 0.25
+
+        return FitResult(
+            method="prior_fallback_tfi",
+            n_obs=0,
+            coefficients=dict(self._coefficients),
+            std_errors={k: 0.5 for k in self._param_names},
+            p_values={k: 1.0 for k in self._param_names},
+            pseudo_r2=0.0,
+            aic=0.0,
+            bic=0.0,
+            converged=False,
+            summary_text="TFI拡張フォールバック: 学術文献ベース事前係数 + TFI=-1.20",
+        )
+
+    # -----------------------------------------------------------------------
+    # fit_from_db() — TFI版
+    # -----------------------------------------------------------------------
+    def fit_from_db(self) -> FitResult:
+        """tourism_stats.db + TFI でPPML推定"""
+        try:
+            from pipeline.tourism.tourism_db import TourismDB
+            import sqlite3
+
+            db = TourismDB()
+            conn = sqlite3.connect(db.db_path)
+            conn.row_factory = sqlite3.Row
+
+            query = """
+                SELECT
+                    g.source_country AS country,
+                    g.year,
+                    COALESCE(j.arrivals, 0) AS visitors,
+                    g.gdp_source_usd AS gdp_source,
+                    g.exchange_rate_jpy AS exr,
+                    g.flight_supply_index AS flight,
+                    g.visa_free,
+                    g.bilateral_risk
+                FROM gravity_variables g
+                LEFT JOIN japan_inbound j
+                    ON g.source_country = j.source_country AND g.year = j.year
+                WHERE g.gdp_source_usd IS NOT NULL
+                ORDER BY g.source_country, g.year
+            """
+            rows = conn.execute(query).fetchall()
+            conn.close()
+
+            if not rows or len(rows) < 10:
+                logger.info("DB データ不足 → 内蔵データにフォールバック (TFI版)")
+                return self.fit()
+
+            panel = []
+            for r in rows:
+                panel.append({
+                    "country": _normalize_country(r["country"]),
+                    "year": r["year"],
+                    "visitors": float(r["visitors"]),
+                    "gdp_source": float(r["gdp_source"]) if r["gdp_source"] else 1.0,
+                    "exr": float(r["exr"]) if r["exr"] else 1.0,
+                    "flight": float(r["flight"]) if r["flight"] else 50,
+                    "visa_free": int(r["visa_free"]) if r["visa_free"] is not None else 0,
+                    "bilateral_risk": float(r["bilateral_risk"]) if r["bilateral_risk"] else 30,
+                })
+
+            return self.fit(panel_data=panel)
+
+        except Exception as e:
+            logger.info("DB読み込み失敗 (%s) → 内蔵データにフォールバック (TFI版)", e)
+            return self.fit()
+
+    # -----------------------------------------------------------------------
+    # calculate_excess_demand() — ブランド効果
+    # -----------------------------------------------------------------------
+    def calculate_excess_demand(
+        self,
+        panel_data=None,
+        predictions=None,
+    ):
+        """
+        超過需要（actual - predicted）を計算。
+
+        正の超過需要 = ブランドプレミアム（構造要因以上の魅力）
+        負の超過需要 = ブランドデフィシット（期待以下のパフォーマンス）
+
+        Args:
+            panel_data: パネルデータ（Noneなら内蔵データ）
+            predictions: 予測値リスト（Noneなら自動計算）
+
+        Returns:
+            list[ExcessDemandRecord]
+        """
+        if not self._fitted:
+            self.fit()
+
+        data = panel_data if panel_data is not None else _BUILTIN_PANEL
+
+        results = []
+        for row in data:
+            country = row["country"]
+            year = row["year"]
+            actual = row["visitors"]
+
+            # 予測値を計算
+            year_month = f"{year}-06"  # 年次データを年央で代表
+            predicted = self.predict_point(country, year_month)
+
+            excess = actual - predicted
+
+            # 解釈
+            if excess > predicted * 0.10:
+                interpretation = "BRAND_PREMIUM"
+            elif excess < -predicted * 0.10:
+                interpretation = "BRAND_DEFICIT"
+            else:
+                interpretation = "NEUTRAL"
+
+            results.append(ExcessDemandRecord(
+                source_country=country,
+                year_month=year_month,
+                excess_demand=round(excess, 1),
+                interpretation=interpretation,
+            ))
+
+        return results
+
+    # -----------------------------------------------------------------------
+    # save_excess_demand() — DBに保存
+    # -----------------------------------------------------------------------
+    def save_excess_demand(self, records=None) -> int:
+        """
+        超過需要をtourism_stats.dbに保存。
+
+        excess_demandテーブル:
+            source_country TEXT, year_month TEXT, excess_demand REAL,
+            interpretation TEXT, PRIMARY KEY(source_country, year_month)
+        """
+        if records is None:
+            records = self.calculate_excess_demand()
+
+        try:
+            from pipeline.tourism.tourism_db import TourismDB
+            import sqlite3
+
+            db = TourismDB()
+            conn = sqlite3.connect(db.db_path)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS excess_demand(
+                    source_country TEXT,
+                    year_month TEXT,
+                    excess_demand REAL,
+                    interpretation TEXT,
+                    PRIMARY KEY(source_country, year_month)
+                )
+            """)
+
+            for rec in records:
+                conn.execute("""
+                    INSERT OR REPLACE INTO excess_demand
+                    (source_country, year_month, excess_demand, interpretation)
+                    VALUES (?, ?, ?, ?)
+                """, (rec.source_country, rec.year_month,
+                      rec.excess_demand, rec.interpretation))
+
+            conn.commit()
+            conn.close()
+            logger.info("excess_demand: %d件 保存完了", len(records))
+            return len(records)
+
+        except Exception as e:
+            logger.warning("excess_demand DB保存失敗: %s", e)
+            return 0

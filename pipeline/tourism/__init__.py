@@ -13,6 +13,8 @@ from .country_outbound_clients import (
 )
 from .competitor_stats_client import CompetitorStatsClient
 from .flight_supply_client import FlightSupplyClient
+from .effective_distance_client import EffectiveFlightDistanceClient, EffectiveDistance
+from .cultural_distance_client import CulturalDistanceClient, CulturalDistance
 from .tourism_db import TourismDB
 from .competitors import (
     ThailandInboundClient,
@@ -33,6 +35,10 @@ __all__ = [
     "WorldBankTourismClient",
     "CompetitorStatsClient",
     "FlightSupplyClient",
+    "EffectiveFlightDistanceClient",
+    "EffectiveDistance",
+    "CulturalDistanceClient",
+    "CulturalDistance",
     "TourismDB",
     "ThailandInboundClient",
     "KoreaInboundClient",

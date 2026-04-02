@@ -48,6 +48,21 @@ try:
 except (ImportError, ModuleNotFoundError):
     RiskAdjuster = None
 
+try:
+    from .travel_friction_index import TravelFrictionIndex
+except (ImportError, ModuleNotFoundError):
+    TravelFrictionIndex = None
+
+try:
+    from .gravity_model import TFIEnrichedGravityModel
+except (ImportError, ModuleNotFoundError):
+    TFIEnrichedGravityModel = None
+
+try:
+    from .cultural_inertia import CulturalInertiaCoefficient
+except (ImportError, ModuleNotFoundError):
+    CulturalInertiaCoefficient = None
+
 __all__ = [
     "TourismGravityModel",
     "SeasonalExtractor",
@@ -60,4 +75,7 @@ __all__ = [
     "DualScaleModel",
     "BayesianUpdater",
     "RiskAdjuster",
+    "TravelFrictionIndex",
+    "TFIEnrichedGravityModel",
+    "CulturalInertiaCoefficient",
 ]

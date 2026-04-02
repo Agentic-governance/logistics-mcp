@@ -680,3 +680,172 @@ class TestGravityModelDB:
         for key in result1.coefficients:
             assert abs(result1.coefficients[key] - result2.coefficients[key]) < 1e-6, \
                 f"係数 {key} が再推定で変化: {result1.coefficients[key]} vs {result2.coefficients[key]}"
+
+
+# =====================================================================
+# TestTFI — Travel Friction Index
+# =====================================================================
+class TestTFI:
+    """features/tourism/travel_friction_index.py のテスト"""
+
+    def _get_tfi(self):
+        from features.tourism.travel_friction_index import TravelFrictionIndex
+        return TravelFrictionIndex()
+
+    def test_tfi_ranking_kr_lowest(self):
+        """韓国が最低TFI近辺（最も摩擦が小さい）"""
+        tfi = self._get_tfi()
+        ranking = tfi.get_expected_tfi_ranking()
+        # 韓国はトップ3以内であるべき
+        top3_countries = [r.source_country for r in ranking[:3]]
+        assert "KR" in top3_countries, \
+            f"韓国がTFI最低3カ国に入っていない: {top3_countries}"
+
+    def test_tfi_all_positive(self):
+        """全TFIが0-100の範囲"""
+        tfi = self._get_tfi()
+        all_results = tfi.calculate_all_countries()
+        for country, result in all_results.items():
+            assert 0 <= result.tfi <= 100, \
+                f"{country}: TFI={result.tfi} は0-100の範囲外"
+
+    def test_cultural_distance_symmetric(self):
+        """文化距離がJP基準で計算されている（正の値）"""
+        tfi = self._get_tfi()
+        result = tfi.calculate("KR")
+        assert result.cultural_distance > 0, \
+            "韓国の文化距離は正であるべき"
+        assert result.cultural_distance < 100, \
+            "韓国の文化距離は100未満であるべき（近隣国）"
+
+    def test_visa_barrier_china_higher(self):
+        """中国のビザ障壁は韓国より高い"""
+        tfi = self._get_tfi()
+        kr = tfi.calculate("KR")
+        cn = tfi.calculate("CN")
+        assert cn.visa_barrier > kr.visa_barrier, \
+            f"中国ビザ({cn.visa_barrier}) > 韓国ビザ({kr.visa_barrier}) であるべき"
+
+    def test_tfi_components_present(self):
+        """TFI結果にコンポーネントが含まれる"""
+        tfi = self._get_tfi()
+        result = tfi.calculate("US")
+        assert "cultural_norm" in result.components
+        assert "efd_norm" in result.components
+        assert "visa_norm" in result.components
+
+    def test_tfi_precomputed_coverage(self):
+        """プリコンピュートデータが20カ国をカバー"""
+        from features.tourism.travel_friction_index import TFI_PRECOMPUTED
+        assert len(TFI_PRECOMPUTED) >= 20, \
+            f"プリコンピュート: {len(TFI_PRECOMPUTED)}カ国 < 20"
+
+
+# =====================================================================
+# TestTFIEnrichedGravityModel — TFI統合PPML
+# =====================================================================
+class TestTFIEnrichedGravityModel:
+    """features/tourism/gravity_model.py TFIEnrichedGravityModel のテスト"""
+
+    def _get_model(self):
+        from features.tourism.gravity_model import TFIEnrichedGravityModel
+        model = TFIEnrichedGravityModel()
+        model.fit()
+        return model
+
+    def test_fit_returns_result(self):
+        """fit()がFitResultを返す"""
+        from features.tourism.gravity_model import TFIEnrichedGravityModel, FitResult
+        model = TFIEnrichedGravityModel()
+        result = model.fit()
+        assert isinstance(result, FitResult)
+        assert "tfi" in result.coefficients, \
+            "TFI係数が推定結果に含まれるべき"
+
+    def test_tfi_coefficient_negative(self):
+        """TFI係数は負（摩擦増→訪日減）"""
+        model = self._get_model()
+        coeffs = model.get_coefficients()
+        assert coeffs.get("tfi", 0) < 0, \
+            f"TFI係数は負であるべき: {coeffs.get('tfi')}"
+
+    def test_excess_demand_calculated(self):
+        """超過需要が計算できる"""
+        from features.tourism.gravity_model import ExcessDemandRecord
+        model = self._get_model()
+        records = model.calculate_excess_demand()
+        assert len(records) > 0, "超過需要レコードが空"
+        for rec in records:
+            assert isinstance(rec, ExcessDemandRecord)
+            assert rec.interpretation in ("BRAND_PREMIUM", "BRAND_DEFICIT", "NEUTRAL")
+
+    def test_fit_from_db_fallback(self):
+        """DBなし時にfit_from_db()がフォールバック"""
+        from features.tourism.gravity_model import TFIEnrichedGravityModel, FitResult
+        model = TFIEnrichedGravityModel()
+        result = model.fit_from_db()
+        assert isinstance(result, FitResult)
+
+
+# =====================================================================
+# TestCIC — Cultural Inertia Coefficient
+# =====================================================================
+class TestCIC:
+    """features/tourism/cultural_inertia.py のテスト"""
+
+    def _get_cic(self):
+        from features.tourism.cultural_inertia import CulturalInertiaCoefficient
+        return CulturalInertiaCoefficient()
+
+    def test_structural_cic_range(self):
+        """構造的CICが0-1の範囲"""
+        cic = self._get_cic()
+        for country in ["KR", "CN", "US", "GB", "TH", "RU"]:
+            val = cic.calculate_structural(country)
+            assert 0 <= val <= 1, \
+                f"{country}: structural_cic={val} は0-1の範囲外"
+
+    def test_asia_higher_than_europe(self):
+        """アジアCIC > 欧米CIC（近隣国のほうが文化的慣性が強い）"""
+        cic = self._get_cic()
+        kr_cic = cic.get_full_cic("KR")
+        gb_cic = cic.get_full_cic("GB")
+        assert kr_cic.total_cic > gb_cic.total_cic, \
+            f"韓国CIC({kr_cic.total_cic}) > 英国CIC({gb_cic.total_cic}) であるべき"
+
+    def test_structural_inverse_of_tfi(self):
+        """structural CIC ≈ 1 - TFI/100"""
+        cic = self._get_cic()
+        from features.tourism.travel_friction_index import TFI_PRECOMPUTED
+        for country in ["KR", "US", "CN"]:
+            structural = cic.calculate_structural(country)
+            tfi = cic._get_tfi(country)
+            expected = 1.0 - tfi / 100.0
+            assert abs(structural - expected) < 0.01, \
+                f"{country}: structural={structural} != 1-TFI/100={expected}"
+
+    def test_cic_result_fields(self):
+        """CICResultに必要なフィールドがある"""
+        cic = self._get_cic()
+        result = cic.get_full_cic("KR")
+        assert hasattr(result, "structural_cic")
+        assert hasattr(result, "psychological_cic")
+        assert hasattr(result, "total_cic")
+        assert hasattr(result, "alpha")
+        assert hasattr(result, "recovery_rate")
+        assert hasattr(result, "interpretation")
+        assert result.interpretation in ("STRONG", "MODERATE", "WEAK")
+
+    def test_psychological_no_data_returns_zero(self):
+        """データ不足時にpsychological CICが0"""
+        cic = self._get_cic()
+        psy = cic.estimate_psychological("XX")  # 存在しない国
+        assert psy == 0.0, f"データなしのpsychological CICは0であるべき: {psy}"
+
+    def test_ranking_order(self):
+        """ランキングがCIC降順"""
+        cic = self._get_cic()
+        ranking = cic.get_cic_ranking()
+        for i in range(len(ranking) - 1):
+            assert ranking[i].total_cic >= ranking[i+1].total_cic, \
+                f"ランキング順序エラー: {ranking[i].country}({ranking[i].total_cic}) < {ranking[i+1].country}({ranking[i+1].total_cic})"
