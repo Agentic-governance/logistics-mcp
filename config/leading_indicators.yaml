@@ -1,0 +1,164 @@
+# Leading Risk Indicators - Auto-discovered cross-correlations
+# Updated: 2026-03-27
+# Source: docs/LEADING_INDICATORS.md (286 relationships across 49 countries)
+# Method: Cross-correlation analysis (lags 7-30 days, p<0.05, |r|>0.3)
+# Format: leading dimension -> target dimension, with lag and correlation
+
+# Top-ranked global leading indicator patterns (|r| > 0.38)
+leading_indicators:
+  # Strongest cross-correlations discovered
+  - leading: disaster
+    target: conflict
+    lag_days: 22
+    min_r: 0.48
+    country: Sri Lanka
+    description: "Disaster events precede conflict escalation (strongest signal)"
+
+  - leading: political
+    target: disaster
+    lag_days: 10
+    min_r: 0.46
+    country: Iraq
+    description: "Political instability leads to disaster vulnerability"
+
+  - leading: economic
+    target: political
+    lag_days: 25
+    min_r: 0.46
+    country: Taiwan
+    description: "Economic shifts precede political risk changes"
+
+  - leading: economic
+    target: disaster
+    lag_days: 8
+    min_r: 0.45
+    country: France
+    description: "Economic conditions lead disaster risk indicators"
+
+  - leading: humanitarian
+    target: disaster
+    lag_days: 28
+    min_r: 0.45
+    country: Japan
+    description: "Humanitarian crises precede disaster risk escalation"
+
+  - leading: humanitarian
+    target: conflict
+    lag_days: 30
+    min_r: 0.43
+    country: Ukraine
+    description: "Humanitarian crises precede conflict escalation"
+
+  - leading: political
+    target: conflict
+    lag_days: 29
+    min_r: 0.42
+    country: Philippines
+    description: "Political instability leads conflict risk (inverse)"
+
+  - leading: disaster
+    target: conflict
+    lag_days: 17
+    min_r: 0.42
+    country: Kenya
+    description: "Disaster events precede conflict in vulnerable regions"
+
+  - leading: economic
+    target: disaster
+    lag_days: 26
+    min_r: 0.42
+    country: Germany
+    description: "Economic indicators lead disaster risk (inverse)"
+
+  - leading: disaster
+    target: economic
+    lag_days: 16
+    min_r: 0.42
+    country: Mexico
+    description: "Disaster events disrupt economic stability"
+
+  - leading: humanitarian
+    target: political
+    lag_days: 19
+    min_r: 0.41
+    country: Australia
+    description: "Humanitarian signals precede political risk changes"
+
+  - leading: humanitarian
+    target: conflict
+    lag_days: 14
+    min_r: 0.41
+    country: Iran
+    description: "Humanitarian deterioration precedes conflict"
+
+  - leading: political
+    target: humanitarian
+    lag_days: 22
+    min_r: 0.40
+    country: Russia
+    description: "Political shifts precede humanitarian impacts (inverse)"
+
+  - leading: political
+    target: conflict
+    lag_days: 27
+    min_r: 0.40
+    country: Japan
+    description: "Political tension leads to conflict risk"
+
+  - leading: political
+    target: humanitarian
+    lag_days: 25
+    min_r: 0.40
+    country: Singapore
+    description: "Political changes precede humanitarian shifts (inverse)"
+
+  - leading: political
+    target: economic
+    lag_days: 28
+    min_r: 0.40
+    country: Poland
+    description: "Political instability leads economic risk"
+
+# Generalized cross-dimension patterns (aggregated across countries)
+generalized_patterns:
+  - leading: humanitarian
+    target: conflict
+    typical_lag_days: 14-30
+    avg_r: 0.38
+    countries_observed: 8
+    description: "Humanitarian deterioration is a consistent precursor to conflict"
+
+  - leading: economic
+    target: political
+    typical_lag_days: 9-28
+    avg_r: 0.37
+    countries_observed: 10
+    description: "Economic instability broadly precedes political risk changes"
+
+  - leading: political
+    target: disaster
+    typical_lag_days: 10-29
+    avg_r: 0.38
+    countries_observed: 7
+    description: "Political disruption weakens disaster preparedness"
+
+  - leading: disaster
+    target: conflict
+    typical_lag_days: 13-30
+    avg_r: 0.37
+    countries_observed: 9
+    description: "Natural disasters precede conflict in fragile states"
+
+  - leading: economic
+    target: disaster
+    typical_lag_days: 7-30
+    avg_r: 0.38
+    countries_observed: 12
+    description: "Economic stress leads to increased disaster vulnerability"
+
+  - leading: conflict
+    target: economic
+    typical_lag_days: 14-25
+    avg_r: 0.33
+    countries_observed: 7
+    description: "Conflict activity disrupts economic conditions"

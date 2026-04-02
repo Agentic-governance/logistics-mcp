@@ -1,0 +1,6 @@
+model_type: prophet
+optimized_at: '2026-03-21T19:20:05.941125'
+parameters:
+  changepoint_prior_scale: 0.3
+  weekly_seasonality: false
+  yearly_seasonality: false

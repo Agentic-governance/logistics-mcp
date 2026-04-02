@@ -1,0 +1,59 @@
+# SCRI Platform CI — test & diagnostics
+# Stream 7-B: GitHub Actions workflow
+
+name: SCRI Tests
+
+on:
+  push:
+    branches: [main, develop, "stream-*"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-timeout
+
+      - name: Run unit & integration tests (skip slow)
+        run: |
+          pytest tests/ -v \
+            --ignore=tests/test_connectivity.py \
+            -m "not slow" \
+            --timeout=60 \
+            --tb=short \
+            -q
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+
+      - name: Run correlation diagnostics
+        run: |
+          python scripts/diagnose_correlations.py --locations Japan China Singapore Yemen Germany 2>&1 | head -100
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        continue-on-error: true
+
+      - name: Verify MCP tool count
+        run: |
+          TOOL_COUNT=$(grep -c "@mcp.tool" mcp_server/server.py)
+          echo "MCP tools registered: $TOOL_COUNT"
+          if [ "$TOOL_COUNT" -lt 20 ]; then
+            echo "WARNING: Expected >= 20 MCP tools, found $TOOL_COUNT"
+            exit 1
+          fi
+          echo "MCP tool count OK ($TOOL_COUNT >= 20)"

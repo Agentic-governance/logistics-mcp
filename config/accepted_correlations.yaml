@@ -1,0 +1,65 @@
+# Accepted High-Correlation Pairs for Weekly Correlation Audit
+# Pairs listed here are excluded from SOURCE_PROBLEM/DOUBLE_COUNTING alerts.
+# Source: KNOWN_CAUSAL set in scripts/diagnose_correlations.py
+#
+# Classification: CAUSAL_ACCEPTABLE
+# These pairs have known causal or geographic-overlap explanations
+# and should not trigger automated alerts.
+#
+# Review schedule: quarterly (or when new dimensions are added)
+# Last reviewed: 2026-03-21
+
+accepted_pairs:
+  - dim1: conflict
+    dim2: humanitarian
+    r_threshold: 0.90
+    reason: "Causal: armed conflict directly drives humanitarian crises (displacement, aid needs)"
+    approved_date: "2026-03-21"
+
+  - dim1: climate_risk
+    dim2: conflict
+    r_threshold: 0.92
+    reason: "Geographic overlap: sub-Saharan Africa and South/Southeast Asia are both climate-vulnerable and conflict-prone"
+    approved_date: "2026-03-21"
+
+  - dim1: geo_risk
+    dim2: conflict
+    r_threshold: 0.90
+    reason: "Causal: geopolitical tensions and rivalries drive armed conflicts"
+    approved_date: "2026-03-21"
+
+  - dim1: conflict
+    dim2: political
+    r_threshold: 0.90
+    reason: "Causal: political instability and authoritarian governance correlate with armed conflict"
+    approved_date: "2026-03-21"
+
+  - dim1: food_security
+    dim2: humanitarian
+    r_threshold: 0.90
+    reason: "Causal: food insecurity is a primary driver of humanitarian emergencies"
+    approved_date: "2026-03-21"
+
+  - dim1: political
+    dim2: compliance
+    r_threshold: 0.85
+    reason: "Causal: weak political institutions correlate with poor regulatory compliance"
+    approved_date: "2026-03-21"
+
+  - dim1: internet
+    dim2: cyber_risk
+    r_threshold: 0.90
+    reason: "Causal: internet infrastructure maturity directly affects cyber risk exposure"
+    approved_date: "2026-03-21"
+
+  - dim1: conflict
+    dim2: typhoon
+    r_threshold: 0.85
+    reason: "Geographic overlap: conflict zones overlap with cyclone-prone regions (e.g., Myanmar, Philippines)"
+    approved_date: "2026-03-21"
+
+  - dim1: humanitarian
+    dim2: typhoon
+    r_threshold: 0.85
+    reason: "Geographic overlap: cyclone-prone regions frequently require humanitarian assistance"
+    approved_date: "2026-03-21"

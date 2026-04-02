@@ -1,0 +1,3 @@
+{"timestamp":"2026-03-19T17:00:00Z","pairs_checked":276,"high_r_pairs":[{"dim1":"sanctions","dim2":"political","r":0.91,"accepted":true}]}
+{"timestamp":"2026-03-20T17:00:00Z","pairs_checked":276,"high_r_pairs":[{"dim1":"sanctions","dim2":"political","r":0.91,"accepted":true},{"dim1":"seismic","dim2":"infrastructure","r":0.87,"accepted":false}]}
+{"timestamp":"2026-03-21T12:00:00Z","pairs_checked":276,"high_r_pairs":[{"dim1":"sanctions","dim2":"political","r":0.92,"accepted":true},{"dim1":"seismic","dim2":"infrastructure","r":0.88,"accepted":false},{"dim1":"cyber","dim2":"technology","r":0.86,"accepted":false}]}

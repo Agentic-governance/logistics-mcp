@@ -1,0 +1,2578 @@
+openapi: "3.0.3"
+info:
+  title: Supply Chain Risk Intelligence API
+  description: |
+    24-dimensional passive supply-chain risk detection platform (SCRI).
+    Aggregates 30+ open data sources to provide real-time risk scoring,
+    BOM analysis, cost-impact estimation, screening, analytics, and
+    forecasting capabilities.
+  version: "0.9.0"
+  contact:
+    name: SCRI Platform Team
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+tags:
+  - name: Health & Status
+    description: Health checks, metrics, and system statistics
+  - name: Sanctions Screening
+    description: Sanctions list screening (OFAC/EU/UN/OpenSanctions/METI/BIS)
+  - name: Risk Scoring
+    description: 24-dimensional risk score calculation
+  - name: Disasters
+    description: Natural disaster data (GDACS, USGS)
+  - name: Maritime
+    description: Maritime disruptions, port activity, congestion
+  - name: Conflict
+    description: Armed conflict and political violence (ACLED)
+  - name: Economic
+    description: Economic indicators and currency risk
+  - name: Trade
+    description: Trade dependency risk (UN Comtrade)
+  - name: Energy
+    description: Commodity prices (FRED/EIA)
+  - name: Health
+    description: Disease and humanitarian risk
+  - name: Food Security
+    description: Food security risk (WFP)
+  - name: Weather
+    description: Weather, typhoon, and space weather risk
+  - name: Compliance
+    description: Compliance, political, and labor risk
+  - name: Infrastructure
+    description: Internet infrastructure risk
+  - name: Aviation
+    description: Aviation traffic activity (OpenSky)
+  - name: Japan
+    description: Japan-specific economic indicators
+  - name: Dashboard
+    description: Global risk dashboard
+  - name: Alerts & Monitoring
+    description: Risk alerts and supplier monitoring
+  - name: Supply Chain Graph
+    description: Tier-N supply chain graph
+  - name: Route Risk
+    description: Transport route risk analysis and chokepoints
+  - name: Concentration
+    description: Supplier concentration risk
+  - name: Simulation
+    description: Disruption simulation scenarios
+  - name: Due Diligence
+    description: KYS due diligence reports
+  - name: Commodity Exposure
+    description: Commodity exposure analysis by sector
+  - name: Bulk Assessment
+    description: Bulk supplier assessment
+  - name: Climate
+    description: Climate risk (ND-GAIN/GloFAS/WRI)
+  - name: Cyber
+    description: Cyber risk (OONI/CISA KEV/ITU ICT)
+  - name: Data Quality
+    description: Data quality monitoring
+  - name: Analytics
+    description: Portfolio, correlation, benchmark, and sensitivity analytics
+  - name: Forecasting
+    description: Time-series forecasting and backtest
+  - name: Screening
+    description: Supplier reputation screening
+  - name: Cost Impact
+    description: Disruption cost estimation and scenario comparison
+  - name: BOM Analysis
+    description: Bill of Materials risk analysis and Tier-2+ inference
+  - name: Batch & Webhooks
+    description: Batch operations and webhook management
+
+paths:
+  # =========================================================================
+  # Health & Status
+  # =========================================================================
+  /health:
+    get:
+      tags: [Health & Status]
+      summary: Health check
+      description: |
+        Returns system health including sanctions source status, active alert count,
+        data freshness, forecast model status, correlation checks, coverage stats,
+        and uptime.
+      operationId: health
+      parameters: []
+      responses:
+        "200":
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /metrics:
+    get:
+      tags: [Health & Status]
+      summary: Prometheus metrics
+      description: Prometheus-compatible metrics endpoint (text/plain exposition format).
+      operationId: prometheusMetrics
+      responses:
+        "200":
+          description: Prometheus text format metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/stats:
+    get:
+      tags: [Health & Status]
+      summary: DB statistics and data source status
+      description: Returns counts of sanctions entities, screenings, alerts, monitored suppliers, and data pipeline details.
+      operationId: getStats
+      responses:
+        "200":
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+
+  # =========================================================================
+  # Sanctions Screening
+  # =========================================================================
+  /api/v1/screen:
+    post:
+      tags: [Sanctions Screening]
+      summary: Screen single entity
+      description: Screen a single company against consolidated sanctions lists (OFAC/EU/UN/OpenSanctions/METI/BIS).
+      operationId: screenSanctions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScreenRequest"
+      responses:
+        "200":
+          description: Screening result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScreenResult"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/screen/bulk:
+    post:
+      tags: [Sanctions Screening]
+      summary: Bulk screen entities
+      description: Screen multiple companies against sanctions lists in a single request.
+      operationId: bulkScreen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkScreenRequest"
+      responses:
+        "200":
+          description: Bulk screening results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkScreenResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # =========================================================================
+  # Risk Scoring
+  # =========================================================================
+  /api/v1/risk/{supplier_id}:
+    get:
+      tags: [Risk Scoring]
+      summary: Get 24-dimensional risk score
+      description: Calculate comprehensive 24-dimensional risk score for a supplier.
+      operationId: getRiskScore
+      parameters:
+        - name: supplier_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Supplier identifier
+        - name: company_name
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Company name
+        - name: country
+          in: query
+          schema:
+            type: string
+          description: Country name or code
+        - name: location
+          in: query
+          schema:
+            type: string
+          description: Location (city or country)
+      responses:
+        "200":
+          description: 24-dimensional risk score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiskScoreResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  # =========================================================================
+  # Disasters
+  # =========================================================================
+  /api/v1/disasters/global:
+    get:
+      tags: [Disasters]
+      summary: Global disaster alerts (GDACS)
+      description: Fetch active global disaster alerts from GDACS.
+      operationId: getGlobalDisasters
+      responses:
+        "200":
+          description: Disaster events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DisasterEvent"
+                  source:
+                    type: string
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/disasters/earthquakes:
+    get:
+      tags: [Disasters]
+      summary: Earthquake data (USGS)
+      description: Fetch recent earthquake data from USGS.
+      operationId: getEarthquakes
+      parameters:
+        - name: min_magnitude
+          in: query
+          schema:
+            type: number
+            default: 4.5
+          description: Minimum earthquake magnitude
+        - name: days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 7
+          description: Number of days to look back
+      responses:
+        "200":
+          description: Earthquake data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  earthquakes:
+                    type: array
+                    items:
+                      type: object
+                  source:
+                    type: string
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Maritime
+  # =========================================================================
+  /api/v1/maritime/disruptions:
+    get:
+      tags: [Maritime]
+      summary: Port disruptions (IMF PortWatch)
+      description: Fetch active maritime/port disruption events.
+      operationId: getMaritimeDisruptions
+      responses:
+        "200":
+          description: Disruption events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  disruptions:
+                    type: array
+                    items:
+                      type: object
+                  source:
+                    type: string
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/maritime/port-activity:
+    get:
+      tags: [Maritime]
+      summary: Port activity data
+      description: Fetch port activity data from IMF PortWatch.
+      operationId: getPortActivity
+      parameters:
+        - name: port_name
+          in: query
+          schema:
+            type: string
+          description: Port name filter
+        - name: country
+          in: query
+          schema:
+            type: string
+          description: Country filter
+        - name: days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 30
+          description: Days to look back
+      responses:
+        "200":
+          description: Port activity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  activity:
+                    type: array
+                    items:
+                      type: object
+                  source:
+                    type: string
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/maritime/congestion/{region}:
+    get:
+      tags: [Maritime]
+      summary: Shipping lane congestion (AIS)
+      description: Get shipping lane congestion data for a region.
+      operationId: getShippingCongestion
+      parameters:
+        - name: region
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Region identifier
+      responses:
+        "200":
+          description: Congestion data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  region:
+                    type: string
+                  source:
+                    type: string
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/maritime/port-congestion/{location}:
+    get:
+      tags: [Maritime]
+      summary: Port congestion risk
+      description: Get port congestion and chokepoint risk for a location.
+      operationId: getPortCongestion
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Location name
+      responses:
+        "200":
+          description: Port congestion risk
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Conflict
+  # =========================================================================
+  /api/v1/conflict/{location}:
+    get:
+      tags: [Conflict]
+      summary: Conflict risk (ACLED)
+      description: Get armed conflict and political violence risk for a location.
+      operationId: getConflictRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Location (country or city)
+      responses:
+        "200":
+          description: Conflict risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Economic
+  # =========================================================================
+  /api/v1/economic/{location}:
+    get:
+      tags: [Economic]
+      summary: Economic risk (World Bank)
+      description: Get economic risk indicators for a location.
+      operationId: getEconomicRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Economic risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/economic/profile/{location}:
+    get:
+      tags: [Economic]
+      summary: Economic profile
+      description: Get detailed economic profile for a location.
+      operationId: getEconomicProfile
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Economic profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/currency/{location}:
+    get:
+      tags: [Economic]
+      summary: Currency volatility risk
+      description: Get currency volatility risk for a location.
+      operationId: getCurrencyRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Currency risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/trade/{location}:
+    get:
+      tags: [Trade]
+      summary: Trade dependency risk (UN Comtrade)
+      description: Get trade dependency risk for a location.
+      operationId: getTradeRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trade risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Energy
+  # =========================================================================
+  /api/v1/energy/commodities:
+    get:
+      tags: [Energy]
+      summary: Commodity prices (FRED/EIA)
+      description: Get current commodity price data.
+      operationId: getCommodityPrices
+      responses:
+        "200":
+          description: Commodity price data
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Health
+  # =========================================================================
+  /api/v1/health/{location}:
+    get:
+      tags: [Health]
+      summary: Disease risk (Disease.sh)
+      description: Get infectious disease risk for a location.
+      operationId: getHealthRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Health risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/humanitarian/{location}:
+    get:
+      tags: [Health]
+      summary: Humanitarian crisis risk (ReliefWeb)
+      description: Get humanitarian crisis data for a location.
+      operationId: getHumanitarianRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Humanitarian risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/food-security/{location}:
+    get:
+      tags: [Food Security]
+      summary: Food security risk (WFP)
+      description: Get food security risk from WFP HungerMap.
+      operationId: getFoodSecurity
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Food security data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Weather
+  # =========================================================================
+  /api/v1/weather/{location}:
+    get:
+      tags: [Weather]
+      summary: Weather risk (Open-Meteo)
+      description: Get extreme weather event risk for a location.
+      operationId: getWeatherRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Weather risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/weather/typhoon/{location}:
+    get:
+      tags: [Weather]
+      summary: Typhoon risk (NOAA)
+      description: Get typhoon/cyclone and space weather risk.
+      operationId: getTyphoonRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Typhoon risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/weather/space:
+    get:
+      tags: [Weather]
+      summary: Space weather (NOAA SWPC)
+      description: Get current space weather conditions (Kp index, solar wind, alerts).
+      operationId: getSpaceWeather
+      responses:
+        "200":
+          description: Space weather data
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Compliance
+  # =========================================================================
+  /api/v1/compliance/{location}:
+    get:
+      tags: [Compliance]
+      summary: Compliance risk (FATF/INFORM/TI-CPI)
+      description: Get compliance risk for a location.
+      operationId: getComplianceRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Compliance risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/compliance/political/{location}:
+    get:
+      tags: [Compliance]
+      summary: Political risk (Freedom House/FSI)
+      description: Get political risk for a location.
+      operationId: getPoliticalRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Political risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/compliance/labor/{location}:
+    get:
+      tags: [Compliance]
+      summary: Labor risk (DoL ILAB/GSI)
+      description: Get forced labor and child labor risk for a location.
+      operationId: getLaborRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Labor risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Infrastructure
+  # =========================================================================
+  /api/v1/infrastructure/internet/{location}:
+    get:
+      tags: [Infrastructure]
+      summary: Internet infrastructure risk
+      description: Get internet infrastructure risk (Cloudflare Radar/IODA).
+      operationId: getInternetRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Internet risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Aviation
+  # =========================================================================
+  /api/v1/aviation/{location}:
+    get:
+      tags: [Aviation]
+      summary: Aviation activity (OpenSky)
+      description: Get aviation traffic activity for a location.
+      operationId: getAviationActivity
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Aviation data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Japan
+  # =========================================================================
+  /api/v1/japan/economy:
+    get:
+      tags: [Japan]
+      summary: Japan economic indicators (BOJ/e-Stat)
+      description: Get Japan-specific economic indicators.
+      operationId: getJapanEconomy
+      responses:
+        "200":
+          description: Japan economy data
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Dashboard
+  # =========================================================================
+  /api/v1/dashboard/global:
+    get:
+      tags: [Dashboard]
+      summary: Global risk dashboard
+      description: |
+        Aggregated global risk dashboard pulling from all data sources:
+        GDACS disasters, USGS earthquakes, NOAA storms/space weather,
+        IMF PortWatch, COVID, Japan economy, and DB statistics.
+      operationId: globalRiskDashboard
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Serve interactive HTML dashboard
+      description: Returns the interactive HTML dashboard page.
+      operationId: serveDashboard
+      responses:
+        "200":
+          description: HTML dashboard page
+          content:
+            text/html:
+              schema:
+                type: string
+        "404":
+          description: Dashboard not generated
+
+  # =========================================================================
+  # Alerts & Monitoring
+  # =========================================================================
+  /api/v1/alerts:
+    get:
+      tags: [Alerts & Monitoring]
+      summary: Get risk alerts
+      description: Retrieve recent risk alerts filtered by time window and minimum score.
+      operationId: getAlerts
+      parameters:
+        - name: since_hours
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 720
+            default: 24
+          description: Hours to look back
+        - name: min_score
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+            default: 50
+          description: Minimum risk score filter
+      responses:
+        "200":
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertsResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/monitor:
+    post:
+      tags: [Alerts & Monitoring]
+      summary: Register supplier for monitoring
+      description: Register a supplier for continuous 24-dimensional risk monitoring at 15-minute intervals.
+      operationId: registerMonitor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MonitorRequest"
+      responses:
+        "200":
+          description: Registration confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  supplier_id:
+                    type: string
+                  monitoring:
+                    type: object
+
+  /api/v1/monitors:
+    get:
+      tags: [Alerts & Monitoring]
+      summary: List monitored suppliers
+      description: List all actively monitored suppliers.
+      operationId: listMonitors
+      responses:
+        "200":
+          description: Monitored suppliers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  suppliers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        supplier_id:
+                          type: string
+                        company_name:
+                          type: string
+                        location:
+                          type: string
+
+  # =========================================================================
+  # Supply Chain Graph
+  # =========================================================================
+  /api/v1/graph/{company_name}:
+    get:
+      tags: [Supply Chain Graph]
+      summary: Get Tier-N supply chain graph
+      description: Build and return a supply chain graph for a company.
+      operationId: getGraph
+      parameters:
+        - name: company_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: country_code
+          in: query
+          schema:
+            type: string
+            default: jp
+        - name: depth
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 3
+            default: 2
+      responses:
+        "200":
+          description: Supply chain graph data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # =========================================================================
+  # Route Risk
+  # =========================================================================
+  /api/v1/route-risk:
+    post:
+      tags: [Route Risk]
+      summary: Analyze transport route risk
+      description: Analyze shipping route risk including chokepoint passage and alternative routes.
+      operationId: analyzeRouteRisk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RouteRiskRequest"
+      responses:
+        "200":
+          description: Route risk analysis
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/chokepoints:
+    get:
+      tags: [Route Risk]
+      summary: List 7 major chokepoints
+      description: List all major maritime chokepoints with current risk levels.
+      operationId: listChokepoints
+      responses:
+        "200":
+          description: Chokepoint list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  chokepoints:
+                    type: array
+                    items:
+                      type: object
+
+  /api/v1/chokepoint/{chokepoint_id}:
+    get:
+      tags: [Route Risk]
+      summary: Get individual chokepoint risk
+      description: Get risk details for a specific chokepoint.
+      operationId: getChokepointRisk
+      parameters:
+        - name: chokepoint_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Chokepoint risk data
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Concentration
+  # =========================================================================
+  /api/v1/concentration:
+    post:
+      tags: [Concentration]
+      summary: Supplier concentration risk analysis
+      description: Analyze supplier concentration risk with optional sector filter.
+      operationId: analyzeConcentration
+      parameters:
+        - name: sector
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Concentration analysis
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Simulation
+  # =========================================================================
+  /api/v1/simulate/{scenario}:
+    get:
+      tags: [Simulation]
+      summary: Simulate disruption scenario
+      description: Run a disruption simulation for a given scenario.
+      operationId: simulateDisruption
+      parameters:
+        - name: scenario
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [sanctions, conflict, disaster, port_closure, pandemic]
+      responses:
+        "200":
+          description: Simulation results
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Due Diligence
+  # =========================================================================
+  /api/v1/dd-report:
+    post:
+      tags: [Due Diligence]
+      summary: Generate KYS due diligence report
+      description: Generate a comprehensive due diligence report for an entity.
+      operationId: generateDDReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DDReportRequest"
+      responses:
+        "200":
+          description: Due diligence report
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Commodity Exposure
+  # =========================================================================
+  /api/v1/commodity/{sector}:
+    get:
+      tags: [Commodity Exposure]
+      summary: Commodity exposure by sector
+      description: Analyze commodity exposure for a given sector.
+      operationId: getCommodityExposure
+      parameters:
+        - name: sector
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Commodity exposure analysis
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Bulk Assessment
+  # =========================================================================
+  /api/v1/bulk-assess:
+    post:
+      tags: [Bulk Assessment]
+      summary: Bulk supplier assessment
+      description: Assess multiple suppliers in bulk from CSV data.
+      operationId: bulkAssessSuppliers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkAssessRequest"
+      responses:
+        "200":
+          description: Bulk assessment results
+          content:
+            application/json:
+              schema:
+                type: object
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Climate
+  # =========================================================================
+  /api/v1/climate/{location}:
+    get:
+      tags: [Climate]
+      summary: Climate risk (ND-GAIN/GloFAS/WRI)
+      description: Get climate risk indicators for a location.
+      operationId: getClimateRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Climate risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Cyber
+  # =========================================================================
+  /api/v1/cyber/{location}:
+    get:
+      tags: [Cyber]
+      summary: Cyber risk (OONI/CISA KEV/ITU ICT)
+      description: Get cyber risk indicators for a location.
+      operationId: getCyberRisk
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cyber risk data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationRiskResponse"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Data Quality
+  # =========================================================================
+  /api/v1/monitoring/quality:
+    get:
+      tags: [Data Quality]
+      summary: Data quality dashboard
+      description: |
+        Returns data quality metrics including score coverage per dimension,
+        recent anomalies, source health, and last full run timestamp.
+      operationId: getDataQuality
+      responses:
+        "200":
+          description: Data quality report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  timestamp:
+                    type: string
+                    format: date-time
+                  score_coverage:
+                    type: object
+                    additionalProperties:
+                      type: number
+                  recent_anomalies:
+                    type: array
+                    items:
+                      type: object
+                  source_health:
+                    type: object
+                  last_full_run:
+                    type: string
+
+  # =========================================================================
+  # Analytics — Overview
+  # =========================================================================
+  /api/v1/analytics/overview:
+    get:
+      tags: [Analytics]
+      summary: Analytics index
+      description: Lists all available analytics endpoints with sample requests.
+      operationId: analyticsOverview
+      responses:
+        "200":
+          description: Analytics index
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  available_analyses:
+                    type: array
+                    items:
+                      type: object
+
+  # =========================================================================
+  # Analytics — Portfolio
+  # =========================================================================
+  /api/v1/analytics/portfolio:
+    post:
+      tags: [Analytics]
+      summary: Portfolio risk analysis
+      description: Analyze risk across a portfolio of suppliers.
+      operationId: analyzePortfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioRequest"
+      responses:
+        "200":
+          description: Portfolio analysis report
+          content:
+            application/json:
+              schema:
+                type: object
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/portfolio/rank:
+    post:
+      tags: [Analytics]
+      summary: Supplier risk ranking
+      description: Rank suppliers by risk score.
+      operationId: rankPortfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RankRequest"
+      responses:
+        "200":
+          description: Ranked suppliers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ranking:
+                    type: array
+                    items:
+                      type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/portfolio/cluster:
+    post:
+      tags: [Analytics]
+      summary: Supplier risk clustering
+      description: Cluster suppliers by risk profile similarity.
+      operationId: clusterPortfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClusterRequest"
+      responses:
+        "200":
+          description: Cluster results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clusters:
+                    type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Analytics — Correlation
+  # =========================================================================
+  /api/v1/analytics/correlations:
+    post:
+      tags: [Analytics]
+      summary: Risk dimension correlations
+      description: Compute correlation matrix across risk dimensions for given locations.
+      operationId: analyzeCorrelations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CorrelationRequest"
+      responses:
+        "200":
+          description: Correlation matrix
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/correlations/leading-indicators:
+    post:
+      tags: [Analytics]
+      summary: Find leading risk indicators
+      description: Detect which risk dimensions lead others by a configurable lag period.
+      operationId: findLeadingIndicators
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadingIndicatorRequest"
+      responses:
+        "200":
+          description: Leading indicators
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  target_dimension:
+                    type: string
+                  indicators:
+                    type: array
+                    items:
+                      type: object
+                  count:
+                    type: integer
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/correlations/cascades/{location}:
+    get:
+      tags: [Analytics]
+      summary: Detect risk cascades
+      description: Detect cascading risk events for a location within a date range.
+      operationId: detectCascades
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+            default: "2026-01-01"
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+            default: "2026-03-17"
+      responses:
+        "200":
+          description: Cascade detection results
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Analytics — Benchmark
+  # =========================================================================
+  /api/v1/analytics/benchmark/industry:
+    post:
+      tags: [Analytics]
+      summary: Industry benchmark
+      description: Benchmark an entity against industry average risk profiles.
+      operationId: benchmarkIndustry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndustryBenchmarkRequest"
+      responses:
+        "200":
+          description: Benchmark report
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/benchmark/peers:
+    post:
+      tags: [Analytics]
+      summary: Peer benchmark
+      description: Benchmark against peer companies.
+      operationId: benchmarkPeers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PeerBenchmarkRequest"
+      responses:
+        "200":
+          description: Peer benchmark report
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/benchmark/regional/{region}:
+    get:
+      tags: [Analytics]
+      summary: Regional baseline
+      description: Compute regional risk baseline scores.
+      operationId: benchmarkRegional
+      parameters:
+        - name: region
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Regional baseline
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Analytics — Sensitivity
+  # =========================================================================
+  /api/v1/analytics/sensitivity/weights:
+    post:
+      tags: [Analytics]
+      summary: Weight sensitivity analysis
+      description: Analyze how perturbations in dimension weights affect overall score.
+      operationId: analyzeWeightSensitivity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WeightSensitivityRequest"
+      responses:
+        "200":
+          description: Sensitivity report
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/sensitivity/what-if:
+    post:
+      tags: [Analytics]
+      summary: What-If scenario simulation
+      description: Simulate score changes when specific dimensions are overridden.
+      operationId: simulateWhatIf
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WhatIfRequest"
+      responses:
+        "200":
+          description: What-if result
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/sensitivity/threshold:
+    post:
+      tags: [Analytics]
+      summary: Threshold driver analysis
+      description: Find which dimensions drive the score past a given risk threshold.
+      operationId: findThresholdDrivers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThresholdRequest"
+      responses:
+        "200":
+          description: Threshold analysis
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/analytics/sensitivity/montecarlo:
+    post:
+      tags: [Analytics]
+      summary: Monte Carlo simulation
+      description: Run Monte Carlo simulation to estimate score distribution.
+      operationId: monteCarloSimulation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MonteCarloRequest"
+      responses:
+        "200":
+          description: Monte Carlo results
+          content:
+            application/json:
+              schema:
+                type: object
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Forecasting
+  # =========================================================================
+  /api/v1/forecast/accuracy:
+    get:
+      tags: [Forecasting]
+      summary: Forecast accuracy report
+      description: Get forecast model accuracy metrics over a specified period.
+      operationId: getForecastAccuracy
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+      responses:
+        "200":
+          description: Accuracy report
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/forecast/ensemble/{location}:
+    get:
+      tags: [Forecasting]
+      summary: Ensemble forecast
+      description: Get ensemble forecast for a location and dimension.
+      operationId: getEnsembleForecast
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dimension
+          in: query
+          schema:
+            type: string
+            default: overall
+        - name: horizon_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 30
+      responses:
+        "200":
+          description: Forecast data
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/forecast/backtest/{location}:
+    get:
+      tags: [Forecasting]
+      summary: Backtest forecast model
+      description: Run backtesting on forecast model for a location.
+      operationId: backtestForecast
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dimension
+          in: query
+          schema:
+            type: string
+            default: overall
+        - name: holdout_days
+          in: query
+          schema:
+            type: integer
+            minimum: 7
+            maximum: 90
+            default: 30
+      responses:
+        "200":
+          description: Backtest results
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Screening — Reputation
+  # =========================================================================
+  /api/v1/screening/reputation:
+    post:
+      tags: [Screening]
+      summary: Supplier reputation screening
+      description: Screen a supplier's reputation using news and public data.
+      operationId: screenReputation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReputationScreenRequest"
+      responses:
+        "200":
+          description: Reputation screening result
+          content:
+            application/json:
+              schema:
+                type: object
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/screening/reputation/batch:
+    post:
+      tags: [Screening]
+      summary: Batch reputation screening
+      description: Screen multiple suppliers' reputations in a single request.
+      operationId: batchScreenReputation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchReputationRequest"
+      responses:
+        "200":
+          description: Batch screening results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_screened:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      type: object
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # Cost Impact
+  # =========================================================================
+  /api/v1/cost-impact/estimate:
+    post:
+      tags: [Cost Impact]
+      summary: Estimate disruption cost
+      description: Estimate the financial cost of a supply chain disruption scenario.
+      operationId: estimateCostImpact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostEstimateRequest"
+      responses:
+        "200":
+          description: Cost estimate
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid scenario
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/cost-impact/compare:
+    post:
+      tags: [Cost Impact]
+      summary: Compare cost scenarios
+      description: Compare financial impact across all disruption scenarios.
+      operationId: compareCostScenarios
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostCompareRequest"
+      responses:
+        "200":
+          description: Scenario comparison
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/cost-impact/sensitivity:
+    post:
+      tags: [Cost Impact]
+      summary: Cost sensitivity analysis
+      description: Analyze cost sensitivity across different disruption durations.
+      operationId: costSensitivity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostSensitivityRequest"
+      responses:
+        "200":
+          description: Sensitivity analysis
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid scenario
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  # =========================================================================
+  # BOM Analysis
+  # =========================================================================
+  /api/v1/bom/analyze:
+    post:
+      tags: [BOM Analysis]
+      summary: Analyze BOM risk
+      description: Perform risk analysis on a Bill of Materials with optional Tier-2 inference.
+      operationId: analyzeBom
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BOMAnalysisRequest"
+      responses:
+        "200":
+          description: BOM risk analysis
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/bom/infer-supply-chain:
+    post:
+      tags: [BOM Analysis]
+      summary: Infer Tier-2/3 supply chain
+      description: Estimate hidden supply chain tiers beyond Tier-1 suppliers.
+      operationId: inferSupplyChain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TierInferenceRequest"
+      responses:
+        "200":
+          description: Inferred supply chain
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/bom/hidden-risk:
+    post:
+      tags: [BOM Analysis]
+      summary: Hidden risk exposure
+      description: Analyze hidden risk exposure from inferred sub-tier suppliers.
+      operationId: getHiddenRisk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HiddenRiskRequest"
+      responses:
+        "200":
+          description: Hidden risk analysis
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/bom/import-csv:
+    post:
+      tags: [BOM Analysis]
+      summary: Import BOM from CSV
+      description: Import a BOM from CSV data and run risk analysis.
+      operationId: importBomCsv
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BOMImportRequest"
+      responses:
+        "200":
+          description: BOM analysis result
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid CSV data
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/bom/product-risk:
+    get:
+      tags: [BOM Analysis]
+      summary: Product risk from BOM file
+      description: Calculate product risk from a BOM JSON file path.
+      operationId: getProductRisk
+      parameters:
+        - name: product_name
+          in: query
+          schema:
+            type: string
+            default: Product
+        - name: bom_file
+          in: query
+          schema:
+            type: string
+          description: Path to BOM JSON file
+      responses:
+        "200":
+          description: Product risk comparison
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+
+  /api/v1/bom/sample:
+    get:
+      tags: [BOM Analysis]
+      summary: Get sample BOM data
+      description: Returns sample BOM data (EV powertrain) for testing.
+      operationId: getSampleBom
+      responses:
+        "200":
+          description: Sample BOM JSON
+          content:
+            application/json:
+              schema:
+                type: object
+
+# ===========================================================================
+# Components
+# ===========================================================================
+components:
+  schemas:
+    ScreenRequest:
+      type: object
+      required: [company_name]
+      properties:
+        company_name:
+          type: string
+          description: Company name (Japanese/English)
+        country:
+          type: string
+          description: Country name (optional, improves accuracy)
+
+    BulkScreenRequest:
+      type: object
+      required: [companies]
+      properties:
+        companies:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScreenRequest"
+
+    ScreenResult:
+      type: object
+      properties:
+        company_name:
+          type: string
+        matched:
+          type: boolean
+        match_score:
+          type: number
+        source:
+          type: string
+        matched_entity:
+          type: string
+        evidence:
+          type: array
+          items:
+            type: string
+        screened_at:
+          type: string
+          format: date-time
+
+    BulkScreenResponse:
+      type: object
+      properties:
+        total_screened:
+          type: integer
+        matched_count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScreenResult"
+
+    MonitorRequest:
+      type: object
+      required: [supplier_id, company_name, location]
+      properties:
+        supplier_id:
+          type: string
+        company_name:
+          type: string
+        location:
+          type: string
+
+    RouteRiskRequest:
+      type: object
+      required: [origin, destination]
+      properties:
+        origin:
+          type: string
+        destination:
+          type: string
+
+    DDReportRequest:
+      type: object
+      required: [entity_name, country]
+      properties:
+        entity_name:
+          type: string
+        country:
+          type: string
+
+    BulkAssessRequest:
+      type: object
+      required: [csv_data]
+      properties:
+        csv_data:
+          type: string
+          description: CSV-formatted supplier data
+        depth:
+          type: string
+          default: quick
+          enum: [quick, standard, deep]
+
+    PortfolioRequest:
+      type: object
+      required: [entities]
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              country:
+                type: string
+              tier:
+                type: integer
+              share:
+                type: number
+        dimensions:
+          type: array
+          items:
+            type: string
+          default: []
+        include_clustering:
+          type: boolean
+          default: false
+
+    RankRequest:
+      type: object
+      required: [entities]
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+        sort_by:
+          type: string
+          default: overall
+        ascending:
+          type: boolean
+          default: true
+
+    ClusterRequest:
+      type: object
+      required: [entities]
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+        n_clusters:
+          type: integer
+          default: 3
+
+    CorrelationRequest:
+      type: object
+      required: [locations]
+      properties:
+        locations:
+          type: array
+          items:
+            type: string
+        method:
+          type: string
+          default: pearson
+          enum: [pearson, spearman, kendall]
+
+    LeadingIndicatorRequest:
+      type: object
+      required: [target_dimension, locations]
+      properties:
+        target_dimension:
+          type: string
+        locations:
+          type: array
+          items:
+            type: string
+        lag_days:
+          type: integer
+          default: 30
+
+    IndustryBenchmarkRequest:
+      type: object
+      required: [entity]
+      properties:
+        entity:
+          type: object
+          properties:
+            name:
+              type: string
+            country:
+              type: string
+            industry:
+              type: string
+
+    PeerBenchmarkRequest:
+      type: object
+      required: [target, peers]
+      properties:
+        target:
+          type: object
+        peers:
+          type: array
+          items:
+            type: object
+
+    WeightSensitivityRequest:
+      type: object
+      required: [location]
+      properties:
+        location:
+          type: string
+        weight_perturbation:
+          type: number
+          default: 0.05
+
+    WhatIfRequest:
+      type: object
+      required: [location, dimension_overrides]
+      properties:
+        location:
+          type: string
+        dimension_overrides:
+          type: object
+          additionalProperties:
+            type: number
+
+    ThresholdRequest:
+      type: object
+      required: [location]
+      properties:
+        location:
+          type: string
+        target_level:
+          type: string
+          default: HIGH
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+
+    MonteCarloRequest:
+      type: object
+      required: [location]
+      properties:
+        location:
+          type: string
+        n_simulations:
+          type: integer
+          default: 1000
+        noise_std:
+          type: number
+          default: 10.0
+
+    ReputationScreenRequest:
+      type: object
+      required: [supplier_name]
+      properties:
+        supplier_name:
+          type: string
+        country:
+          type: string
+          default: ""
+        days_back:
+          type: integer
+          default: 180
+
+    BatchReputationRequest:
+      type: object
+      required: [suppliers]
+      properties:
+        suppliers:
+          type: array
+          items:
+            type: object
+            properties:
+              supplier_name:
+                type: string
+              country:
+                type: string
+        days_back:
+          type: integer
+          default: 180
+
+    CostEstimateRequest:
+      type: object
+      required: [scenario]
+      properties:
+        scenario:
+          type: string
+          enum: [sanctions, conflict, disaster, port_closure, pandemic]
+        annual_spend_usd:
+          type: number
+          default: 1000000
+        daily_revenue_usd:
+          type: number
+          default: 100000
+        duration_days:
+          type: integer
+          default: 60
+        risk_score:
+          type: number
+          default: 50.0
+
+    CostCompareRequest:
+      type: object
+      properties:
+        annual_spend_usd:
+          type: number
+          default: 1000000
+        daily_revenue_usd:
+          type: number
+          default: 100000
+        duration_days:
+          type: integer
+          default: 60
+        risk_score:
+          type: number
+          default: 50.0
+        scenarios:
+          type: array
+          items:
+            type: string
+          nullable: true
+
+    CostSensitivityRequest:
+      type: object
+      required: [scenario]
+      properties:
+        scenario:
+          type: string
+          enum: [sanctions, conflict, disaster, port_closure, pandemic]
+        annual_spend_usd:
+          type: number
+          default: 1000000
+        daily_revenue_usd:
+          type: number
+          default: 100000
+        durations:
+          type: array
+          items:
+            type: integer
+          default: [30, 60, 90, 180]
+        risk_score:
+          type: number
+          default: 50.0
+
+    BOMAnalysisRequest:
+      type: object
+      required: [bom]
+      properties:
+        bom:
+          type: array
+          items:
+            type: object
+            properties:
+              part_id:
+                type: string
+              part_name:
+                type: string
+              supplier_name:
+                type: string
+              supplier_country:
+                type: string
+              material:
+                type: string
+              hs_code:
+                type: string
+              tier:
+                type: integer
+              quantity:
+                type: number
+              unit_cost_usd:
+                type: number
+              is_critical:
+                type: boolean
+        product_name:
+          type: string
+          default: Product
+        include_tier2_inference:
+          type: boolean
+          default: false
+
+    TierInferenceRequest:
+      type: object
+      required: [tier1_country, hs_code]
+      properties:
+        tier1_country:
+          type: string
+        hs_code:
+          type: string
+        material:
+          type: string
+          default: ""
+        max_depth:
+          type: integer
+          default: 3
+
+    HiddenRiskRequest:
+      type: object
+      required: [tier1_country, materials]
+      properties:
+        tier1_country:
+          type: string
+        materials:
+          type: array
+          items:
+            type: object
+            properties:
+              hs_code:
+                type: string
+              material:
+                type: string
+
+    BOMImportRequest:
+      type: object
+      required: [csv_data]
+      properties:
+        csv_data:
+          type: string
+        product_name:
+          type: string
+          default: Product
+        include_tier2_inference:
+          type: boolean
+          default: false
+
+    DisasterEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        title:
+          type: string
+        severity:
+          type: string
+        country:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+        date:
+          type: string
+
+    LocationRiskResponse:
+      type: object
+      properties:
+        location:
+          type: string
+        score:
+          type: number
+        evidence:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+
+    RiskScoreResponse:
+      type: object
+      properties:
+        supplier_id:
+          type: string
+        company_name:
+          type: string
+        overall_score:
+          type: number
+        risk_level:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
+        dimension_scores:
+          type: object
+          additionalProperties:
+            type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        version:
+          type: string
+        dimensions:
+          type: integer
+        mcp_tools:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        sanctions_sources:
+          type: object
+        active_alerts:
+          type: integer
+        data_staleness:
+          type: object
+        forecast_model_status:
+          type: string
+        coverage:
+          type: object
+        uptime_seconds:
+          type: number
+        total_requests_served:
+          type: integer
+
+    StatsResponse:
+      type: object
+      properties:
+        sanctions_entities:
+          type: integer
+        screenings_performed:
+          type: integer
+        active_alerts:
+          type: integer
+        monitored_suppliers:
+          type: integer
+        sources:
+          type: object
+        dimensions:
+          type: integer
+        data_pipelines:
+          type: object
+
+    DashboardResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        dimensions:
+          type: integer
+        sources:
+          type: object
+        db:
+          type: object
+
+    AlertsResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        alerts:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              supplier:
+                type: string
+              type:
+                type: string
+              severity:
+                type: string
+              score:
+                type: number
+              title:
+                type: string
+              description:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+
+  responses:
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              detail:
+                type: string
+
+    UpstreamError:
+      description: Upstream data source error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail:
+                type: string

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "scri": {
+      "command": "python",
+      "args": ["/PATH/TO/supply-chain-risk/server/mcp_server.py"]
+    }
+  }
+}

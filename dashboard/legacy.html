@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCRI Dashboard - Supply Chain Risk Intelligence</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
+a{color:#58a6ff;text-decoration:none}
+.header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #30363d;box-shadow:0 2px 16px rgba(0,0,0,0.4)}
+.header h1{font-size:22px;font-weight:700;color:#f0f6fc;letter-spacing:.5px}
+.header h1 span{color:#58a6ff}
+.header .meta{font-size:12px;color:#8b949e}
+.tab-nav{display:flex;background:#161b22;border-bottom:1px solid #30363d;padding:0 24px;overflow-x:auto}
+.tab-btn{padding:12px 24px;cursor:pointer;border:none;background:none;color:#8b949e;font-size:14px;font-weight:500;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap}
+.tab-btn:hover{color:#c9d1d9;background:rgba(88,166,255,.05)}
+.tab-btn.active{color:#58a6ff;border-bottom-color:#58a6ff}
+.tab-content{display:none;padding:24px 32px}
+.tab-content.active{display:block}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 6px rgba(0,0,0,.3)}
+.card-title{font-size:16px;font-weight:600;color:#f0f6fc;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #21262d}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px 20px;text-align:center}
+.stat-value{font-size:32px;font-weight:700;color:#f0f6fc}
+.stat-label{font-size:12px;color:#8b949e;margin-top:4px;text-transform:uppercase;letter-spacing:1px}
+input[type="text"],select{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:8px 12px;border-radius:6px;font-size:14px;outline:none;transition:border-color .2s}
+input[type="text"]:focus,select:focus{border-color:#58a6ff}
+button.btn{background:#238636;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:500;transition:background .2s}
+button.btn:hover{background:#2ea043}
+button.btn-secondary{background:#30363d}
+button.btn-secondary:hover{background:#484f58}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#21262d;color:#f0f6fc;padding:10px 12px;text-align:left;font-weight:600;border-bottom:1px solid #30363d;position:sticky;top:0}
+td{padding:8px 12px;border-bottom:1px solid #21262d}
+tr:hover{background:rgba(88,166,255,.04)}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;text-transform:uppercase}
+.badge-critical{background:rgba(255,23,68,.2);color:#ff1744}
+.badge-high{background:rgba(255,145,0,.2);color:#ff9100}
+.badge-medium{background:rgba(255,234,0,.15);color:#ffd600}
+.badge-low{background:rgba(0,230,118,.15);color:#00e676}
+.badge-minimal{background:rgba(0,176,255,.15);color:#00b0ff}
+.badge-warning{background:rgba(255,145,0,.2);color:#ff9100}
+.badge-info{background:rgba(0,176,255,.15);color:#00b0ff}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.flex-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.mt-16{margin-top:16px}
+.mb-16{margin-bottom:16px}
+.text-center{text-align:center}
+.text-muted{color:#8b949e}
+.scrollable{max-height:500px;overflow-y:auto}
+.filter-group{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.filter-btn{padding:5px 14px;border-radius:16px;border:1px solid #30363d;background:none;color:#8b949e;cursor:pointer;font-size:12px;transition:all .2s}
+.filter-btn:hover{border-color:#58a6ff;color:#58a6ff}
+.filter-btn.active{background:rgba(88,166,255,.15);border-color:#58a6ff;color:#58a6ff}
+@media(max-width:768px){.grid-2{grid-template-columns:1fr}.header{padding:12px 16px}.tab-content{padding:16px}.tab-btn{padding:10px 14px;font-size:13px}}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1><span>SCRI</span> Supply Chain Risk Intelligence</h1>
+    <div class="meta">
+        v1.1.0 &middot; 50 countries &middot; 26 dimensions<br>
+        Generated: 2026-03-28 UTC
+    </div>
+</div>
+
+<div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('tab-map')">Global Risk Map</button>
+    <button class="tab-btn" onclick="switchTab('tab-portfolio')">Portfolio Analyzer</button>
+    <button class="tab-btn" onclick="switchTab('tab-correlation')">Correlation Matrix</button>
+    <button class="tab-btn" onclick="switchTab('tab-timeseries')">Time Series</button>
+    <button class="tab-btn" onclick="switchTab('tab-alerts')">Alerts</button>
+    <button class="tab-btn" onclick="switchTab('tab-bom')">BOM Analysis</button>
+    <button class="tab-btn" onclick="switchTab('tab-costimpact')">Cost Impact</button>
+    <button class="tab-btn" onclick="switchTab('tab-graph')">Supply Chain Graph</button>
+    <button class="tab-btn" onclick="switchTab('tab-twin')">Digital Twin</button>
+    <button class="tab-btn" onclick="switchTab('tab-scenario')">Scenario Simulator</button>
+</div>
+
+<!-- TAB 1: GLOBAL RISK MAP -->
+<div id="tab-map" class="tab-content active">
+    <div class="stats-row" id="stats-row"></div>
+    <div class="card">
+        <div class="card-title">World Risk Choropleth &mdash; Click a country to see its 24-dimension radar</div>
+        <div id="choropleth-map" style="width:100%;height:520px;"></div>
+    </div>
+    <div class="card" id="radar-card" style="display:none;">
+        <div class="card-title" id="radar-title">Dimension Radar</div>
+        <div id="radar-chart" style="width:100%;height:480px;"></div>
+    </div>
+</div>
+
+<!-- TAB 2: PORTFOLIO ANALYZER -->
+<div id="tab-portfolio" class="tab-content">
+    <div class="card">
+        <div class="card-title">Analyze Country Portfolio</div>
+        <div class="flex-row mb-16">
+            <input type="text" id="portfolio-input"
+                   placeholder="Enter ISO-3 codes: JPN, USA, DEU, CHN ..."
+                   style="flex:1;min-width:300px;">
+            <button class="btn" onclick="analyzePortfolio()">Analyze</button>
+            <button class="btn btn-secondary" onclick="loadPreset('asia')">Asia Preset</button>
+            <button class="btn btn-secondary" onclick="loadPreset('g7')">G7 Preset</button>
+            <button class="btn btn-secondary" onclick="loadPreset('high_risk')">High Risk</button>
+        </div>
+        <p class="text-muted" style="font-size:12px;">
+            Available codes: ARE, ARG, AUS, BGD, BRA, CAN, CHE, CHL, CHN, COL, DEU, EGY, ETH, FRA, GBR, IDN, IND, IRN, IRQ, ISR, ITA, JPN, KEN, KHM, KOR, LKA, MEX, MMR, MYS, NGA, NLD, PAK, PHL, POL, PRK, QAT, RUS, SAU, SGP, SOM, SSD, THA, TUR, TWN, UKR, USA, VEN, VNM, YEM, ZAF
+        </p>
+    </div>
+    <div id="portfolio-results" style="display:none;">
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-title">Risk Ranking</div>
+                <div id="portfolio-table-wrap" class="scrollable"></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Overall Score Comparison</div>
+                <div id="portfolio-bar" style="width:100%;height:400px;"></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Dimension Heatmap &mdash; Selected Countries &times; 24 Dimensions</div>
+            <div id="portfolio-heatmap" style="width:100%;height:500px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- TAB 3: CORRELATION MATRIX -->
+<div id="tab-correlation" class="tab-content">
+    <div class="card">
+        <div class="card-title">24&times;24 Dimension Correlation Matrix</div>
+        <p class="text-muted mb-16" style="font-size:13px;">
+            Pearson correlation across 50 countries.
+            Cells with |r| &gt; 0.70 are highlighted with annotation markers.
+        </p>
+        <div id="corr-heatmap" style="width:100%;height:700px;"></div>
+    </div>
+    <div class="card">
+        <div class="card-title">Strongly Correlated Dimension Pairs (|r| &gt; 0.70)</div>
+        <div id="corr-table-wrap" class="scrollable"></div>
+    </div>
+</div>
+
+<!-- TAB 4: TIME SERIES -->
+<div id="tab-timeseries" class="tab-content">
+    <div class="card">
+        <div class="card-title">Score History</div>
+        <div class="flex-row mb-16">
+            <label style="color:#8b949e;">Country:</label>
+            <select id="ts-country" onchange="updateTimeSeries()" style="min-width:200px;">
+                <option value="Argentina">Argentina</option><option value="Australia">Australia</option><option value="Bangladesh">Bangladesh</option><option value="Brazil">Brazil</option><option value="Cambodia">Cambodia</option><option value="Canada">Canada</option><option value="Chile">Chile</option><option value="China">China</option><option value="Colombia">Colombia</option><option value="Egypt">Egypt</option><option value="Ethiopia">Ethiopia</option><option value="France">France</option><option value="Germany">Germany</option><option value="India">India</option><option value="Indonesia">Indonesia</option><option value="Iran">Iran</option><option value="Iraq">Iraq</option><option value="Israel">Israel</option><option value="Italy">Italy</option><option value="Japan">Japan</option><option value="Kenya">Kenya</option><option value="Malaysia">Malaysia</option><option value="Mexico">Mexico</option><option value="Myanmar">Myanmar</option><option value="Netherlands">Netherlands</option><option value="Nigeria">Nigeria</option><option value="North Korea">North Korea</option><option value="Pakistan">Pakistan</option><option value="Philippines">Philippines</option><option value="Poland">Poland</option><option value="Qatar">Qatar</option><option value="Russia">Russia</option><option value="Saudi Arabia">Saudi Arabia</option><option value="Singapore">Singapore</option><option value="Somalia">Somalia</option><option value="South Africa">South Africa</option><option value="South Korea">South Korea</option><option value="South Sudan">South Sudan</option><option value="Sri Lanka">Sri Lanka</option><option value="Switzerland">Switzerland</option><option value="Taiwan">Taiwan</option><option value="Thailand">Thailand</option><option value="Turkey">Turkey</option><option value="UAE">UAE</option><option value="Ukraine">Ukraine</option><option value="United Kingdom">United Kingdom</option><option value="United States">United States</option><option value="Venezuela">Venezuela</option><option value="Vietnam">Vietnam</option><option value="Yemen">Yemen</option>
+            </select>
+            <label style="color:#8b949e;margin-left:16px;">Dimension:</label>
+            <select id="ts-dimension" onchange="updateTimeSeries()" style="min-width:180px;">
+                <option value="overall">Overall Score</option>
+                <option value="sanctions">Sanctions</option><option value="geo_risk">Geo Risk</option><option value="disaster">Disaster</option><option value="legal">Legal</option><option value="maritime">Maritime</option><option value="conflict">Conflict</option><option value="economic">Economic</option><option value="currency">Currency</option><option value="health">Health</option><option value="humanitarian">Humanitarian</option><option value="weather">Weather</option><option value="typhoon">Typhoon</option><option value="compliance">Compliance</option><option value="food_security">Food Security</option><option value="trade">Trade</option><option value="internet">Internet</option><option value="political">Political</option><option value="labor">Labor</option><option value="port_congestion">Port Congestion</option><option value="aviation">Aviation</option><option value="energy">Energy</option><option value="japan_economy">Japan Economy</option><option value="climate_risk">Climate Risk</option><option value="cyber_risk">Cyber Risk</option>
+            </select>
+        </div>
+        <div id="ts-chart" style="width:100%;height:450px;"></div>
+        <div id="ts-placeholder" class="text-center text-muted mt-16" style="display:none;padding:40px;">
+            <p style="font-size:18px;">No historical data available for this selection.</p>
+            <p style="font-size:13px;margin-top:8px;">
+                Run <code>python scripts/build_baseline_scores.py</code> multiple times over different days to build time-series history.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- TAB 5: ALERTS -->
+<div id="tab-alerts" class="tab-content">
+    <div class="card">
+        <div class="card-title">Recent Alerts</div>
+        <div class="filter-group" id="alert-filters">
+            <button class="filter-btn active" onclick="filterAlerts('ALL')">All</button>
+            <button class="filter-btn" onclick="filterAlerts('CRITICAL')">Critical</button>
+            <button class="filter-btn" onclick="filterAlerts('WARNING')">Warning</button>
+            <button class="filter-btn" onclick="filterAlerts('INFO')">Info</button>
+            <button class="filter-btn" onclick="filterAlerts('LOW')">Low</button>
+        </div>
+        <div id="alerts-table-wrap" class="scrollable"></div>
+        <div id="alerts-empty" class="text-center text-muted" style="display:none;padding:40px;">
+            <p style="font-size:18px;">No alerts found.</p>
+            <p style="font-size:13px;margin-top:8px;">
+                Alerts are generated during risk scoring runs and stored in <code>data/alerts/</code>.
+            </p>
+        </div>
+    </div>
+</div>
+
+<script>
+// Embedded Data
+const MAP_LOCATIONS = ["SSD", "IRN", "MMR", "SAU", "BGD", "YEM", "RUS", "PRK", "VEN", "IDN", "PHL", "ETH", "SOM", "UKR", "USA", "NLD", "PAK", "KHM", "CHN", "MYS", "TWN", "NGA", "BRA", "IRQ", "KEN", "THA", "IND", "TUR", "COL", "VNM", "ARE", "AUS", "ZAF", "KOR", "ISR", "EGY", "MEX", "QAT", "ARG", "SGP", "DEU", "CAN", "LKA", "ITA", "JPN", "GBR", "FRA", "POL", "CHE", "CHL"];
+const MAP_Z = [69.0, 62.0, 59.0, 57.0, 57.0, 56.0, 54.0, 54.0, 53.0, 51.0, 51.0, 51.0, 50.0, 47.0, 46.0, 45.0, 44.0, 43.0, 42.0, 42.0, 41.0, 40.0, 39.0, 38.0, 38.0, 36.0, 35.0, 35.0, 35.0, 34.0, 32.0, 32.0, 31.0, 31.0, 30.0, 30.0, 30.0, 28.0, 26.0, 24.0, 23.0, 23.0, 22.0, 17.0, 16.0, 15.0, 15.0, 15.0, 14.0, 13.0];
+const MAP_TEXT = ["South Sudan<br>Score: 69.0<br>Level: HIGH", "Iran<br>Score: 62.0<br>Level: HIGH", "Myanmar<br>Score: 59.0<br>Level: MEDIUM", "Saudi Arabia<br>Score: 57.0<br>Level: MEDIUM", "Bangladesh<br>Score: 57.0<br>Level: MEDIUM", "Yemen<br>Score: 56.0<br>Level: MEDIUM", "Russia<br>Score: 54.0<br>Level: MEDIUM", "North Korea<br>Score: 54.0<br>Level: MEDIUM", "Venezuela<br>Score: 53.0<br>Level: MEDIUM", "Indonesia<br>Score: 51.0<br>Level: MEDIUM", "Philippines<br>Score: 51.0<br>Level: MEDIUM", "Ethiopia<br>Score: 51.0<br>Level: MEDIUM", "Somalia<br>Score: 50.0<br>Level: MEDIUM", "Ukraine<br>Score: 47.0<br>Level: MEDIUM", "United States<br>Score: 46.0<br>Level: MEDIUM", "Netherlands<br>Score: 45.0<br>Level: MEDIUM", "Pakistan<br>Score: 44.0<br>Level: MEDIUM", "Cambodia<br>Score: 43.0<br>Level: MEDIUM", "China<br>Score: 42.0<br>Level: MEDIUM", "Malaysia<br>Score: 42.0<br>Level: MEDIUM", "Taiwan<br>Score: 41.0<br>Level: MEDIUM", "Nigeria<br>Score: 40.0<br>Level: MEDIUM", "Brazil<br>Score: 39.0<br>Level: LOW", "Iraq<br>Score: 38.0<br>Level: LOW", "Kenya<br>Score: 38.0<br>Level: LOW", "Thailand<br>Score: 36.0<br>Level: LOW", "India<br>Score: 35.0<br>Level: LOW", "Turkey<br>Score: 35.0<br>Level: LOW", "Colombia<br>Score: 35.0<br>Level: LOW", "Vietnam<br>Score: 34.0<br>Level: LOW", "UAE<br>Score: 32.0<br>Level: LOW", "Australia<br>Score: 32.0<br>Level: LOW", "South Africa<br>Score: 31.0<br>Level: LOW", "South Korea<br>Score: 31.0<br>Level: LOW", "Israel<br>Score: 30.0<br>Level: LOW", "Egypt<br>Score: 30.0<br>Level: LOW", "Mexico<br>Score: 30.0<br>Level: LOW", "Qatar<br>Score: 28.0<br>Level: LOW", "Argentina<br>Score: 26.0<br>Level: LOW", "Singapore<br>Score: 24.0<br>Level: LOW", "Germany<br>Score: 23.0<br>Level: LOW", "Canada<br>Score: 23.0<br>Level: LOW", "Sri Lanka<br>Score: 22.0<br>Level: LOW", "Italy<br>Score: 17.0<br>Level: MINIMAL", "Japan<br>Score: 16.0<br>Level: MINIMAL", "United Kingdom<br>Score: 15.0<br>Level: MINIMAL", "France<br>Score: 15.0<br>Level: MINIMAL", "Poland<br>Score: 15.0<br>Level: MINIMAL", "Switzerland<br>Score: 14.0<br>Level: MINIMAL", "Chile<br>Score: 13.0<br>Level: MINIMAL"];
+const COUNTRY_SCORES = {"SSD": {"name": "South Sudan", "overall": 69.0, "scores": {"sanctions": 30, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 85, "economic": 34, "currency": 30, "health": 0, "humanitarian": 68, "weather": 70, "typhoon": 0, "compliance": 83, "food_security": 55, "trade": 70, "internet": 60, "political": 57, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 42, "cyber_risk": 31}}, "IRN": {"name": "Iran", "overall": 62.0, "scores": {"sanctions": 32, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 0, "currency": 0, "health": 0, "humanitarian": 0, "weather": 40, "typhoon": 0, "compliance": 95, "food_security": 0, "trade": 0, "internet": 60, "political": 52, "labor": 45, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 54, "cyber_risk": 45}}, "MMR": {"name": "Myanmar", "overall": 59.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 90, "economic": 64, "currency": 15, "health": 0, "humanitarian": 60, "weather": 0, "typhoon": 0, "compliance": 95, "food_security": 70, "trade": 15, "internet": 70, "political": 54, "labor": 65, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 46, "cyber_risk": 47}}, "SAU": {"name": "Saudi Arabia", "overall": 57.0, "scores": {"sanctions": 32, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 30, "currency": 0, "health": 0, "humanitarian": 0, "weather": 50, "typhoon": 0, "compliance": 24, "food_security": 0, "trade": 50, "internet": 0, "political": 55, "labor": 85, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 52, "cyber_risk": 20}}, "BGD": {"name": "Bangladesh", "overall": 57.0, "scores": {"sanctions": 33, "geo_risk": 0, "disaster": 55, "legal": 0, "maritime": 0, "conflict": 0, "economic": 53, "currency": 15, "health": 0, "humanitarian": 32, "weather": 70, "typhoon": 0, "compliance": 61, "food_security": 24, "trade": 15, "internet": 0, "political": 36, "labor": 45, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 53, "cyber_risk": 31}}, "YEM": {"name": "Yemen", "overall": 56.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 90, "economic": 64, "currency": 0, "health": 0, "humanitarian": 72, "weather": 40, "typhoon": 0, "compliance": 81, "food_security": 57, "trade": 0, "internet": 65, "political": 54, "labor": 45, "port_congestion": 75, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 43, "cyber_risk": 58}}, "RUS": {"name": "Russia", "overall": 54.0, "scores": {"sanctions": 30, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 60, "economic": 52, "currency": 0, "health": 0, "humanitarian": 0, "weather": 30, "typhoon": 0, "compliance": 40, "food_security": 0, "trade": 30, "internet": 0, "political": 52, "labor": 65, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 41, "cyber_risk": 26}}, "PRK": {"name": "North Korea", "overall": 54.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 20, "currency": 30, "health": 0, "humanitarian": 0, "weather": 30, "typhoon": 0, "compliance": 95, "food_security": 0, "trade": 70, "internet": 95, "political": 58, "labor": 85, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 38, "cyber_risk": 90}}, "VEN": {"name": "Venezuela", "overall": 53.0, "scores": {"sanctions": 34, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 72, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 60, "food_security": 0, "trade": 0, "internet": 0, "political": 51, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 12, "cyber_risk": 28}}, "IDN": {"name": "Indonesia", "overall": 51.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 100, "legal": 0, "maritime": 0, "conflict": 0, "economic": 36, "currency": 0, "health": 0, "humanitarian": 0, "weather": 70, "typhoon": 0, "compliance": 45, "food_security": 50, "trade": 50, "internet": 0, "political": 27, "labor": 48, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 44, "cyber_risk": 23}}, "PHL": {"name": "Philippines", "overall": 51.0, "scores": {"sanctions": 31, "geo_risk": 0, "disaster": 60, "legal": 0, "maritime": 0, "conflict": 0, "economic": 38, "currency": 15, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 52, "food_security": 50, "trade": 50, "internet": 0, "political": 28, "labor": 60, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 42, "cyber_risk": 18}}, "ETH": {"name": "Ethiopia", "overall": 51.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 60, "legal": 0, "maritime": 0, "conflict": 75, "economic": 34, "currency": 30, "health": 0, "humanitarian": 60, "weather": 70, "typhoon": 0, "compliance": 69, "food_security": 29, "trade": 70, "internet": 55, "political": 46, "labor": 48, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 36, "cyber_risk": 54}}, "SOM": {"name": "Somalia", "overall": 50.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 60, "legal": 0, "maritime": 0, "conflict": 80, "economic": 60, "currency": 0, "health": 0, "humanitarian": 64, "weather": 0, "typhoon": 0, "compliance": 82, "food_security": 57, "trade": 0, "internet": 0, "political": 55, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 41, "cyber_risk": 34}}, "UKR": {"name": "Ukraine", "overall": 47.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 95, "economic": 51, "currency": 0, "health": 0, "humanitarian": 52, "weather": 0, "typhoon": 0, "compliance": 56, "food_security": 50, "trade": 5, "internet": 0, "political": 30, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 39, "cyber_risk": 19}}, "USA": {"name": "United States", "overall": 46.0, "scores": {"sanctions": 31, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 23, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 32, "food_security": 0, "trade": 70, "internet": 0, "political": 16, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 28, "cyber_risk": 15}}, "NLD": {"name": "Netherlands", "overall": 45.0, "scores": {"sanctions": 30, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 34, "currency": 30, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 0, "food_security": 0, "trade": 70, "internet": 0, "political": 0, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 12, "cyber_risk": 28}}, "PAK": {"name": "Pakistan", "overall": 44.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 45, "legal": 0, "maritime": 0, "conflict": 55, "economic": 60, "currency": 0, "health": 0, "humanitarian": 32, "weather": 70, "typhoon": 0, "compliance": 64, "food_security": 14, "trade": 15, "internet": 0, "political": 39, "labor": 54, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 55, "cyber_risk": 38}}, "KHM": {"name": "Cambodia", "overall": 43.0, "scores": {"sanctions": 30, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 39, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 44, "food_security": 50, "trade": 15, "internet": 0, "political": 45, "labor": 48, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 34, "cyber_risk": 26}}, "CHN": {"name": "China", "overall": 42.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 35, "currency": 0, "health": 0, "humanitarian": 0, "weather": 25, "typhoon": 0, "compliance": 29, "food_security": 0, "trade": 70, "internet": 0, "political": 54, "labor": 80, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 50, "cyber_risk": 36}}, "MYS": {"name": "Malaysia", "overall": 42.0, "scores": {"sanctions": 30, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 28, "currency": 15, "health": 0, "humanitarian": 0, "weather": 40, "typhoon": 0, "compliance": 32, "food_security": 0, "trade": 50, "internet": 0, "political": 30, "labor": 45, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 36, "cyber_risk": 14}}, "TWN": {"name": "Taiwan", "overall": 41.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 80, "legal": 0, "maritime": 0, "conflict": 40, "economic": 0, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 16, "food_security": 0, "trade": 70, "internet": 0, "political": 3, "labor": 0, "port_congestion": 35, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 32, "cyber_risk": 17}}, "NGA": {"name": "Nigeria", "overall": 40.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 65, "economic": 52, "currency": 0, "health": 0, "humanitarian": 48, "weather": 0, "typhoon": 0, "compliance": 69, "food_security": 40, "trade": 5, "internet": 0, "political": 40, "labor": 39, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 43, "cyber_risk": 31}}, "BRA": {"name": "Brazil", "overall": 39.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 60, "legal": 0, "maritime": 0, "conflict": 0, "economic": 37, "currency": 30, "health": 0, "humanitarian": 0, "weather": 70, "typhoon": 0, "compliance": 51, "food_security": 0, "trade": 30, "internet": 0, "political": 25, "labor": 66, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 28, "cyber_risk": 18}}, "IRQ": {"name": "Iraq", "overall": 38.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 65, "economic": 0, "currency": 0, "health": 0, "humanitarian": 36, "weather": 40, "typhoon": 0, "compliance": 57, "food_security": 15, "trade": 0, "internet": 0, "political": 42, "labor": 65, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 55, "cyber_risk": 21}}, "KEN": {"name": "Kenya", "overall": 38.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 60, "legal": 0, "maritime": 0, "conflict": 0, "economic": 41, "currency": 0, "health": 0, "humanitarian": 0, "weather": 70, "typhoon": 0, "compliance": 60, "food_security": 25, "trade": 15, "internet": 0, "political": 35, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 12, "cyber_risk": 28}}, "THA": {"name": "Thailand", "overall": 36.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 34, "currency": 30, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 42, "food_security": 0, "trade": 70, "internet": 0, "political": 42, "labor": 45, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 43, "cyber_risk": 17}}, "IND": {"name": "India", "overall": 35.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 36, "currency": 15, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 53, "food_security": 0, "trade": 0, "internet": 0, "political": 30, "labor": 66, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 61, "cyber_risk": 23}}, "TUR": {"name": "Turkey", "overall": 35.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 35, "legal": 0, "maritime": 0, "conflict": 0, "economic": 42, "currency": 0, "health": 0, "humanitarian": 0, "weather": 25, "typhoon": 0, "compliance": 52, "food_security": 0, "trade": 30, "internet": 0, "political": 40, "labor": 65, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 43, "cyber_risk": 19}}, "COL": {"name": "Colombia", "overall": 35.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 44, "currency": 0, "health": 0, "humanitarian": 0, "weather": 40, "typhoon": 0, "compliance": 52, "food_security": 75, "trade": 0, "internet": 0, "political": 33, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 12, "cyber_risk": 28}}, "VNM": {"name": "Vietnam", "overall": 34.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 35, "legal": 0, "maritime": 0, "conflict": 0, "economic": 33, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 60, "food_security": 50, "trade": 50, "internet": 0, "political": 48, "labor": 45, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 49, "cyber_risk": 20}}, "ARE": {"name": "UAE", "overall": 32.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 21, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 20, "food_security": 0, "trade": 50, "internet": 0, "political": 49, "labor": 65, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 42, "cyber_risk": 16}}, "AUS": {"name": "Australia", "overall": 32.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 15, "currency": 30, "health": 0, "humanitarian": 0, "weather": 40, "typhoon": 0, "compliance": 24, "food_security": 0, "trade": 70, "internet": 0, "political": 9, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 32, "cyber_risk": 13}}, "ZAF": {"name": "South Africa", "overall": 31.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 36, "currency": 30, "health": 0, "humanitarian": 0, "weather": 40, "typhoon": 0, "compliance": 60, "food_security": 0, "trade": 30, "internet": 0, "political": 27, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 44, "cyber_risk": 21}}, "KOR": {"name": "South Korea", "overall": 31.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 20, "currency": 30, "health": 0, "humanitarian": 0, "weather": 30, "typhoon": 0, "compliance": 20, "food_security": 0, "trade": 70, "internet": 0, "political": 14, "labor": 25, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 32, "cyber_risk": 15}}, "ISR": {"name": "Israel", "overall": 30.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 60, "economic": 35, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 0, "food_security": 0, "trade": 50, "internet": 0, "political": 15, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 31, "cyber_risk": 16}}, "EGY": {"name": "Egypt", "overall": 30.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 56, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 43, "food_security": 50, "trade": 5, "internet": 0, "political": 49, "labor": 36, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 43, "cyber_risk": 25}}, "MEX": {"name": "Mexico", "overall": 30.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 42, "currency": 30, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 48, "food_security": 0, "trade": 30, "internet": 0, "political": 29, "labor": 54, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 37, "cyber_risk": 18}}, "QAT": {"name": "Qatar", "overall": 28.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 20, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 0, "food_security": 0, "trade": 0, "internet": 0, "political": 0, "labor": 65, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 50, "cyber_risk": 15}}, "ARG": {"name": "Argentina", "overall": 26.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 60, "legal": 0, "maritime": 0, "conflict": 0, "economic": 36, "currency": 15, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 0, "food_security": 0, "trade": 0, "internet": 0, "political": 0, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 12, "cyber_risk": 28}}, "SGP": {"name": "Singapore", "overall": 24.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 10, "currency": 0, "health": 0, "humanitarian": 0, "weather": 40, "typhoon": 0, "compliance": 8, "food_security": 0, "trade": 50, "internet": 0, "political": 31, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 19, "cyber_risk": 15}}, "DEU": {"name": "Germany", "overall": 23.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 21, "currency": 15, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 26, "food_security": 0, "trade": 50, "internet": 0, "political": 11, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 19, "cyber_risk": 15}}, "CAN": {"name": "Canada", "overall": 23.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 16, "currency": 0, "health": 0, "humanitarian": 0, "weather": 25, "typhoon": 0, "compliance": 27, "food_security": 0, "trade": 50, "internet": 0, "political": 8, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 18, "cyber_risk": 15}}, "LKA": {"name": "Sri Lanka", "overall": 22.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 0, "currency": 0, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 33, "food_security": 50, "trade": 0, "internet": 0, "political": 27, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 31, "cyber_risk": 28}}, "ITA": {"name": "Italy", "overall": 17.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 25, "currency": 15, "health": 0, "humanitarian": 0, "weather": 25, "typhoon": 0, "compliance": 30, "food_security": 0, "trade": 30, "internet": 0, "political": 0, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 28, "cyber_risk": 17}}, "JPN": {"name": "Japan", "overall": 16.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 16, "currency": 30, "health": 0, "humanitarian": 0, "weather": 25, "typhoon": 0, "compliance": 20, "food_security": 0, "trade": 0, "internet": 0, "political": 12, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 29, "cyber_risk": 17}}, "GBR": {"name": "United Kingdom", "overall": 15.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 19, "currency": 15, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 21, "food_security": 0, "trade": 30, "internet": 0, "political": 15, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 15, "cyber_risk": 14}}, "FRA": {"name": "France", "overall": 15.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 22, "currency": 15, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 26, "food_security": 0, "trade": 30, "internet": 0, "political": 14, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 15, "cyber_risk": 16}}, "POL": {"name": "Poland", "overall": 15.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 25, "currency": 30, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 0, "food_security": 0, "trade": 0, "internet": 0, "political": 11, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 20, "cyber_risk": 16}}, "CHE": {"name": "Switzerland", "overall": 14.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 0, "legal": 0, "maritime": 0, "conflict": 0, "economic": 25, "currency": 15, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 9, "food_security": 0, "trade": 30, "internet": 0, "political": 0, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 8, "cyber_risk": 14}}, "CHL": {"name": "Chile", "overall": 13.0, "scores": {"sanctions": 0, "geo_risk": 0, "disaster": 25, "legal": 0, "maritime": 0, "conflict": 0, "economic": 0, "currency": 15, "health": 0, "humanitarian": 0, "weather": 0, "typhoon": 0, "compliance": 0, "food_security": 0, "trade": 0, "internet": 0, "political": 0, "labor": 0, "port_congestion": 0, "aviation": 0, "energy": 0, "japan_economy": 35, "climate_risk": 12, "cyber_risk": 28}}};
+const DIM_KEYS = ["sanctions", "geo_risk", "disaster", "legal", "maritime", "conflict", "economic", "currency", "health", "humanitarian", "weather", "typhoon", "compliance", "food_security", "trade", "internet", "political", "labor", "port_congestion", "aviation", "energy", "japan_economy", "climate_risk", "cyber_risk"];
+const DIM_LABELS = ["Sanctions", "Geo Risk", "Disaster", "Legal", "Maritime", "Conflict", "Economic", "Currency", "Health", "Humanitarian", "Weather", "Typhoon", "Compliance", "Food Security", "Trade", "Internet", "Political", "Labor", "Port Congestion", "Aviation", "Energy", "Japan Economy", "Climate Risk", "Cyber Risk"];
+const TS_DATA = {"Argentina": {"overall": {"x": ["2026-03-18T13:29:47.277353"], "y": [26.0]}, "disaster": {"x": ["2026-03-18T13:29:47.277353"], "y": [60.0]}, "economic": {"x": ["2026-03-18T13:29:47.277353"], "y": [36.0]}, "currency": {"x": ["2026-03-18T13:29:47.277353"], "y": [15.0]}, "japan_economy": {"x": ["2026-03-18T13:29:47.277353"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:29:47.277353"], "y": [12.0]}, "cyber_risk": {"x": ["2026-03-18T13:29:47.277353"], "y": [28.0]}}, "Australia": {"overall": {"x": ["2026-03-18T13:32:24.831947"], "y": [32.0]}, "disaster": {"x": ["2026-03-18T13:32:24.831947"], "y": [25.0]}, "economic": {"x": ["2026-03-18T13:32:24.831947"], "y": [15.0]}, "currency": {"x": ["2026-03-18T13:32:24.831947"], "y": [30.0]}, "weather": {"x": ["2026-03-18T13:32:24.831947"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T13:32:24.831947"], "y": [24.0]}, "trade": {"x": ["2026-03-18T13:32:24.831947"], "y": [70.0]}, "political": {"x": ["2026-03-18T13:32:24.831947"], "y": [9.0]}, "japan_economy": {"x": ["2026-03-18T13:32:24.831947"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:32:24.831947"], "y": [32.0]}, "cyber_risk": {"x": ["2026-03-18T13:32:24.831947"], "y": [13.0]}}, "Bangladesh": {"overall": {"x": ["2026-03-18T13:02:22.933518"], "y": [57.0]}, "sanctions": {"x": ["2026-03-18T13:02:22.933518"], "y": [33.0]}, "disaster": {"x": ["2026-03-18T13:02:22.933518"], "y": [55.0]}, "economic": {"x": ["2026-03-18T13:02:22.933518"], "y": [53.0]}, "currency": {"x": ["2026-03-18T13:02:22.933518"], "y": [15.0]}, "humanitarian": {"x": ["2026-03-18T13:02:22.933518"], "y": [32.0]}, "weather": {"x": ["2026-03-18T13:02:22.933518"], "y": [70.0]}, "compliance": {"x": ["2026-03-18T13:02:22.933518"], "y": [61.0]}, "food_security": {"x": ["2026-03-18T13:02:22.933518"], "y": [24.0]}, "trade": {"x": ["2026-03-18T13:02:22.933518"], "y": [15.0]}, "political": {"x": ["2026-03-18T13:02:22.933518"], "y": [36.0]}, "labor": {"x": ["2026-03-18T13:02:22.933518"], "y": [45.0]}, "japan_economy": {"x": ["2026-03-18T13:02:22.933518"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:02:22.933518"], "y": [53.0]}, "cyber_risk": {"x": ["2026-03-18T13:02:22.933518"], "y": [31.0]}}, "Brazil": {"overall": {"x": ["2026-03-18T12:20:42.141837"], "y": [39.0]}, "disaster": {"x": ["2026-03-18T12:20:42.141837"], "y": [60.0]}, "economic": {"x": ["2026-03-18T12:20:42.141837"], "y": [37.0]}, "currency": {"x": ["2026-03-18T12:20:42.141837"], "y": [30.0]}, "weather": {"x": ["2026-03-18T12:20:42.141837"], "y": [70.0]}, "compliance": {"x": ["2026-03-18T12:20:42.141837"], "y": [51.0]}, "trade": {"x": ["2026-03-18T12:20:42.141837"], "y": [30.0]}, "political": {"x": ["2026-03-18T12:20:42.141837"], "y": [25.0]}, "labor": {"x": ["2026-03-18T12:20:42.141837"], "y": [66.0]}, "japan_economy": {"x": ["2026-03-18T12:20:42.141837"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:20:42.141837"], "y": [28.0]}, "cyber_risk": {"x": ["2026-03-18T12:20:42.141837"], "y": [18.0]}}, "Cambodia": {"overall": {"x": ["2026-03-18T12:39:47.206988"], "y": [43.0]}, "sanctions": {"x": ["2026-03-18T12:39:47.206988"], "y": [30.0]}, "economic": {"x": ["2026-03-18T12:39:47.206988"], "y": [39.0]}, "compliance": {"x": ["2026-03-18T12:39:47.206988"], "y": [44.0]}, "food_security": {"x": ["2026-03-18T12:39:47.206988"], "y": [50.0]}, "trade": {"x": ["2026-03-18T12:39:47.206988"], "y": [15.0]}, "political": {"x": ["2026-03-18T12:39:47.206988"], "y": [45.0]}, "labor": {"x": ["2026-03-18T12:39:47.206988"], "y": [48.0]}, "japan_economy": {"x": ["2026-03-18T12:39:47.206988"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:39:47.206988"], "y": [34.0]}, "cyber_risk": {"x": ["2026-03-18T12:39:47.206988"], "y": [26.0]}}, "Canada": {"overall": {"x": ["2026-03-18T12:11:46.217949"], "y": [23.0]}, "disaster": {"x": ["2026-03-18T12:11:46.217949"], "y": [25.0]}, "economic": {"x": ["2026-03-18T12:11:46.217949"], "y": [16.0]}, "weather": {"x": ["2026-03-18T12:11:46.217949"], "y": [25.0]}, "compliance": {"x": ["2026-03-18T12:11:46.217949"], "y": [27.0]}, "trade": {"x": ["2026-03-18T12:11:46.217949"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:11:46.217949"], "y": [8.0]}, "japan_economy": {"x": ["2026-03-18T12:11:46.217949"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:11:46.217949"], "y": [18.0]}, "cyber_risk": {"x": ["2026-03-18T12:11:46.217949"], "y": [15.0]}}, "Chile": {"overall": {"x": ["2026-03-18T13:30:01.171639"], "y": [13.0]}, "disaster": {"x": ["2026-03-18T13:30:01.171639"], "y": [25.0]}, "currency": {"x": ["2026-03-18T13:30:01.171639"], "y": [15.0]}, "japan_economy": {"x": ["2026-03-18T13:30:01.171639"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:30:01.171639"], "y": [12.0]}, "cyber_risk": {"x": ["2026-03-18T13:30:01.171639"], "y": [28.0]}}, "China": {"overall": {"x": ["2026-03-18T12:14:17.241895"], "y": [42.0]}, "disaster": {"x": ["2026-03-18T12:14:17.241895"], "y": [25.0]}, "economic": {"x": ["2026-03-18T12:14:17.241895"], "y": [35.0]}, "weather": {"x": ["2026-03-18T12:14:17.241895"], "y": [25.0]}, "compliance": {"x": ["2026-03-18T12:14:17.241895"], "y": [29.0]}, "trade": {"x": ["2026-03-18T12:14:17.241895"], "y": [70.0]}, "political": {"x": ["2026-03-18T12:14:17.241895"], "y": [54.0]}, "labor": {"x": ["2026-03-18T12:14:17.241895"], "y": [80.0]}, "japan_economy": {"x": ["2026-03-18T12:14:17.241895"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:14:17.241895"], "y": [50.0]}, "cyber_risk": {"x": ["2026-03-18T12:14:17.241895"], "y": [36.0]}}, "Colombia": {"overall": {"x": ["2026-03-18T13:27:02.221927"], "y": [35.0]}, "economic": {"x": ["2026-03-18T13:27:02.221927"], "y": [44.0]}, "weather": {"x": ["2026-03-18T13:27:02.221927"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T13:27:02.221927"], "y": [52.0]}, "food_security": {"x": ["2026-03-18T13:27:02.221927"], "y": [75.0]}, "political": {"x": ["2026-03-18T13:27:02.221927"], "y": [33.0]}, "japan_economy": {"x": ["2026-03-18T13:27:02.221927"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:27:02.221927"], "y": [12.0]}, "cyber_risk": {"x": ["2026-03-18T13:27:02.221927"], "y": [28.0]}}, "Egypt": {"overall": {"x": ["2026-03-18T13:15:49.740548"], "y": [30.0]}, "economic": {"x": ["2026-03-18T13:15:49.740548"], "y": [56.0]}, "compliance": {"x": ["2026-03-18T13:15:49.740548"], "y": [43.0]}, "food_security": {"x": ["2026-03-18T13:15:49.740548"], "y": [50.0]}, "trade": {"x": ["2026-03-18T13:15:49.740548"], "y": [5.0]}, "political": {"x": ["2026-03-18T13:15:49.740548"], "y": [49.0]}, "labor": {"x": ["2026-03-18T13:15:49.740548"], "y": [36.0]}, "japan_economy": {"x": ["2026-03-18T13:15:49.740548"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:15:49.740548"], "y": [43.0]}, "cyber_risk": {"x": ["2026-03-18T13:15:49.740548"], "y": [25.0]}}, "Ethiopia": {"overall": {"x": ["2026-03-18T13:11:07.238085"], "y": [51.0]}, "disaster": {"x": ["2026-03-18T13:11:07.238085"], "y": [60.0]}, "conflict": {"x": ["2026-03-18T13:11:07.238085"], "y": [75.0]}, "economic": {"x": ["2026-03-18T13:11:07.238085"], "y": [34.0]}, "currency": {"x": ["2026-03-18T13:11:07.238085"], "y": [30.0]}, "humanitarian": {"x": ["2026-03-18T13:11:07.238085"], "y": [60.0]}, "weather": {"x": ["2026-03-18T13:11:07.238085"], "y": [70.0]}, "compliance": {"x": ["2026-03-18T13:11:07.238085"], "y": [69.0]}, "food_security": {"x": ["2026-03-18T13:11:07.238085"], "y": [29.0]}, "trade": {"x": ["2026-03-18T13:11:07.238085"], "y": [70.0]}, "internet": {"x": ["2026-03-18T13:11:07.238085"], "y": [55.0]}, "political": {"x": ["2026-03-18T13:11:07.238085"], "y": [46.0]}, "labor": {"x": ["2026-03-18T13:11:07.238085"], "y": [48.0]}, "japan_economy": {"x": ["2026-03-18T13:11:07.238085"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:11:07.238085"], "y": [36.0]}, "cyber_risk": {"x": ["2026-03-18T13:11:07.238085"], "y": [54.0]}}, "France": {"overall": {"x": ["2026-03-18T12:06:49.427230"], "y": [15.0]}, "economic": {"x": ["2026-03-18T12:06:49.427230"], "y": [22.0]}, "currency": {"x": ["2026-03-18T12:06:49.427230"], "y": [15.0]}, "compliance": {"x": ["2026-03-18T12:06:49.427230"], "y": [26.0]}, "trade": {"x": ["2026-03-18T12:06:49.427230"], "y": [30.0]}, "political": {"x": ["2026-03-18T12:06:49.427230"], "y": [14.0]}, "japan_economy": {"x": ["2026-03-18T12:06:49.427230"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:06:49.427230"], "y": [15.0]}, "cyber_risk": {"x": ["2026-03-18T12:06:49.427230"], "y": [16.0]}}, "Germany": {"overall": {"x": ["2026-03-18T12:02:24.335409"], "y": [23.0]}, "disaster": {"x": ["2026-03-18T12:02:24.335409"], "y": [25.0]}, "economic": {"x": ["2026-03-18T12:02:24.335409"], "y": [21.0]}, "currency": {"x": ["2026-03-18T12:02:24.335409"], "y": [15.0]}, "compliance": {"x": ["2026-03-18T12:02:24.335409"], "y": [26.0]}, "trade": {"x": ["2026-03-18T12:02:24.335409"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:02:24.335409"], "y": [11.0]}, "japan_economy": {"x": ["2026-03-18T12:02:24.335409"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:02:24.335409"], "y": [19.0]}, "cyber_risk": {"x": ["2026-03-18T12:02:24.335409"], "y": [15.0]}}, "India": {"overall": {"x": ["2026-03-18T12:16:23.524389"], "y": [35.0]}, "disaster": {"x": ["2026-03-18T12:16:23.524389"], "y": [25.0]}, "economic": {"x": ["2026-03-18T12:16:23.524389"], "y": [36.0]}, "currency": {"x": ["2026-03-18T12:16:23.524389"], "y": [15.0]}, "compliance": {"x": ["2026-03-18T12:16:23.524389"], "y": [53.0]}, "political": {"x": ["2026-03-18T12:16:23.524389"], "y": [30.0]}, "labor": {"x": ["2026-03-18T12:16:23.524389"], "y": [66.0]}, "japan_economy": {"x": ["2026-03-18T12:16:23.524389"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:16:23.524389"], "y": [61.0]}, "cyber_risk": {"x": ["2026-03-18T12:16:23.524389"], "y": [23.0]}}, "Indonesia": {"overall": {"x": ["2026-03-18T12:24:34.937634"], "y": [51.0]}, "disaster": {"x": ["2026-03-18T12:24:34.937634"], "y": [100.0]}, "economic": {"x": ["2026-03-18T12:24:34.937634"], "y": [36.0]}, "weather": {"x": ["2026-03-18T12:24:34.937634"], "y": [70.0]}, "compliance": {"x": ["2026-03-18T12:24:34.937634"], "y": [45.0]}, "food_security": {"x": ["2026-03-18T12:24:34.937634"], "y": [50.0]}, "trade": {"x": ["2026-03-18T12:24:34.937634"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:24:34.937634"], "y": [27.0]}, "labor": {"x": ["2026-03-18T12:24:34.937634"], "y": [48.0]}, "japan_economy": {"x": ["2026-03-18T12:24:34.937634"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:24:34.937634"], "y": [44.0]}, "cyber_risk": {"x": ["2026-03-18T12:24:34.937634"], "y": [23.0]}}, "Iran": {"overall": {"x": ["2026-03-18T12:46:07.225771"], "y": [62.0]}, "sanctions": {"x": ["2026-03-18T12:46:07.225771"], "y": [32.0]}, "disaster": {"x": ["2026-03-18T12:46:07.225771"], "y": [25.0]}, "weather": {"x": ["2026-03-18T12:46:07.225771"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T12:46:07.225771"], "y": [95.0]}, "internet": {"x": ["2026-03-18T12:46:07.225771"], "y": [60.0]}, "political": {"x": ["2026-03-18T12:46:07.225771"], "y": [52.0]}, "labor": {"x": ["2026-03-18T12:46:07.225771"], "y": [45.0]}, "japan_economy": {"x": ["2026-03-18T12:46:07.225771"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:46:07.225771"], "y": [54.0]}, "cyber_risk": {"x": ["2026-03-18T12:46:07.225771"], "y": [45.0]}}, "Iraq": {"overall": {"x": ["2026-03-18T12:47:53.333030"], "y": [38.0]}, "conflict": {"x": ["2026-03-18T12:47:53.333030"], "y": [65.0]}, "humanitarian": {"x": ["2026-03-18T12:47:53.333030"], "y": [36.0]}, "weather": {"x": ["2026-03-18T12:47:53.333030"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T12:47:53.333030"], "y": [57.0]}, "food_security": {"x": ["2026-03-18T12:47:53.333030"], "y": [15.0]}, "political": {"x": ["2026-03-18T12:47:53.333030"], "y": [42.0]}, "labor": {"x": ["2026-03-18T12:47:53.333030"], "y": [65.0]}, "japan_economy": {"x": ["2026-03-18T12:47:53.333030"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:47:53.333030"], "y": [55.0]}, "cyber_risk": {"x": ["2026-03-18T12:47:53.333030"], "y": [21.0]}}, "Israel": {"overall": {"x": ["2026-03-18T12:51:03.933010"], "y": [30.0]}, "conflict": {"x": ["2026-03-18T12:51:03.933010"], "y": [60.0]}, "economic": {"x": ["2026-03-18T12:51:03.933010"], "y": [35.0]}, "trade": {"x": ["2026-03-18T12:51:03.933010"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:51:03.933010"], "y": [15.0]}, "japan_economy": {"x": ["2026-03-18T12:51:03.933010"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:51:03.933010"], "y": [31.0]}, "cyber_risk": {"x": ["2026-03-18T12:51:03.933010"], "y": [16.0]}}, "Italy": {"overall": {"x": ["2026-03-18T12:09:12.028959"], "y": [17.0]}, "economic": {"x": ["2026-03-18T12:09:12.028959"], "y": [25.0]}, "currency": {"x": ["2026-03-18T12:09:12.028959"], "y": [15.0]}, "weather": {"x": ["2026-03-18T12:09:12.028959"], "y": [25.0]}, "compliance": {"x": ["2026-03-18T12:09:12.028959"], "y": [30.0]}, "trade": {"x": ["2026-03-18T12:09:12.028959"], "y": [30.0]}, "japan_economy": {"x": ["2026-03-18T12:09:12.028959"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:09:12.028959"], "y": [28.0]}, "cyber_risk": {"x": ["2026-03-18T12:09:12.028959"], "y": [17.0]}}, "Japan": {"overall": {"x": ["2026-03-18T11:57:20.405647"], "y": [16.0]}, "economic": {"x": ["2026-03-18T11:57:20.405647"], "y": [16.0]}, "currency": {"x": ["2026-03-18T11:57:20.405647"], "y": [30.0]}, "weather": {"x": ["2026-03-18T11:57:20.405647"], "y": [25.0]}, "compliance": {"x": ["2026-03-18T11:57:20.405647"], "y": [20.0]}, "political": {"x": ["2026-03-18T11:57:20.405647"], "y": [12.0]}, "japan_economy": {"x": ["2026-03-18T11:57:20.405647"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T11:57:20.405647"], "y": [29.0]}, "cyber_risk": {"x": ["2026-03-18T11:57:20.405647"], "y": [17.0]}}, "Kenya": {"overall": {"x": ["2026-03-18T13:13:50.281238"], "y": [38.0]}, "disaster": {"x": ["2026-03-18T13:13:50.281238"], "y": [60.0]}, "economic": {"x": ["2026-03-18T13:13:50.281238"], "y": [41.0]}, "weather": {"x": ["2026-03-18T13:13:50.281238"], "y": [70.0]}, "compliance": {"x": ["2026-03-18T13:13:50.281238"], "y": [60.0]}, "food_security": {"x": ["2026-03-18T13:13:50.281238"], "y": [25.0]}, "trade": {"x": ["2026-03-18T13:13:50.281238"], "y": [15.0]}, "political": {"x": ["2026-03-18T13:13:50.281238"], "y": [35.0]}, "japan_economy": {"x": ["2026-03-18T13:13:50.281238"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:13:50.281238"], "y": [12.0]}, "cyber_risk": {"x": ["2026-03-18T13:13:50.281238"], "y": [28.0]}}, "Malaysia": {"overall": {"x": ["2026-03-18T12:31:38.393857"], "y": [42.0]}, "sanctions": {"x": ["2026-03-18T12:31:38.393857"], "y": [30.0]}, "economic": {"x": ["2026-03-18T12:31:38.393857"], "y": [28.0]}, "currency": {"x": ["2026-03-18T12:31:38.393857"], "y": [15.0]}, "weather": {"x": ["2026-03-18T12:31:38.393857"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T12:31:38.393857"], "y": [32.0]}, "trade": {"x": ["2026-03-18T12:31:38.393857"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:31:38.393857"], "y": [30.0]}, "labor": {"x": ["2026-03-18T12:31:38.393857"], "y": [45.0]}, "japan_economy": {"x": ["2026-03-18T12:31:38.393857"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:31:38.393857"], "y": [36.0]}, "cyber_risk": {"x": ["2026-03-18T12:31:38.393857"], "y": [14.0]}}, "Mexico": {"overall": {"x": ["2026-03-18T13:25:02.734970"], "y": [30.0]}, "disaster": {"x": ["2026-03-18T13:25:02.734970"], "y": [25.0]}, "economic": {"x": ["2026-03-18T13:25:02.734970"], "y": [42.0]}, "currency": {"x": ["2026-03-18T13:25:02.734970"], "y": [30.0]}, "compliance": {"x": ["2026-03-18T13:25:02.734970"], "y": [48.0]}, "trade": {"x": ["2026-03-18T13:25:02.734970"], "y": [30.0]}, "political": {"x": ["2026-03-18T13:25:02.734970"], "y": [29.0]}, "labor": {"x": ["2026-03-18T13:25:02.734970"], "y": [54.0]}, "japan_economy": {"x": ["2026-03-18T13:25:02.734970"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:25:02.734970"], "y": [37.0]}, "cyber_risk": {"x": ["2026-03-18T13:25:02.734970"], "y": [18.0]}}, "Myanmar": {"overall": {"x": ["2026-03-18T12:38:13.869306"], "y": [59.0]}, "disaster": {"x": ["2026-03-18T12:38:13.869306"], "y": [25.0]}, "conflict": {"x": ["2026-03-18T12:38:13.869306"], "y": [90.0]}, "economic": {"x": ["2026-03-18T12:38:13.869306"], "y": [64.0]}, "currency": {"x": ["2026-03-18T12:38:13.869306"], "y": [15.0]}, "humanitarian": {"x": ["2026-03-18T12:38:13.869306"], "y": [60.0]}, "compliance": {"x": ["2026-03-18T12:38:13.869306"], "y": [95.0]}, "food_security": {"x": ["2026-03-18T12:38:13.869306"], "y": [70.0]}, "trade": {"x": ["2026-03-18T12:38:13.869306"], "y": [15.0]}, "internet": {"x": ["2026-03-18T12:38:13.869306"], "y": [70.0]}, "political": {"x": ["2026-03-18T12:38:13.869306"], "y": [54.0]}, "labor": {"x": ["2026-03-18T12:38:13.869306"], "y": [65.0]}, "japan_economy": {"x": ["2026-03-18T12:38:13.869306"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:38:13.869306"], "y": [46.0]}, "cyber_risk": {"x": ["2026-03-18T12:38:13.869306"], "y": [47.0]}}, "Netherlands": {"overall": {"x": ["2026-03-18T13:22:19.664984"], "y": [45.0]}, "sanctions": {"x": ["2026-03-18T13:22:19.664984"], "y": [30.0]}, "disaster": {"x": ["2026-03-18T13:22:19.664984"], "y": [25.0]}, "economic": {"x": ["2026-03-18T13:22:19.664984"], "y": [34.0]}, "currency": {"x": ["2026-03-18T13:22:19.664984"], "y": [30.0]}, "trade": {"x": ["2026-03-18T13:22:19.664984"], "y": [70.0]}, "japan_economy": {"x": ["2026-03-18T13:22:19.664984"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:22:19.664984"], "y": [12.0]}, "cyber_risk": {"x": ["2026-03-18T13:22:19.664984"], "y": [28.0]}}, "Nigeria": {"overall": {"x": ["2026-03-18T13:08:57.464511"], "y": [40.0]}, "conflict": {"x": ["2026-03-18T13:08:57.464511"], "y": [65.0]}, "economic": {"x": ["2026-03-18T13:08:57.464511"], "y": [52.0]}, "humanitarian": {"x": ["2026-03-18T13:08:57.464511"], "y": [48.0]}, "compliance": {"x": ["2026-03-18T13:08:57.464511"], "y": [69.0]}, "food_security": {"x": ["2026-03-18T13:08:57.464511"], "y": [40.0]}, "trade": {"x": ["2026-03-18T13:08:57.464511"], "y": [5.0]}, "political": {"x": ["2026-03-18T13:08:57.464511"], "y": [40.0]}, "labor": {"x": ["2026-03-18T13:08:57.464511"], "y": [39.0]}, "japan_economy": {"x": ["2026-03-18T13:08:57.464511"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:08:57.464511"], "y": [43.0]}, "cyber_risk": {"x": ["2026-03-18T13:08:57.464511"], "y": [31.0]}}, "North Korea": {"overall": {"x": ["2026-03-18T12:59:52.731564"], "y": [54.0]}, "economic": {"x": ["2026-03-18T12:59:52.731564"], "y": [20.0]}, "currency": {"x": ["2026-03-18T12:59:52.731564"], "y": [30.0]}, "weather": {"x": ["2026-03-18T12:59:52.731564"], "y": [30.0]}, "compliance": {"x": ["2026-03-18T12:59:52.731564"], "y": [95.0]}, "trade": {"x": ["2026-03-18T12:59:52.731564"], "y": [70.0]}, "internet": {"x": ["2026-03-18T12:59:52.731564"], "y": [95.0]}, "political": {"x": ["2026-03-18T12:59:52.731564"], "y": [58.0]}, "labor": {"x": ["2026-03-18T12:59:52.731564"], "y": [85.0]}, "japan_economy": {"x": ["2026-03-18T12:59:52.731564"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:59:52.731564"], "y": [38.0]}, "cyber_risk": {"x": ["2026-03-18T12:59:52.731564"], "y": [90.0]}}, "Pakistan": {"overall": {"x": ["2026-03-18T13:04:30.331659"], "y": [44.0]}, "disaster": {"x": ["2026-03-18T13:04:30.331659"], "y": [45.0]}, "conflict": {"x": ["2026-03-18T13:04:30.331659"], "y": [55.0]}, "economic": {"x": ["2026-03-18T13:04:30.331659"], "y": [60.0]}, "humanitarian": {"x": ["2026-03-18T13:04:30.331659"], "y": [32.0]}, "weather": {"x": ["2026-03-18T13:04:30.331659"], "y": [70.0]}, "compliance": {"x": ["2026-03-18T13:04:30.331659"], "y": [64.0]}, "food_security": {"x": ["2026-03-18T13:04:30.331659"], "y": [14.0]}, "trade": {"x": ["2026-03-18T13:04:30.331659"], "y": [15.0]}, "political": {"x": ["2026-03-18T13:04:30.331659"], "y": [39.0]}, "labor": {"x": ["2026-03-18T13:04:30.331659"], "y": [54.0]}, "japan_economy": {"x": ["2026-03-18T13:04:30.331659"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:04:30.331659"], "y": [55.0]}, "cyber_risk": {"x": ["2026-03-18T13:04:30.331659"], "y": [38.0]}}, "Philippines": {"overall": {"x": ["2026-03-18T12:36:09.961290"], "y": [51.0]}, "sanctions": {"x": ["2026-03-18T12:36:09.961290"], "y": [31.0]}, "disaster": {"x": ["2026-03-18T12:36:09.961290"], "y": [60.0]}, "economic": {"x": ["2026-03-18T12:36:09.961290"], "y": [38.0]}, "currency": {"x": ["2026-03-18T12:36:09.961290"], "y": [15.0]}, "compliance": {"x": ["2026-03-18T12:36:09.961290"], "y": [52.0]}, "food_security": {"x": ["2026-03-18T12:36:09.961290"], "y": [50.0]}, "trade": {"x": ["2026-03-18T12:36:09.961290"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:36:09.961290"], "y": [28.0]}, "labor": {"x": ["2026-03-18T12:36:09.961290"], "y": [60.0]}, "japan_economy": {"x": ["2026-03-18T12:36:09.961290"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:36:09.961290"], "y": [42.0]}, "cyber_risk": {"x": ["2026-03-18T12:36:09.961290"], "y": [18.0]}}, "Poland": {"overall": {"x": ["2026-03-18T13:22:02.804712"], "y": [15.0]}, "disaster": {"x": ["2026-03-18T13:22:02.804712"], "y": [25.0]}, "economic": {"x": ["2026-03-18T13:22:02.804712"], "y": [25.0]}, "currency": {"x": ["2026-03-18T13:22:02.804712"], "y": [30.0]}, "political": {"x": ["2026-03-18T13:22:02.804712"], "y": [11.0]}, "japan_economy": {"x": ["2026-03-18T13:22:02.804712"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:22:02.804712"], "y": [20.0]}, "cyber_risk": {"x": ["2026-03-18T13:22:02.804712"], "y": [16.0]}}, "Qatar": {"overall": {"x": ["2026-03-18T12:51:26.563944"], "y": [28.0]}, "economic": {"x": ["2026-03-18T12:51:26.563944"], "y": [20.0]}, "labor": {"x": ["2026-03-18T12:51:26.563944"], "y": [65.0]}, "japan_economy": {"x": ["2026-03-18T12:51:26.563944"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:51:26.563944"], "y": [50.0]}, "cyber_risk": {"x": ["2026-03-18T12:51:26.563944"], "y": [15.0]}}, "Russia": {"overall": {"x": ["2026-03-18T12:18:34.858980"], "y": [54.0]}, "sanctions": {"x": ["2026-03-18T12:18:34.858980"], "y": [30.0]}, "disaster": {"x": ["2026-03-18T12:18:34.858980"], "y": [25.0]}, "conflict": {"x": ["2026-03-18T12:18:34.858980"], "y": [60.0]}, "economic": {"x": ["2026-03-18T12:18:34.858980"], "y": [52.0]}, "weather": {"x": ["2026-03-18T12:18:34.858980"], "y": [30.0]}, "compliance": {"x": ["2026-03-18T12:18:34.858980"], "y": [40.0]}, "trade": {"x": ["2026-03-18T12:18:34.858980"], "y": [30.0]}, "political": {"x": ["2026-03-18T12:18:34.858980"], "y": [52.0]}, "labor": {"x": ["2026-03-18T12:18:34.858980"], "y": [65.0]}, "japan_economy": {"x": ["2026-03-18T12:18:34.858980"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:18:34.858980"], "y": [41.0]}, "cyber_risk": {"x": ["2026-03-18T12:18:34.858980"], "y": [26.0]}}, "Saudi Arabia": {"overall": {"x": ["2026-03-18T12:42:02.514887"], "y": [57.0]}, "sanctions": {"x": ["2026-03-18T12:42:02.514887"], "y": [32.0]}, "economic": {"x": ["2026-03-18T12:42:02.514887"], "y": [30.0]}, "weather": {"x": ["2026-03-18T12:42:02.514887"], "y": [50.0]}, "compliance": {"x": ["2026-03-18T12:42:02.514887"], "y": [24.0]}, "trade": {"x": ["2026-03-18T12:42:02.514887"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:42:02.514887"], "y": [55.0]}, "labor": {"x": ["2026-03-18T12:42:02.514887"], "y": [85.0]}, "japan_economy": {"x": ["2026-03-18T12:42:02.514887"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:42:02.514887"], "y": [52.0]}, "cyber_risk": {"x": ["2026-03-18T12:42:02.514887"], "y": [20.0]}}, "Singapore": {"overall": {"x": ["2026-03-18T12:34:10.198334"], "y": [24.0]}, "economic": {"x": ["2026-03-18T12:34:10.198334"], "y": [10.0]}, "weather": {"x": ["2026-03-18T12:34:10.198334"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T12:34:10.198334"], "y": [8.0]}, "trade": {"x": ["2026-03-18T12:34:10.198334"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:34:10.198334"], "y": [31.0]}, "japan_economy": {"x": ["2026-03-18T12:34:10.198334"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:34:10.198334"], "y": [19.0]}, "cyber_risk": {"x": ["2026-03-18T12:34:10.198334"], "y": [15.0]}}, "Somalia": {"overall": {"x": ["2026-03-18T13:19:48.557863"], "y": [50.0]}, "disaster": {"x": ["2026-03-18T13:19:48.557863"], "y": [60.0]}, "conflict": {"x": ["2026-03-18T13:19:48.557863"], "y": [80.0]}, "economic": {"x": ["2026-03-18T13:19:48.557863"], "y": [60.0]}, "humanitarian": {"x": ["2026-03-18T13:19:48.557863"], "y": [64.0]}, "compliance": {"x": ["2026-03-18T13:19:48.557863"], "y": [82.0]}, "food_security": {"x": ["2026-03-18T13:19:48.557863"], "y": [57.0]}, "political": {"x": ["2026-03-18T13:19:48.557863"], "y": [55.0]}, "japan_economy": {"x": ["2026-03-18T13:19:48.557863"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:19:48.557863"], "y": [41.0]}, "cyber_risk": {"x": ["2026-03-18T13:19:48.557863"], "y": [34.0]}}, "South Africa": {"overall": {"x": ["2026-03-18T12:22:34.865388"], "y": [31.0]}, "economic": {"x": ["2026-03-18T12:22:34.865388"], "y": [36.0]}, "currency": {"x": ["2026-03-18T12:22:34.865388"], "y": [30.0]}, "weather": {"x": ["2026-03-18T12:22:34.865388"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T12:22:34.865388"], "y": [60.0]}, "trade": {"x": ["2026-03-18T12:22:34.865388"], "y": [30.0]}, "political": {"x": ["2026-03-18T12:22:34.865388"], "y": [27.0]}, "japan_economy": {"x": ["2026-03-18T12:22:34.865388"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:22:34.865388"], "y": [44.0]}, "cyber_risk": {"x": ["2026-03-18T12:22:34.865388"], "y": [21.0]}}, "South Korea": {"overall": {"x": ["2026-03-18T12:55:36.216497"], "y": [31.0]}, "economic": {"x": ["2026-03-18T12:55:36.216497"], "y": [20.0]}, "currency": {"x": ["2026-03-18T12:55:36.216497"], "y": [30.0]}, "weather": {"x": ["2026-03-18T12:55:36.216497"], "y": [30.0]}, "compliance": {"x": ["2026-03-18T12:55:36.216497"], "y": [20.0]}, "trade": {"x": ["2026-03-18T12:55:36.216497"], "y": [70.0]}, "political": {"x": ["2026-03-18T12:55:36.216497"], "y": [14.0]}, "labor": {"x": ["2026-03-18T12:55:36.216497"], "y": [25.0]}, "japan_economy": {"x": ["2026-03-18T12:55:36.216497"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:55:36.216497"], "y": [32.0]}, "cyber_risk": {"x": ["2026-03-18T12:55:36.216497"], "y": [15.0]}}, "South Sudan": {"overall": {"x": ["2026-03-18T13:18:06.464589"], "y": [69.0]}, "sanctions": {"x": ["2026-03-18T13:18:06.464589"], "y": [30.0]}, "conflict": {"x": ["2026-03-18T13:18:06.464589"], "y": [85.0]}, "economic": {"x": ["2026-03-18T13:18:06.464589"], "y": [34.0]}, "currency": {"x": ["2026-03-18T13:18:06.464589"], "y": [30.0]}, "humanitarian": {"x": ["2026-03-18T13:18:06.464589"], "y": [68.0]}, "weather": {"x": ["2026-03-18T13:18:06.464589"], "y": [70.0]}, "compliance": {"x": ["2026-03-18T13:18:06.464589"], "y": [83.0]}, "food_security": {"x": ["2026-03-18T13:18:06.464589"], "y": [55.0]}, "trade": {"x": ["2026-03-18T13:18:06.464589"], "y": [70.0]}, "internet": {"x": ["2026-03-18T13:18:06.464589"], "y": [60.0]}, "political": {"x": ["2026-03-18T13:18:06.464589"], "y": [57.0]}, "japan_economy": {"x": ["2026-03-18T13:18:06.464589"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:18:06.464589"], "y": [42.0]}, "cyber_risk": {"x": ["2026-03-18T13:18:06.464589"], "y": [31.0]}}, "Sri Lanka": {"overall": {"x": ["2026-03-18T13:06:37.927538"], "y": [22.0]}, "compliance": {"x": ["2026-03-18T13:06:37.927538"], "y": [33.0]}, "food_security": {"x": ["2026-03-18T13:06:37.927538"], "y": [50.0]}, "political": {"x": ["2026-03-18T13:06:37.927538"], "y": [27.0]}, "japan_economy": {"x": ["2026-03-18T13:06:37.927538"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:06:37.927538"], "y": [31.0]}, "cyber_risk": {"x": ["2026-03-18T13:06:37.927538"], "y": [28.0]}}, "Switzerland": {"overall": {"x": ["2026-03-18T13:22:59.433254"], "y": [14.0]}, "economic": {"x": ["2026-03-18T13:22:59.433254"], "y": [25.0]}, "currency": {"x": ["2026-03-18T13:22:59.433254"], "y": [15.0]}, "compliance": {"x": ["2026-03-18T13:22:59.433254"], "y": [9.0]}, "trade": {"x": ["2026-03-18T13:22:59.433254"], "y": [30.0]}, "japan_economy": {"x": ["2026-03-18T13:22:59.433254"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:22:59.433254"], "y": [8.0]}, "cyber_risk": {"x": ["2026-03-18T13:22:59.433254"], "y": [14.0]}}, "Taiwan": {"overall": {"x": ["2026-03-18T12:57:30.521439"], "y": [41.0]}, "disaster": {"x": ["2026-03-18T12:57:30.521439"], "y": [80.0]}, "conflict": {"x": ["2026-03-18T12:57:30.521439"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T12:57:30.521439"], "y": [16.0]}, "trade": {"x": ["2026-03-18T12:57:30.521439"], "y": [70.0]}, "political": {"x": ["2026-03-18T12:57:30.521439"], "y": [3.0]}, "port_congestion": {"x": ["2026-03-18T12:57:30.521439"], "y": [35.0]}, "japan_economy": {"x": ["2026-03-18T12:57:30.521439"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:57:30.521439"], "y": [32.0]}, "cyber_risk": {"x": ["2026-03-18T12:57:30.521439"], "y": [17.0]}}, "Thailand": {"overall": {"x": ["2026-03-18T12:29:09.781440"], "y": [36.0]}, "disaster": {"x": ["2026-03-18T12:29:09.781440"], "y": [25.0]}, "economic": {"x": ["2026-03-18T12:29:09.781440"], "y": [34.0]}, "currency": {"x": ["2026-03-18T12:29:09.781440"], "y": [30.0]}, "compliance": {"x": ["2026-03-18T12:29:09.781440"], "y": [42.0]}, "trade": {"x": ["2026-03-18T12:29:09.781440"], "y": [70.0]}, "political": {"x": ["2026-03-18T12:29:09.781440"], "y": [42.0]}, "labor": {"x": ["2026-03-18T12:29:09.781440"], "y": [45.0]}, "japan_economy": {"x": ["2026-03-18T12:29:09.781440"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:29:09.781440"], "y": [43.0]}, "cyber_risk": {"x": ["2026-03-18T12:29:09.781440"], "y": [17.0]}}, "Turkey": {"overall": {"x": ["2026-03-18T12:50:39.561622"], "y": [35.0]}, "disaster": {"x": ["2026-03-18T12:50:39.561622"], "y": [35.0]}, "economic": {"x": ["2026-03-18T12:50:39.561622"], "y": [42.0]}, "weather": {"x": ["2026-03-18T12:50:39.561622"], "y": [25.0]}, "compliance": {"x": ["2026-03-18T12:50:39.561622"], "y": [52.0]}, "trade": {"x": ["2026-03-18T12:50:39.561622"], "y": [30.0]}, "political": {"x": ["2026-03-18T12:50:39.561622"], "y": [40.0]}, "labor": {"x": ["2026-03-18T12:50:39.561622"], "y": [65.0]}, "japan_economy": {"x": ["2026-03-18T12:50:39.561622"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:50:39.561622"], "y": [43.0]}, "cyber_risk": {"x": ["2026-03-18T12:50:39.561622"], "y": [19.0]}}, "UAE": {"overall": {"x": ["2026-03-18T12:44:09.209271"], "y": [32.0]}, "economic": {"x": ["2026-03-18T12:44:09.209271"], "y": [21.0]}, "compliance": {"x": ["2026-03-18T12:44:09.209271"], "y": [20.0]}, "trade": {"x": ["2026-03-18T12:44:09.209271"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:44:09.209271"], "y": [49.0]}, "labor": {"x": ["2026-03-18T12:44:09.209271"], "y": [65.0]}, "japan_economy": {"x": ["2026-03-18T12:44:09.209271"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:44:09.209271"], "y": [42.0]}, "cyber_risk": {"x": ["2026-03-18T12:44:09.209271"], "y": [16.0]}}, "Ukraine": {"overall": {"x": ["2026-03-18T13:21:38.996591"], "y": [47.0]}, "conflict": {"x": ["2026-03-18T13:21:38.996591"], "y": [95.0]}, "economic": {"x": ["2026-03-18T13:21:38.996591"], "y": [51.0]}, "humanitarian": {"x": ["2026-03-18T13:21:38.996591"], "y": [52.0]}, "compliance": {"x": ["2026-03-18T13:21:38.996591"], "y": [56.0]}, "food_security": {"x": ["2026-03-18T13:21:38.996591"], "y": [50.0]}, "trade": {"x": ["2026-03-18T13:21:38.996591"], "y": [5.0]}, "political": {"x": ["2026-03-18T13:21:38.996591"], "y": [30.0]}, "japan_economy": {"x": ["2026-03-18T13:21:38.996591"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:21:38.996591"], "y": [39.0]}, "cyber_risk": {"x": ["2026-03-18T13:21:38.996591"], "y": [19.0]}}, "United Kingdom": {"overall": {"x": ["2026-03-18T12:04:40.446016"], "y": [15.0]}, "economic": {"x": ["2026-03-18T12:04:40.446016"], "y": [19.0]}, "currency": {"x": ["2026-03-18T12:04:40.446016"], "y": [15.0]}, "compliance": {"x": ["2026-03-18T12:04:40.446016"], "y": [21.0]}, "trade": {"x": ["2026-03-18T12:04:40.446016"], "y": [30.0]}, "political": {"x": ["2026-03-18T12:04:40.446016"], "y": [15.0]}, "japan_economy": {"x": ["2026-03-18T12:04:40.446016"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:04:40.446016"], "y": [15.0]}, "cyber_risk": {"x": ["2026-03-18T12:04:40.446016"], "y": [14.0]}}, "United States": {"overall": {"x": ["2026-03-18T11:59:53.236070"], "y": [46.0]}, "sanctions": {"x": ["2026-03-18T11:59:53.236070"], "y": [31.0]}, "disaster": {"x": ["2026-03-18T11:59:53.236070"], "y": [25.0]}, "economic": {"x": ["2026-03-18T11:59:53.236070"], "y": [23.0]}, "compliance": {"x": ["2026-03-18T11:59:53.236070"], "y": [32.0]}, "trade": {"x": ["2026-03-18T11:59:53.236070"], "y": [70.0]}, "political": {"x": ["2026-03-18T11:59:53.236070"], "y": [16.0]}, "japan_economy": {"x": ["2026-03-18T11:59:53.236070"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T11:59:53.236070"], "y": [28.0]}, "cyber_risk": {"x": ["2026-03-18T11:59:53.236070"], "y": [15.0]}}, "Venezuela": {"overall": {"x": ["2026-03-18T13:29:26.683147"], "y": [53.0]}, "sanctions": {"x": ["2026-03-18T13:29:26.683147"], "y": [34.0]}, "disaster": {"x": ["2026-03-18T13:29:26.683147"], "y": [25.0]}, "economic": {"x": ["2026-03-18T13:29:26.683147"], "y": [72.0]}, "compliance": {"x": ["2026-03-18T13:29:26.683147"], "y": [60.0]}, "political": {"x": ["2026-03-18T13:29:26.683147"], "y": [51.0]}, "japan_economy": {"x": ["2026-03-18T13:29:26.683147"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T13:29:26.683147"], "y": [12.0]}, "cyber_risk": {"x": ["2026-03-18T13:29:26.683147"], "y": [28.0]}}, "Vietnam": {"overall": {"x": ["2026-03-18T12:26:48.345902"], "y": [34.0]}, "disaster": {"x": ["2026-03-18T12:26:48.345902"], "y": [35.0]}, "economic": {"x": ["2026-03-18T12:26:48.345902"], "y": [33.0]}, "compliance": {"x": ["2026-03-18T12:26:48.345902"], "y": [60.0]}, "food_security": {"x": ["2026-03-18T12:26:48.345902"], "y": [50.0]}, "trade": {"x": ["2026-03-18T12:26:48.345902"], "y": [50.0]}, "political": {"x": ["2026-03-18T12:26:48.345902"], "y": [48.0]}, "labor": {"x": ["2026-03-18T12:26:48.345902"], "y": [45.0]}, "japan_economy": {"x": ["2026-03-18T12:26:48.345902"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:26:48.345902"], "y": [49.0]}, "cyber_risk": {"x": ["2026-03-18T12:26:48.345902"], "y": [20.0]}}, "Yemen": {"overall": {"x": ["2026-03-18T12:53:45.445491"], "y": [56.0]}, "conflict": {"x": ["2026-03-18T12:53:45.445491"], "y": [90.0]}, "economic": {"x": ["2026-03-18T12:53:45.445491"], "y": [64.0]}, "humanitarian": {"x": ["2026-03-18T12:53:45.445491"], "y": [72.0]}, "weather": {"x": ["2026-03-18T12:53:45.445491"], "y": [40.0]}, "compliance": {"x": ["2026-03-18T12:53:45.445491"], "y": [81.0]}, "food_security": {"x": ["2026-03-18T12:53:45.445491"], "y": [57.0]}, "internet": {"x": ["2026-03-18T12:53:45.445491"], "y": [65.0]}, "political": {"x": ["2026-03-18T12:53:45.445491"], "y": [54.0]}, "labor": {"x": ["2026-03-18T12:53:45.445491"], "y": [45.0]}, "port_congestion": {"x": ["2026-03-18T12:53:45.445491"], "y": [75.0]}, "japan_economy": {"x": ["2026-03-18T12:53:45.445491"], "y": [35.0]}, "climate_risk": {"x": ["2026-03-18T12:53:45.445491"], "y": [43.0]}, "cyber_risk": {"x": ["2026-03-18T12:53:45.445491"], "y": [58.0]}}};
+const ALERTS_DATA = [{"type": "test", "severity": "LOW", "message": "Test alert", "dispatched_at": "2026-03-18T11:59:05.176545", "file": "2026-03-18.jsonl", "country": "", "dimension": ""}];
+const CORR_MATRIX = [[1.0, 0.0, 0.01, 0.0, 0.0, -0.076, 0.144, -0.062, 0.0, -0.035, 0.123, 0.0, 0.132, -0.005, 0.127, 0.065, 0.245, 0.118, -0.102, 0.0, 0.0, 0.0, 0.101, 0.017], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.01, 0.0, 1.0, 0.0, 0.0, 0.002, 0.157, -0.016, 0.0, 0.028, 0.256, 0.0, 0.127, 0.084, 0.124, -0.08, -0.04, 0.079, 0.029, 0.0, 0.0, 0.0, 0.044, 0.06], [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.076, 0.0, 0.002, 0.0, 0.0, 1.0, 0.39, -0.16, 0.0, 0.879, 0.113, 0.0, 0.457, 0.477, -0.122, 0.407, 0.377, 0.045, 0.344, 0.0, 0.0, 0.0, 0.306, 0.346], [0.144, 0.0, 0.157, 0.0, 0.0, 0.39, 1.0, -0.131, 0.0, 0.443, 0.072, 0.0, 0.457, 0.452, -0.242, 0.073, 0.47, 0.197, 0.125, 0.0, 0.0, 0.0, 0.186, 0.25], [-0.062, 0.0, -0.016, 0.0, 0.0, -0.16, -0.131, 1.0, 0.0, -0.032, 0.106, 0.0, -0.053, -0.276, 0.31, 0.215, -0.261, -0.097, -0.167, 0.0, 0.0, 0.0, -0.173, 0.053], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [-0.035, 0.0, 0.028, 0.0, 0.0, 0.879, 0.443, -0.032, 0.0, 1.0, 0.233, 0.0, 0.592, 0.582, -0.175, 0.49, 0.44, 0.066, 0.338, 0.0, 0.0, 0.0, 0.329, 0.443], [0.123, 0.0, 0.256, 0.0, 0.0, 0.113, 0.072, 0.106, 0.0, 0.233, 1.0, 0.0, 0.358, 0.074, 0.153, 0.253, 0.286, 0.214, 0.043, 0.0, 0.0, 0.0, 0.224, 0.258], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.132, 0.0, 0.127, 0.0, 0.0, 0.457, 0.457, -0.053, 0.0, 0.592, 0.358, 0.0, 1.0, 0.538, -0.15, 0.629, 0.759, 0.368, 0.137, 0.0, 0.0, 0.0, 0.499, 0.65], [-0.005, 0.0, 0.084, 0.0, 0.0, 0.477, 0.452, -0.276, 0.0, 0.582, 0.074, 0.0, 0.538, 1.0, -0.27, 0.259, 0.443, 0.032, 0.182, 0.0, 0.0, 0.0, 0.206, 0.295], [0.127, 0.0, 0.124, 0.0, 0.0, -0.122, -0.242, 0.31, 0.0, -0.175, 0.153, 0.0, -0.15, -0.27, 1.0, 0.106, -0.037, 0.074, -0.065, 0.0, 0.0, 0.0, -0.016, -0.051], [0.065, 0.0, -0.08, 0.0, 0.0, 0.407, 0.073, 0.215, 0.0, 0.49, 0.253, 0.0, 0.629, 0.259, 0.106, 1.0, 0.466, 0.272, 0.309, 0.0, 0.0, 0.0, 0.221, 0.832], [0.245, 0.0, -0.04, 0.0, 0.0, 0.377, 0.47, -0.261, 0.0, 0.44, 0.286, 0.0, 0.759, 0.443, -0.037, 0.466, 1.0, 0.57, 0.08, 0.0, 0.0, 0.0, 0.573, 0.545], [0.118, 0.0, 0.079, 0.0, 0.0, 0.045, 0.197, -0.097, 0.0, 0.066, 0.214, 0.0, 0.368, 0.032, 0.074, 0.272, 0.57, 1.0, 0.01, 0.0, 0.0, 0.0, 0.724, 0.357], [-0.102, 0.0, 0.029, 0.0, 0.0, 0.344, 0.125, -0.167, 0.0, 0.338, 0.043, 0.0, 0.137, 0.182, -0.065, 0.309, 0.08, 0.01, 1.0, 0.0, 0.0, 0.0, 0.071, 0.272], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0], [0.101, 0.0, 0.044, 0.0, 0.0, 0.306, 0.186, -0.173, 0.0, 0.329, 0.224, 0.0, 0.499, 0.206, -0.016, 0.221, 0.573, 0.724, 0.071, 0.0, 0.0, 0.0, 1.0, 0.235], [0.017, 0.0, 0.06, 0.0, 0.0, 0.346, 0.25, 0.053, 0.0, 0.443, 0.258, 0.0, 0.65, 0.295, -0.051, 0.832, 0.545, 0.357, 0.272, 0.0, 0.0, 0.0, 0.235, 1.0]];
+const ISO3_TO_NAME = {"JPN": "Japan", "USA": "United States", "DEU": "Germany", "GBR": "United Kingdom", "FRA": "France", "ITA": "Italy", "CAN": "Canada", "CHN": "China", "IND": "India", "RUS": "Russia", "BRA": "Brazil", "ZAF": "South Africa", "IDN": "Indonesia", "VNM": "Vietnam", "THA": "Thailand", "MYS": "Malaysia", "SGP": "Singapore", "PHL": "Philippines", "MMR": "Myanmar", "KHM": "Cambodia", "SAU": "Saudi Arabia", "ARE": "UAE", "IRN": "Iran", "IRQ": "Iraq", "TUR": "Turkey", "ISR": "Israel", "QAT": "Qatar", "YEM": "Yemen", "KOR": "South Korea", "TWN": "Taiwan", "PRK": "North Korea", "BGD": "Bangladesh", "PAK": "Pakistan", "LKA": "Sri Lanka", "NGA": "Nigeria", "ETH": "Ethiopia", "KEN": "Kenya", "EGY": "Egypt", "SSD": "South Sudan", "SOM": "Somalia", "UKR": "Ukraine", "POL": "Poland", "NLD": "Netherlands", "CHE": "Switzerland", "MEX": "Mexico", "COL": "Colombia", "VEN": "Venezuela", "ARG": "Argentina", "CHL": "Chile", "AUS": "Australia"};
+const ALL_COUNTRIES = ["Argentina", "Australia", "Bangladesh", "Brazil", "Cambodia", "Canada", "Chile", "China", "Colombia", "Egypt", "Ethiopia", "France", "Germany", "India", "Indonesia", "Iran", "Iraq", "Israel", "Italy", "Japan", "Kenya", "Malaysia", "Mexico", "Myanmar", "Netherlands", "Nigeria", "North Korea", "Pakistan", "Philippines", "Poland", "Qatar", "Russia", "Saudi Arabia", "Singapore", "Somalia", "South Africa", "South Korea", "South Sudan", "Sri Lanka", "Switzerland", "Taiwan", "Thailand", "Turkey", "UAE", "Ukraine", "United Kingdom", "United States", "Venezuela", "Vietnam", "Yemen"];
+
+const DARK_LAYOUT = {
+    paper_bgcolor: '#161b22',
+    plot_bgcolor: '#161b22',
+    font: { color: '#c9d1d9', family: 'Segoe UI, system-ui, sans-serif' },
+    margin: { t: 30, b: 40, l: 60, r: 20 },
+};
+
+function switchTab(id) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(id)) btn.classList.add('active');
+    });
+    if (id === 'tab-correlation' && !window._corrInit) { initCorrelation(); window._corrInit = true; }
+    if (id === 'tab-timeseries' && !window._tsInit) { updateTimeSeries(); window._tsInit = true; }
+    if (id === 'tab-alerts' && !window._alertsInit) { renderAlerts('ALL'); window._alertsInit = true; }
+    if (id === 'tab-graph' && !window._graphInit) { window._graphInit = true; }
+}
+
+function riskLevel(score) {
+    if (score >= 80) return 'CRITICAL';
+    if (score >= 60) return 'HIGH';
+    if (score >= 40) return 'MEDIUM';
+    if (score >= 20) return 'LOW';
+    return 'MINIMAL';
+}
+function riskColor(score) {
+    if (score >= 80) return '#ff1744';
+    if (score >= 60) return '#ff9100';
+    if (score >= 40) return '#ffea00';
+    if (score >= 20) return '#00e676';
+    return '#00b0ff';
+}
+function badgeClass(level) {
+    return 'badge badge-' + level.toLowerCase();
+}
+
+// TAB 1: Global Risk Map
+function initMap() {
+    let critCnt=0,highCnt=0,medCnt=0,lowCnt=0,minCnt=0,sumScore=0;
+    MAP_Z.forEach(s => {
+        sumScore += s;
+        if (s>=80) critCnt++; else if (s>=60) highCnt++; else if (s>=40) medCnt++; else if (s>=20) lowCnt++; else minCnt++;
+    });
+    const avgScore = MAP_Z.length > 0 ? (sumScore/MAP_Z.length).toFixed(1) : 0;
+    document.getElementById('stats-row').innerHTML = `
+        <div class="stat-card"><div class="stat-value">${MAP_Z.length}</div><div class="stat-label">Countries Monitored</div></div>
+        <div class="stat-card"><div class="stat-value">${avgScore}</div><div class="stat-label">Avg Risk Score</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#ff1744">${critCnt}</div><div class="stat-label">Critical</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#ff9100">${highCnt}</div><div class="stat-label">High</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#ffea00">${medCnt}</div><div class="stat-label">Medium</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#00e676">${lowCnt+minCnt}</div><div class="stat-label">Low / Minimal</div></div>
+    `;
+
+    const trace = {
+        type: 'choropleth',
+        locations: MAP_LOCATIONS,
+        z: MAP_Z,
+        text: MAP_TEXT,
+        hoverinfo: 'text',
+        colorscale: [[0,'#00b0ff'],[0.2,'#00e676'],[0.4,'#ffea00'],[0.6,'#ff9100'],[0.8,'#ff1744'],[1.0,'#b71c1c']],
+        zmin: 0, zmax: 100,
+        colorbar: {
+            title: 'Risk', tickvals: [0,20,40,60,80,100],
+            ticktext: ['Minimal','Low','Medium','High','Critical','100'],
+            len: 0.6, thickness: 15, outlinewidth: 0,
+        },
+        marker: { line: { color: '#30363d', width: 0.5 } },
+    };
+
+    const layout = {
+        ...DARK_LAYOUT,
+        geo: {
+            bgcolor: '#0d1117', showframe: false, showcoastlines: true,
+            coastlinecolor: '#30363d', showland: true, landcolor: '#21262d',
+            showocean: true, oceancolor: '#0d1117', showlakes: false,
+            projection: { type: 'natural earth' },
+            countrycolor: '#30363d', countrywidth: 0.5,
+        },
+        margin: { t: 10, b: 10, l: 10, r: 10 },
+    };
+
+    Plotly.newPlot('choropleth-map', [trace], layout, {
+        responsive: true, displayModeBar: true,
+        modeBarButtonsToRemove: ['toImage','sendDataToCloud'],
+    });
+
+    document.getElementById('choropleth-map').on('plotly_click', function(data) {
+        const iso3 = data.points[0].location;
+        showRadar(iso3);
+    });
+}
+
+function showRadar(iso3) {
+    const info = COUNTRY_SCORES[iso3];
+    if (!info) return;
+    document.getElementById('radar-card').style.display = 'block';
+    document.getElementById('radar-title').textContent =
+        info.name + ' - 24 Dimension Risk Profile (Overall: ' + info.overall + ')';
+
+    const values = DIM_KEYS.map(d => info.scores[d] || 0);
+    const radarValues = [...values, values[0]];
+    const radarLabels = [...DIM_LABELS, DIM_LABELS[0]];
+
+    const trace = {
+        type: 'scatterpolar', r: radarValues, theta: radarLabels,
+        fill: 'toself', fillcolor: 'rgba(88,166,255,0.15)',
+        line: { color: '#58a6ff', width: 2 },
+        marker: { size: 5, color: '#58a6ff' }, name: info.name,
+    };
+    const layout = {
+        ...DARK_LAYOUT,
+        polar: {
+            bgcolor: '#161b22',
+            radialaxis: { visible: true, range: [0,100], tickvals: [20,40,60,80],
+                tickfont: { size: 10, color: '#8b949e' }, gridcolor: '#21262d', linecolor: '#30363d' },
+            angularaxis: { tickfont: { size: 11, color: '#c9d1d9' }, gridcolor: '#21262d', linecolor: '#30363d' },
+        },
+        showlegend: false, margin: { t: 40, b: 40, l: 80, r: 80 },
+    };
+    Plotly.newPlot('radar-chart', [trace], layout, { responsive: true });
+    document.getElementById('radar-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+// TAB 2: Portfolio Analyzer
+const PRESETS = {
+    asia: 'JPN,CHN,KOR,TWN,VNM,THA,MYS,SGP,IDN,PHL',
+    g7: 'JPN,USA,DEU,GBR,FRA,ITA,CAN',
+    high_risk: 'PRK,IRN,RUS,MMR,VEN,SOM,SSD,YEM,IRQ,UKR',
+};
+
+function loadPreset(name) {
+    document.getElementById('portfolio-input').value = PRESETS[name] || '';
+    analyzePortfolio();
+}
+
+function analyzePortfolio() {
+    const raw = document.getElementById('portfolio-input').value.trim();
+    if (!raw) return;
+    const codes = raw.toUpperCase().split(/[,\s]+/).filter(c => c.length === 3);
+    const selected = [];
+    codes.forEach(iso3 => {
+        const name = ISO3_TO_NAME[iso3];
+        if (name && COUNTRY_SCORES[iso3]) {
+            selected.push({ iso3, name, ...COUNTRY_SCORES[iso3] });
+        }
+    });
+    if (selected.length === 0) {
+        alert('No matching countries found. Use ISO-3 codes like JPN, USA, DEU.');
+        return;
+    }
+    document.getElementById('portfolio-results').style.display = 'block';
+    selected.sort((a,b) => b.overall - a.overall);
+
+    let tableHTML = '<table><thead><tr><th>#</th><th>Country</th><th>Code</th><th>Score</th><th>Level</th></tr></thead><tbody>';
+    selected.forEach((c,i) => {
+        const level = riskLevel(c.overall);
+        tableHTML += '<tr><td>'+(i+1)+'</td><td>'+c.name+'</td><td>'+c.iso3+'</td><td style="font-weight:700;color:'+riskColor(c.overall)+'">'+c.overall+'</td><td><span class="'+badgeClass(level)+'">'+level+'</span></td></tr>';
+    });
+    tableHTML += '</tbody></table>';
+    document.getElementById('portfolio-table-wrap').innerHTML = tableHTML;
+
+    const barTrace = {
+        type: 'bar',
+        x: selected.map(c => c.name), y: selected.map(c => c.overall),
+        marker: { color: selected.map(c => riskColor(c.overall)), line: { color: '#30363d', width: 1 } },
+        text: selected.map(c => c.overall), textposition: 'outside',
+        textfont: { color: '#c9d1d9', size: 12 },
+    };
+    Plotly.newPlot('portfolio-bar', [barTrace], {
+        ...DARK_LAYOUT,
+        yaxis: { title: 'Risk Score', range: [0,110], gridcolor: '#21262d' },
+        xaxis: { tickangle: -30 },
+    }, { responsive: true });
+
+    const zData = selected.map(c => DIM_KEYS.map(d => c.scores[d] || 0));
+    const heatTrace = {
+        type: 'heatmap', z: zData, x: DIM_LABELS, y: selected.map(c => c.name),
+        colorscale: [[0,'#0d1117'],[0.2,'#00b0ff'],[0.4,'#00e676'],[0.5,'#ffea00'],[0.7,'#ff9100'],[1.0,'#ff1744']],
+        zmin: 0, zmax: 100,
+        colorbar: { title: 'Score', len: 0.6, thickness: 15 },
+        hovertemplate: '%{y}<br>%{x}: %{z}<extra></extra>',
+    };
+    Plotly.newPlot('portfolio-heatmap', [heatTrace], {
+        ...DARK_LAYOUT,
+        xaxis: { tickangle: -45, tickfont: { size: 11 } },
+        yaxis: { tickfont: { size: 12 } },
+        margin: { t: 20, b: 120, l: 140, r: 20 },
+    }, { responsive: true });
+}
+
+// TAB 3: Correlation Matrix
+function initCorrelation() {
+    const annotations = [];
+    const strongPairs = [];
+    for (let i = 0; i < DIM_KEYS.length; i++) {
+        for (let j = i + 1; j < DIM_KEYS.length; j++) {
+            const r = CORR_MATRIX[i][j];
+            if (Math.abs(r) > 0.70) {
+                annotations.push({ x: DIM_LABELS[j], y: DIM_LABELS[i], text: r.toFixed(2), showarrow: false,
+                    font: { color: '#f0f6fc', size: 9, family: 'monospace' } });
+                annotations.push({ x: DIM_LABELS[i], y: DIM_LABELS[j], text: r.toFixed(2), showarrow: false,
+                    font: { color: '#f0f6fc', size: 9, family: 'monospace' } });
+                strongPairs.push({ dim1: DIM_LABELS[i], dim2: DIM_LABELS[j], r: r });
+            }
+        }
+    }
+
+    const trace = {
+        type: 'heatmap', z: CORR_MATRIX, x: DIM_LABELS, y: DIM_LABELS,
+        colorscale: [[0,'#b71c1c'],[0.25,'#ff9100'],[0.5,'#161b22'],[0.75,'#00b0ff'],[1.0,'#1565c0']],
+        zmin: -1, zmax: 1,
+        colorbar: { title: 'r', len: 0.6, thickness: 15 },
+        hovertemplate: '%{x} vs %{y}<br>r = %{z:.3f}<extra></extra>',
+    };
+    Plotly.newPlot('corr-heatmap', [trace], {
+        ...DARK_LAYOUT,
+        xaxis: { tickangle: -45, tickfont: { size: 10 } },
+        yaxis: { tickfont: { size: 10 }, autorange: 'reversed' },
+        margin: { t: 20, b: 120, l: 120, r: 20 },
+        annotations: annotations,
+    }, { responsive: true });
+
+    strongPairs.sort((a,b) => Math.abs(b.r) - Math.abs(a.r));
+    let tbl = '<table><thead><tr><th>Dimension 1</th><th>Dimension 2</th><th>r</th><th>Strength</th></tr></thead><tbody>';
+    if (strongPairs.length === 0) {
+        tbl += '<tr><td colspan="4" class="text-center text-muted" style="padding:20px;">No dimension pairs with |r| > 0.70 found.</td></tr>';
+    }
+    strongPairs.forEach(p => {
+        const strength = Math.abs(p.r) > 0.90 ? 'Very Strong' : Math.abs(p.r) > 0.80 ? 'Strong' : 'Moderate-Strong';
+        const color = p.r > 0 ? '#00b0ff' : '#ff9100';
+        tbl += '<tr><td>'+p.dim1+'</td><td>'+p.dim2+'</td><td style="font-weight:700;color:'+color+'">'+p.r.toFixed(3)+'</td><td>'+strength+' '+(p.r > 0 ? '(positive)' : '(negative)')+'</td></tr>';
+    });
+    tbl += '</tbody></table>';
+    document.getElementById('corr-table-wrap').innerHTML = tbl;
+}
+
+// TAB 4: Time Series
+function updateTimeSeries() {
+    const country = document.getElementById('ts-country').value;
+    const dimension = document.getElementById('ts-dimension').value;
+    const countryData = TS_DATA[country];
+    let xVals = [], yVals = [];
+    if (countryData) {
+        const dimData = countryData[dimension];
+        if (dimData) { xVals = dimData.x; yVals = dimData.y; }
+    }
+    if (xVals.length === 0) {
+        document.getElementById('ts-chart').style.display = 'none';
+        document.getElementById('ts-placeholder').style.display = 'block';
+        return;
+    }
+    document.getElementById('ts-chart').style.display = 'block';
+    document.getElementById('ts-placeholder').style.display = 'none';
+
+    const dimLabel = dimension === 'overall' ? 'Overall Score'
+        : DIM_LABELS[DIM_KEYS.indexOf(dimension)] || dimension;
+
+    const trace = {
+        type: 'scatter', mode: 'lines+markers',
+        x: xVals, y: yVals,
+        line: { color: '#58a6ff', width: 2.5 },
+        marker: { size: 6, color: '#58a6ff' },
+        fill: 'tozeroy', fillcolor: 'rgba(88,166,255,0.08)',
+        name: dimLabel,
+    };
+    const shapes = [
+        { type:'line', y0:80, y1:80, x0:xVals[0], x1:xVals[xVals.length-1], line:{ color:'rgba(255,23,68,0.3)', width:1, dash:'dash' } },
+        { type:'line', y0:60, y1:60, x0:xVals[0], x1:xVals[xVals.length-1], line:{ color:'rgba(255,145,0,0.3)', width:1, dash:'dash' } },
+        { type:'line', y0:40, y1:40, x0:xVals[0], x1:xVals[xVals.length-1], line:{ color:'rgba(255,234,0,0.2)', width:1, dash:'dash' } },
+    ];
+    Plotly.newPlot('ts-chart', [trace], {
+        ...DARK_LAYOUT,
+        xaxis: { title: 'Date', gridcolor: '#21262d' },
+        yaxis: { title: 'Score', range: [0,105], gridcolor: '#21262d' },
+        shapes: shapes,
+        annotations: [
+            { x: xVals[xVals.length-1], y: 80, text: 'CRITICAL', showarrow: false, font: { color: '#ff1744', size: 10 }, xanchor: 'right' },
+            { x: xVals[xVals.length-1], y: 60, text: 'HIGH', showarrow: false, font: { color: '#ff9100', size: 10 }, xanchor: 'right' },
+        ],
+    }, { responsive: true });
+}
+
+// TAB 5: Alerts
+function filterAlerts(severity) {
+    document.querySelectorAll('#alert-filters .filter-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    renderAlerts(severity);
+}
+
+function renderAlerts(filterSeverity) {
+    let data = ALERTS_DATA;
+    if (filterSeverity !== 'ALL') {
+        data = data.filter(a => a.severity.toUpperCase() === filterSeverity);
+    }
+    if (data.length === 0) {
+        document.getElementById('alerts-table-wrap').innerHTML = '';
+        document.getElementById('alerts-empty').style.display = 'block';
+        return;
+    }
+    document.getElementById('alerts-empty').style.display = 'none';
+    let tbl = '<table><thead><tr><th>Time</th><th>Severity</th><th>Type</th><th>Message</th><th>Country</th><th>Source</th></tr></thead><tbody>';
+    data.forEach(a => {
+        const sev = a.severity.toUpperCase();
+        const cls = sev==='CRITICAL' ? 'badge-critical' : sev==='WARNING'||sev==='HIGH' ? 'badge-warning' : sev==='LOW' ? 'badge-low' : 'badge-info';
+        tbl += '<tr><td style="white-space:nowrap">'+(a.dispatched_at||'-')+'</td><td><span class="badge '+cls+'">'+sev+'</span></td><td>'+(a.type||'-')+'</td><td>'+(a.message||'-')+'</td><td>'+(a.country||'-')+'</td><td style="font-size:11px;color:#8b949e">'+(a.file||'-')+'</td></tr>';
+    });
+    tbl += '</tbody></table>';
+    document.getElementById('alerts-table-wrap').innerHTML = tbl;
+}
+
+
+
+// ===== TAB 6: BOM Analysis =====
+async function loadSampleBOM() {
+    try {
+        const resp = await fetch('/api/v1/bom/sample');
+        const data = await resp.json();
+        if (data.bom) {
+            document.getElementById('bom-input').value = JSON.stringify(data.bom, null, 2);
+            document.getElementById('bom-product-name').value = data.product_name || 'EV Powertrain';
+        } else {
+            document.getElementById('bom-input').value = JSON.stringify([
+                {"part_id":"P001","part_name":"Battery Cell","supplier_name":"Samsung SDI","supplier_country":"South Korea","material":"battery","hs_code":"8507","quantity":100,"unit_cost_usd":45.0,"is_critical":true},
+                {"part_id":"P002","part_name":"Motor Controller","supplier_name":"Infineon","supplier_country":"Germany","material":"semiconductor","hs_code":"8542","quantity":4,"unit_cost_usd":120.0,"is_critical":true},
+                {"part_id":"P003","part_name":"Copper Wire","supplier_name":"Sumitomo","supplier_country":"Japan","material":"copper","hs_code":"7408","quantity":50,"unit_cost_usd":8.0,"is_critical":false}
+            ], null, 2);
+        }
+    } catch(e) {
+        alert('Failed to load sample BOM: ' + e.message);
+    }
+}
+
+async function analyzeBOM() {
+    const bomText = document.getElementById('bom-input').value.trim();
+    if (!bomText) { alert('Please paste BOM JSON data.'); return; }
+    let bom;
+    try { bom = JSON.parse(bomText); } catch(e) { alert('Invalid JSON: ' + e.message); return; }
+
+    const productName = document.getElementById('bom-product-name').value || 'Product';
+    const includeTier2 = document.getElementById('bom-tier2').checked;
+
+    document.getElementById('bom-loading').style.display = 'block';
+    document.getElementById('bom-results').style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/v1/bom/analyze', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({bom: bom, product_name: productName, include_tier2_inference: includeTier2})
+        });
+        const data = await resp.json();
+        renderBOMResults(data);
+    } catch(e) {
+        alert('BOM Analysis failed: ' + e.message);
+    } finally {
+        document.getElementById('bom-loading').style.display = 'none';
+    }
+}
+
+function formatUSD(val) {
+    if (val >= 1e6) return '$' + (val/1e6).toFixed(1) + 'M';
+    if (val >= 1e3) return '$' + (val/1e3).toFixed(0) + 'K';
+    return '$' + val.toFixed(0);
+}
+
+function renderBOMResults(data) {
+    document.getElementById('bom-results').style.display = 'block';
+
+    const overallRisk = data.overall_bom_risk || data.overall_risk_score || data.confirmed_risk_score || 0;
+    const partsCount = data.parts_analyzed || data.total_parts || 0;
+    const resilience = data.resilience_score || data.supply_chain_resilience || 0;
+    const financial = data.total_financial_exposure || data.financial_exposure_usd || 0;
+
+    document.getElementById('bom-overall-risk').textContent = Math.round(overallRisk);
+    document.getElementById('bom-overall-risk').style.color = overallRisk >= 60 ? '#f85149' : overallRisk >= 40 ? '#d29922' : '#3fb950';
+    document.getElementById('bom-parts-count').textContent = partsCount;
+    document.getElementById('bom-resilience').textContent = Math.round(resilience);
+    document.getElementById('bom-resilience').style.color = resilience >= 60 ? '#3fb950' : resilience >= 40 ? '#d29922' : '#f85149';
+    document.getElementById('bom-financial').textContent = formatUSD(financial);
+
+    // Parts risk chart
+    const parts = data.part_details || data.parts || [];
+    if (parts.length > 0) {
+        const names = parts.map(p => p.part_name || p.name || p.part_id);
+        const scores = parts.map(p => p.risk_score || p.country_risk_score || 0);
+        const colors = scores.map(s => s >= 60 ? '#f85149' : s >= 40 ? '#d29922' : '#3fb950');
+        Plotly.newPlot('bom-parts-chart', [{
+            type: 'bar', x: scores, y: names, orientation: 'h',
+            marker: {color: colors},
+            text: scores.map(s => s.toFixed(0)), textposition: 'outside'
+        }], {
+            ...DARK_LAYOUT, margin: {t:10,b:30,l:140,r:40},
+            xaxis: {title: 'Risk Score', range: [0, 100]}, yaxis: {autorange: 'reversed'}
+        }, {responsive: true});
+    }
+
+    // Bottlenecks
+    const bottlenecks = data.bottlenecks || data.single_source_risks || [];
+    let bnHtml = '';
+    if (bottlenecks.length === 0) {
+        bnHtml = '<p style="color:#3fb950;">No critical bottlenecks detected.</p>';
+    } else {
+        bottlenecks.forEach(bn => {
+            const text = typeof bn === 'string' ? bn : (bn.description || bn.part_name || JSON.stringify(bn));
+            bnHtml += '<div style="padding:8px 12px;margin-bottom:6px;background:#1c1917;border-left:3px solid #f85149;border-radius:4px;font-size:13px;color:#fca5a5;">' + text + '</div>';
+        });
+    }
+    document.getElementById('bom-bottlenecks').innerHTML = bnHtml;
+
+    // Tier-2 inferred parts
+    const tier2 = data.tier2_inferred || data.inferred_tier2_parts || data.hidden_dependencies || [];
+    let t2Html = '';
+    if (tier2.length === 0) {
+        t2Html = '<p style="color:#8b949e;">No Tier-2 inference available. Enable "Include Tier-2/3 Inference" option.</p>';
+    } else {
+        t2Html = '<table style="width:100%;font-size:12px;"><thead><tr><th style="text-align:left;padding:6px;color:#8b949e;">Part</th><th style="text-align:left;padding:6px;color:#8b949e;">Source Country</th><th style="text-align:left;padding:6px;color:#8b949e;">Risk</th></tr></thead><tbody>';
+        tier2.forEach(p => {
+            const name = p.part_name || p.material || p.name || '—';
+            const country = p.country || p.source_country || '—';
+            const risk = p.risk_score || p.risk || 0;
+            const col = risk >= 60 ? '#f85149' : risk >= 40 ? '#d29922' : '#3fb950';
+            t2Html += '<tr><td style="padding:6px;">' + name + '</td><td style="padding:6px;">' + country + '</td><td style="padding:6px;color:' + col + ';font-weight:600;">' + Math.round(risk) + '</td></tr>';
+        });
+        t2Html += '</tbody></table>';
+    }
+    document.getElementById('bom-tier2-results').innerHTML = t2Html;
+
+    // Financial exposure
+    const financialDetails = data.cost_breakdown || data.financial_breakdown || {};
+    let fdHtml = '<table style="width:100%;font-size:13px;">';
+    if (Object.keys(financialDetails).length > 0) {
+        Object.entries(financialDetails).forEach(([k, v]) => {
+            fdHtml += '<tr><td style="padding:6px;color:#8b949e;">' + k.replace(/_/g, ' ') + '</td><td style="padding:6px;text-align:right;font-weight:600;color:#f0f6fc;">' + formatUSD(v) + '</td></tr>';
+        });
+    } else {
+        fdHtml += '<tr><td style="padding:6px;color:#8b949e;">Total Exposure</td><td style="padding:6px;text-align:right;font-weight:600;color:#f0f6fc;">' + formatUSD(financial) + '</td></tr>';
+    }
+    fdHtml += '</table>';
+    document.getElementById('bom-financial-detail').innerHTML = fdHtml;
+}
+
+// ===== TAB 7: Cost Impact =====
+async function estimateCost() {
+    const scenario = document.getElementById('cost-scenario').value;
+    const spend = parseFloat(document.getElementById('cost-spend').value) || 1000000;
+    const revenue = parseFloat(document.getElementById('cost-revenue').value) || 100000;
+    const duration = parseInt(document.getElementById('cost-duration').value) || 60;
+
+    document.getElementById('cost-loading').style.display = 'block';
+    document.getElementById('cost-results').style.display = 'none';
+    document.getElementById('cost-compare-results').style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/v1/cost-impact/estimate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({scenario, annual_spend_usd: spend, daily_revenue_usd: revenue, duration_days: duration, risk_score: 50})
+        });
+        const data = await resp.json();
+        renderCostResults(data);
+    } catch(e) {
+        alert('Cost estimation failed: ' + e.message);
+    } finally {
+        document.getElementById('cost-loading').style.display = 'none';
+    }
+}
+
+function renderCostResults(data) {
+    document.getElementById('cost-results').style.display = 'block';
+
+    const total = data.total_estimated_cost_usd || data.total_cost_usd || data.total_impact_usd || 0;
+    const breakdown = data.cost_breakdown || data.breakdown || {};
+    const procurement = breakdown.procurement_premium || breakdown.procurement || 0;
+    const logistics = breakdown.logistics_surcharge || breakdown.logistics || 0;
+    const production = breakdown.production_loss || breakdown.revenue_loss || 0;
+
+    document.getElementById('cost-total').textContent = formatUSD(total);
+    document.getElementById('cost-procurement').textContent = formatUSD(procurement);
+    document.getElementById('cost-logistics').textContent = formatUSD(logistics);
+    document.getElementById('cost-production').textContent = formatUSD(production);
+
+    // Breakdown table
+    let tblHtml = '<table style="width:100%;font-size:13px;"><thead><tr><th style="text-align:left;padding:8px;color:#8b949e;border-bottom:1px solid #21262d;">Category</th><th style="text-align:right;padding:8px;color:#8b949e;border-bottom:1px solid #21262d;">Amount (USD)</th><th style="text-align:right;padding:8px;color:#8b949e;border-bottom:1px solid #21262d;">% of Total</th></tr></thead><tbody>';
+    Object.entries(breakdown).forEach(([k, v]) => {
+        const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0.0';
+        tblHtml += '<tr><td style="padding:8px;color:#c9d1d9;">' + k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + '</td><td style="padding:8px;text-align:right;color:#f0f6fc;font-weight:600;">' + formatUSD(v) + '</td><td style="padding:8px;text-align:right;color:#8b949e;">' + pct + '%</td></tr>';
+    });
+    tblHtml += '<tr style="border-top:2px solid #30363d;"><td style="padding:8px;color:#f0f6fc;font-weight:700;">TOTAL</td><td style="padding:8px;text-align:right;color:#f85149;font-weight:700;">' + formatUSD(total) + '</td><td style="padding:8px;text-align:right;color:#f85149;font-weight:700;">100%</td></tr>';
+    tblHtml += '</tbody></table>';
+    document.getElementById('cost-breakdown-table').innerHTML = tblHtml;
+}
+
+async function compareAllScenarios() {
+    const spend = parseFloat(document.getElementById('cost-spend').value) || 1000000;
+    const revenue = parseFloat(document.getElementById('cost-revenue').value) || 100000;
+    const duration = parseInt(document.getElementById('cost-duration').value) || 60;
+
+    document.getElementById('cost-loading').style.display = 'block';
+    document.getElementById('cost-results').style.display = 'none';
+    document.getElementById('cost-compare-results').style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/v1/cost-impact/compare', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({annual_spend_usd: spend, daily_revenue_usd: revenue, duration_days: duration, risk_score: 50})
+        });
+        const data = await resp.json();
+        renderCostComparison(data);
+    } catch(e) {
+        alert('Scenario comparison failed: ' + e.message);
+    } finally {
+        document.getElementById('cost-loading').style.display = 'none';
+    }
+}
+
+function renderCostComparison(data) {
+    document.getElementById('cost-compare-results').style.display = 'block';
+
+    const scenarios = data.scenarios || data.comparison || [];
+    const scenarioList = Array.isArray(scenarios) ? scenarios : Object.entries(scenarios).map(([k,v]) => ({scenario: k, ...v}));
+
+    if (scenarioList.length === 0) {
+        document.getElementById('cost-compare-chart').innerHTML = '<p style="color:#8b949e;">No comparison data available.</p>';
+        return;
+    }
+
+    // Chart
+    const names = scenarioList.map(s => (s.scenario || s.name || '').replace(/_/g, ' '));
+    const totals = scenarioList.map(s => s.total_estimated_cost_usd || s.total_cost_usd || s.total_impact_usd || 0);
+    const colors = ['#f85149', '#d29922', '#3fb950', '#58a6ff', '#bc8cff'];
+
+    Plotly.newPlot('cost-compare-chart', [{
+        type: 'bar', x: names, y: totals,
+        marker: {color: colors.slice(0, names.length)},
+        text: totals.map(t => formatUSD(t)), textposition: 'outside',
+        textfont: {color: '#c9d1d9'}
+    }], {
+        ...DARK_LAYOUT,
+        yaxis: {title: 'Total Cost (USD)', tickformat: '$,.0f'},
+        xaxis: {title: ''},
+        margin: {t:30,b:60,l:80,r:20}
+    }, {responsive: true});
+
+    // Table
+    let tbl = '<table style="width:100%;font-size:13px;"><thead><tr><th style="text-align:left;padding:8px;color:#8b949e;border-bottom:1px solid #21262d;">Scenario</th><th style="text-align:right;padding:8px;color:#8b949e;border-bottom:1px solid #21262d;">Total Cost</th><th style="text-align:right;padding:8px;color:#8b949e;border-bottom:1px solid #21262d;">Procurement</th><th style="text-align:right;padding:8px;color:#8b949e;border-bottom:1px solid #21262d;">Logistics</th><th style="text-align:right;padding:8px;color:#8b949e;border-bottom:1px solid #21262d;">Production Loss</th></tr></thead><tbody>';
+    scenarioList.forEach((s, i) => {
+        const bd = s.cost_breakdown || s.breakdown || {};
+        const total = s.total_estimated_cost_usd || s.total_cost_usd || s.total_impact_usd || 0;
+        tbl += '<tr><td style="padding:8px;color:' + colors[i % colors.length] + ';font-weight:600;">' + (s.scenario || s.name || '').replace(/_/g, ' ') + '</td>';
+        tbl += '<td style="padding:8px;text-align:right;color:#f0f6fc;font-weight:600;">' + formatUSD(total) + '</td>';
+        tbl += '<td style="padding:8px;text-align:right;color:#c9d1d9;">' + formatUSD(bd.procurement_premium || bd.procurement || 0) + '</td>';
+        tbl += '<td style="padding:8px;text-align:right;color:#c9d1d9;">' + formatUSD(bd.logistics_surcharge || bd.logistics || 0) + '</td>';
+        tbl += '<td style="padding:8px;text-align:right;color:#c9d1d9;">' + formatUSD(bd.production_loss || bd.revenue_loss || 0) + '</td></tr>';
+    });
+    tbl += '</tbody></table>';
+    document.getElementById('cost-compare-table').innerHTML = tbl;
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', function() {
+    initMap();
+    renderAlerts('ALL');
+    window._alertsInit = true;
+});
+</script>
+
+
+<!-- TAB 6: BOM ANALYSIS -->
+<div id="tab-bom" class="tab-content">
+<div class="card">
+    <div class="card-title">BOM Risk Analysis</div>
+    <p style="color:#8b949e;margin-bottom:16px;">Paste or upload a BOM (Bill of Materials) JSON to analyze supply chain risk, identify bottlenecks, and assess Tier-2+ hidden dependencies.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div>
+            <label style="color:#c9d1d9;font-size:13px;font-weight:600;display:block;margin-bottom:8px;">BOM JSON Data</label>
+            <textarea id="bom-input" rows="14" style="width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:12px;font-family:'Fira Code',monospace;font-size:12px;resize:vertical;" placeholder='[
+  {
+    "part_id": "P001",
+    "part_name": "Battery Cell",
+    "supplier_name": "Samsung SDI",
+    "supplier_country": "South Korea",
+    "material": "battery",
+    "hs_code": "8507",
+    "quantity": 100,
+    "unit_cost_usd": 45.0,
+    "is_critical": true
+  }
+]'></textarea>
+        </div>
+        <div>
+            <label style="color:#c9d1d9;font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Options</label>
+            <div style="margin-bottom:12px;">
+                <label style="color:#8b949e;font-size:12px;display:block;margin-bottom:4px;">Product Name</label>
+                <input id="bom-product-name" type="text" value="Product" style="width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:8px 12px;font-size:13px;">
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="display:flex;align-items:center;gap:8px;color:#c9d1d9;font-size:13px;cursor:pointer;">
+                    <input id="bom-tier2" type="checkbox" style="accent-color:#58a6ff;"> Include Tier-2/3 Inference
+                </label>
+            </div>
+            <button onclick="loadSampleBOM()" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:13px;margin-right:8px;">Load Sample BOM</button>
+            <button onclick="analyzeBOM()" style="background:#238636;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-size:13px;font-weight:600;">Analyze BOM</button>
+            <div id="bom-loading" style="display:none;margin-top:12px;color:#58a6ff;font-size:13px;">Analyzing...</div>
+        </div>
+    </div>
+</div>
+
+<div id="bom-results" style="display:none;">
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-value" id="bom-overall-risk">--</div>
+            <div class="stat-label">Overall BOM Risk</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="bom-parts-count">--</div>
+            <div class="stat-label">Parts Analyzed</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="bom-resilience">--</div>
+            <div class="stat-label">Resilience Score</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="bom-financial">--</div>
+            <div class="stat-label">Financial Exposure</div>
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="card">
+            <div class="card-title">Risk Scores by Part</div>
+            <div id="bom-parts-chart" style="height:300px;"></div>
+        </div>
+        <div class="card">
+            <div class="card-title">Bottleneck Analysis</div>
+            <div id="bom-bottlenecks" style="max-height:300px;overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="card">
+            <div class="card-title">Tier-2 Inferred Parts</div>
+            <div id="bom-tier2-results"></div>
+        </div>
+        <div class="card">
+            <div class="card-title">Financial Exposure Summary</div>
+            <div id="bom-financial-detail"></div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- TAB 7: COST IMPACT -->
+<div id="tab-costimpact" class="tab-content">
+<div class="card">
+    <div class="card-title">Disruption Cost Impact Estimator</div>
+    <p style="color:#8b949e;margin-bottom:16px;">Estimate the financial impact of supply chain disruption scenarios. Compare costs across sanctions, conflict, disaster, port closure, and pandemic scenarios.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+        <div>
+            <label style="color:#c9d1d9;font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Scenario</label>
+            <select id="cost-scenario" style="width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:8px 12px;font-size:13px;">
+                <option value="sanctions">Sanctions</option>
+                <option value="conflict">Conflict</option>
+                <option value="disaster" selected>Disaster</option>
+                <option value="port_closure">Port Closure</option>
+                <option value="pandemic">Pandemic</option>
+            </select>
+        </div>
+        <div>
+            <label style="color:#c9d1d9;font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Annual Spend (USD)</label>
+            <input id="cost-spend" type="number" value="1000000" step="100000" style="width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:8px 12px;font-size:13px;">
+        </div>
+        <div>
+            <label style="color:#c9d1d9;font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Daily Revenue (USD)</label>
+            <input id="cost-revenue" type="number" value="100000" step="10000" style="width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:8px 12px;font-size:13px;">
+        </div>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px;">
+        <div>
+            <label style="color:#c9d1d9;font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Duration: <span id="cost-duration-val" style="color:#58a6ff;">60</span> days</label>
+            <input id="cost-duration" type="range" min="30" max="180" value="60" step="1" style="width:100%;accent-color:#58a6ff;" oninput="document.getElementById('cost-duration-val').textContent=this.value">
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:8px;">
+            <button onclick="estimateCost()" style="background:#238636;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-size:13px;font-weight:600;">Estimate Cost</button>
+            <button onclick="compareAllScenarios()" style="background:#1f6feb;color:#fff;border:none;border-radius:6px;padding:8px 20px;cursor:pointer;font-size:13px;font-weight:600;">Compare All</button>
+        </div>
+    </div>
+    <div id="cost-loading" style="display:none;color:#58a6ff;font-size:13px;">Calculating...</div>
+</div>
+
+<div id="cost-results" style="display:none;">
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-value" id="cost-total" style="color:#f85149;">--</div>
+            <div class="stat-label">Total Estimated Cost</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="cost-procurement">--</div>
+            <div class="stat-label">Procurement Premium</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="cost-logistics">--</div>
+            <div class="stat-label">Logistics Surcharge</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="cost-production">--</div>
+            <div class="stat-label">Production Loss</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Cost Breakdown</div>
+        <div id="cost-breakdown-table"></div>
+    </div>
+</div>
+
+<div id="cost-compare-results" style="display:none;">
+    <div class="card">
+        <div class="card-title">Scenario Comparison</div>
+        <div id="cost-compare-chart" style="height:400px;"></div>
+    </div>
+    <div class="card">
+        <div class="card-title">Detailed Comparison Table</div>
+        <div id="cost-compare-table"></div>
+    </div>
+</div>
+</div>
+
+<!-- TAB 8: SUPPLY CHAIN GRAPH -->
+<div id="tab-graph" class="tab-content">
+<div class="card">
+    <div class="card-title">Supply Chain Graph Visualization</div>
+    <p style="color:#8b949e;margin-bottom:16px;">企業名を入力してサプライチェーンのネットワークグラフをインタラクティブに表示します。ノードのホバーでリスクスコアを確認でき、制裁パス検索で制裁対象への接続経路をハイライトできます。</p>
+    <div class="flex-row mb-16">
+        <input type="text" id="graph-company-input" placeholder="企業名を入力 (例: Toyota Motor)" style="flex:1;min-width:300px;">
+        <select id="graph-depth" style="width:120px;">
+            <option value="1">Depth: 1</option>
+            <option value="2" selected>Depth: 2</option>
+            <option value="3">Depth: 3</option>
+        </select>
+        <button class="btn" onclick="buildGraph()">グラフ構築</button>
+        <button class="btn btn-secondary" onclick="findSanctionsPath()" id="graph-sanctions-btn" disabled>制裁パス検索</button>
+    </div>
+    <div id="graph-loading" style="display:none;color:#58a6ff;font-size:13px;margin-bottom:12px;">グラフ構築中...</div>
+    <div id="graph-error" style="display:none;color:#f85149;font-size:13px;margin-bottom:12px;"></div>
+</div>
+
+<div class="card" id="graph-container-card" style="display:none;">
+    <div class="card-title">
+        Network Graph
+        <span id="graph-stats" style="float:right;font-size:12px;color:#8b949e;font-weight:400;"></span>
+    </div>
+    <div id="graph-legend" style="margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap;">
+        <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:#8b949e;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#58a6ff;"></span> 企業</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:#8b949e;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ff9100;"></span> 人物</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:#8b949e;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#3fb950;"></span> 部品</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:#8b949e;"><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#8b949e;"></span> 地域</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:#8b949e;"><span style="display:inline-block;width:3px;height:12px;background:#c9d1d9;"></span> 確定</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:#8b949e;"><span style="display:inline-block;width:3px;height:12px;background:rgba(201,209,217,0.3);"></span> 推定</span>
+        <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:#8b949e;"><span style="display:inline-block;width:3px;height:12px;background:#ff1744;"></span> 制裁接続</span>
+    </div>
+    <div id="graph-canvas" style="width:100%;height:600px;background:#0d1117;border-radius:6px;border:1px solid #21262d;position:relative;overflow:hidden;"></div>
+</div>
+
+<div class="card" id="graph-details-card" style="display:none;">
+    <div class="card-title">ノード詳細</div>
+    <div id="graph-node-details" style="font-size:13px;"></div>
+</div>
+</div>
+
+<!-- TAB 9: DIGITAL TWIN -->
+<div id="tab-twin" class="tab-content">
+<!-- 上段: サマリーカード4枚 -->
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-value" id="twin-critical-parts" style="color:#f85149;">--</div>
+        <div class="stat-label">在庫CRITICAL部品数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="twin-production-risk" style="color:#ff9100;">--</div>
+        <div class="stat-label">30日内生産停止リスク</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="twin-transport-high" style="color:#ffd600;">--</div>
+        <div class="stat-label">輸送HIGHリスク便数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" id="twin-facility-exposure" style="color:#58a6ff;">--</div>
+        <div class="stat-label">拠点リスク曝露額合計</div>
+    </div>
+</div>
+
+<!-- 中段: 左=ウォッチリスト、右=拠点リスクマップ -->
+<div class="grid-2">
+    <div class="card">
+        <div class="card-title">在庫枯渇ウォッチリスト</div>
+        <div class="flex-row mb-16">
+            <button class="btn" onclick="loadStockoutData()">データ取得</button>
+            <span id="twin-stockout-loading" style="display:none;color:#58a6ff;font-size:13px;">読込中...</span>
+        </div>
+        <div class="scrollable" style="max-height:480px;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>部品名</th>
+                        <th>残日数</th>
+                        <th>リスク要因</th>
+                        <th>深刻度</th>
+                    </tr>
+                </thead>
+                <tbody id="twin-stockout-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">拠点リスクマップ</div>
+        <div id="twin-facility-map" style="width:100%;height:480px;background:#0d1117;border-radius:6px;border:1px solid #21262d;"></div>
+        <div class="flex-row mt-16">
+            <button class="btn btn-secondary" onclick="loadFacilityRisks()">拠点データ取得</button>
+            <span id="twin-facility-loading" style="display:none;color:#58a6ff;font-size:13px;">読込中...</span>
+        </div>
+    </div>
+</div>
+
+<!-- 下段: 輸送便リスクリスト -->
+<div class="card mt-16">
+    <div class="card-title">輸送便リスクリスト</div>
+    <div class="flex-row mb-16">
+        <button class="btn" onclick="loadTransportRisks()">輸送データ取得</button>
+        <span id="twin-transport-loading" style="display:none;color:#58a6ff;font-size:13px;">読込中...</span>
+    </div>
+    <div class="scrollable" style="max-height:400px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>便名</th>
+                    <th>出発地</th>
+                    <th>到着地</th>
+                    <th>輸送モード</th>
+                    <th>リスクスコア</th>
+                    <th>リスクレベル</th>
+                    <th>チョークポイント</th>
+                </tr>
+            </thead>
+            <tbody id="twin-transport-tbody"></tbody>
+        </table>
+    </div>
+</div>
+</div>
+
+<!-- TAB 10: SCENARIO SIMULATOR -->
+<div id="tab-scenario" class="tab-content">
+<div class="card">
+    <div class="card-title">What-If シナリオシミュレーター</div>
+    <p style="color:#8b949e;margin-bottom:16px;">地政学シナリオの影響をデジタルツインで予測します。シナリオを選択し、期間を設定して実行してください。</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+        <div>
+            <label style="color:#c9d1d9;font-size:13px;font-weight:600;display:block;margin-bottom:6px;">シナリオ</label>
+            <select id="scenario-type" style="width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:10px 12px;font-size:14px;">
+                <option value="suez_closure">スエズ運河閉鎖</option>
+                <option value="china_lockdown">中国ロックダウン</option>
+                <option value="taiwan_blockade">台湾海峡封鎖</option>
+            </select>
+        </div>
+        <div>
+            <label style="color:#c9d1d9;font-size:13px;font-weight:600;display:block;margin-bottom:6px;">シミュレーション期間: <span id="scenario-duration-val" style="color:#58a6ff;">30</span> 日</label>
+            <input id="scenario-duration" type="range" min="7" max="180" value="30" step="1" style="width:100%;accent-color:#58a6ff;" oninput="document.getElementById('scenario-duration-val').textContent=this.value">
+        </div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;">
+        <button class="btn" onclick="runScenarioSimulation()">シミュレーション実行</button>
+        <span id="scenario-loading" style="display:none;color:#58a6ff;font-size:13px;">シミュレーション中...</span>
+    </div>
+</div>
+
+<!-- シミュレーション結果 -->
+<div id="scenario-results" style="display:none;">
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-value" id="scenario-affected-parts" style="color:#f85149;">--</div>
+            <div class="stat-label">影響部品数</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="scenario-production-risk" style="color:#ff9100;">--</div>
+            <div class="stat-label">生産停止リスク</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="scenario-financial-impact" style="color:#ffd600;">--</div>
+            <div class="stat-label">財務影響（万円）</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="scenario-recovery-days" style="color:#58a6ff;">--</div>
+            <div class="stat-label">回復予測日数</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">カスケードタイムライン</div>
+        <div id="scenario-timeline-chart" style="width:100%;height:350px;"></div>
+    </div>
+
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-title">影響部品一覧</div>
+            <div class="scrollable" style="max-height:400px;">
+                <table>
+                    <thead>
+                        <tr><th>部品</th><th>影響日</th><th>影響種別</th><th>深刻度</th></tr>
+                    </thead>
+                    <tbody id="scenario-parts-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">財務影響内訳</div>
+            <div id="scenario-financial-chart" style="width:100%;height:350px;"></div>
+        </div>
+    </div>
+</div>
+</div>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+/* ================================================================
+   TAB 8: Supply Chain Graph - D3.js Force-Directed Graph
+   ================================================================ */
+let graphData = null;
+let graphSimulation = null;
+let graphSvg = null;
+
+// ノード色マッピング
+const NODE_COLORS = {
+    company: '#58a6ff',   // 青
+    person: '#ff9100',    // オレンジ
+    part: '#3fb950',      // 緑
+    component: '#3fb950', // 緑
+    region: '#8b949e',    // グレー
+    country: '#8b949e',   // グレー
+};
+
+// エッジ色マッピング
+function edgeColor(edge) {
+    if (edge.sanctioned) return '#ff1744';       // 制裁接続: 赤
+    if (edge.inferred) return 'rgba(201,209,217,0.25)';  // 推定: 薄い
+    return 'rgba(201,209,217,0.7)';               // 確定: 濃い
+}
+
+function edgeWidth(edge) {
+    if (edge.sanctioned) return 3;
+    if (edge.inferred) return 1;
+    return 2;
+}
+
+function nodeRadius(node) {
+    if (node.is_root) return 20;
+    if (node.type === 'company') return 14;
+    if (node.type === 'person') return 10;
+    return 8;
+}
+
+async function buildGraph() {
+    const company = document.getElementById('graph-company-input').value.trim();
+    if (!company) { alert('企業名を入力してください'); return; }
+
+    const depth = parseInt(document.getElementById('graph-depth').value) || 2;
+
+    document.getElementById('graph-loading').style.display = 'block';
+    document.getElementById('graph-error').style.display = 'none';
+    document.getElementById('graph-container-card').style.display = 'none';
+    document.getElementById('graph-details-card').style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/v1/graph/visualize', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({company_name: company, depth: depth}),
+        });
+
+        if (!resp.ok) {
+            // APIがまだ存在しない場合はデモデータを使用
+            if (resp.status === 404 || resp.status === 405) {
+                graphData = generateDemoGraph(company, depth);
+            } else {
+                throw new Error(`API Error: ${resp.status}`);
+            }
+        } else {
+            graphData = await resp.json();
+        }
+
+        renderGraph(graphData);
+        document.getElementById('graph-sanctions-btn').disabled = false;
+        document.getElementById('graph-container-card').style.display = 'block';
+    } catch (e) {
+        // APIエンドポイント未実装時はデモデータで表示
+        graphData = generateDemoGraph(company, depth);
+        renderGraph(graphData);
+        document.getElementById('graph-sanctions-btn').disabled = false;
+        document.getElementById('graph-container-card').style.display = 'block';
+        document.getElementById('graph-error').style.display = 'block';
+        document.getElementById('graph-error').textContent = 'Note: /api/v1/graph/visualize エンドポイント未実装のためデモデータを表示中';
+    } finally {
+        document.getElementById('graph-loading').style.display = 'none';
+    }
+}
+
+function generateDemoGraph(company, depth) {
+    /* デモデータ生成（API未実装時） */
+    const nodes = [
+        {id: company, label: company, type: 'company', is_root: true, risk_score: 35, country: 'Japan'},
+        {id: 'supplier_1', label: 'Samsung SDI', type: 'company', risk_score: 28, country: 'South Korea'},
+        {id: 'supplier_2', label: 'TSMC', type: 'company', risk_score: 42, country: 'Taiwan'},
+        {id: 'supplier_3', label: 'Nippon Steel', type: 'company', risk_score: 18, country: 'Japan'},
+        {id: 'part_1', label: 'Battery Cell', type: 'part', risk_score: null},
+        {id: 'part_2', label: 'Semiconductor', type: 'part', risk_score: null},
+        {id: 'part_3', label: 'Steel Sheet', type: 'part', risk_score: null},
+        {id: 'region_kr', label: 'South Korea', type: 'region', risk_score: 32},
+        {id: 'region_tw', label: 'Taiwan', type: 'region', risk_score: 48},
+        {id: 'region_jp', label: 'Japan', type: 'region', risk_score: 15},
+        {id: 'person_1', label: 'CEO Kim', type: 'person', risk_score: null},
+    ];
+
+    const edges = [
+        {source: company, target: 'supplier_1', label: 'SUPPLIES', inferred: false, sanctioned: false},
+        {source: company, target: 'supplier_2', label: 'SUPPLIES', inferred: false, sanctioned: false},
+        {source: company, target: 'supplier_3', label: 'SUPPLIES', inferred: false, sanctioned: false},
+        {source: 'supplier_1', target: 'part_1', label: 'PRODUCES', inferred: false, sanctioned: false},
+        {source: 'supplier_2', target: 'part_2', label: 'PRODUCES', inferred: false, sanctioned: false},
+        {source: 'supplier_3', target: 'part_3', label: 'PRODUCES', inferred: true, sanctioned: false},
+        {source: 'supplier_1', target: 'region_kr', label: 'LOCATED_IN', inferred: false, sanctioned: false},
+        {source: 'supplier_2', target: 'region_tw', label: 'LOCATED_IN', inferred: false, sanctioned: false},
+        {source: 'supplier_3', target: 'region_jp', label: 'LOCATED_IN', inferred: false, sanctioned: false},
+        {source: 'person_1', target: 'supplier_1', label: 'EXECUTIVE_OF', inferred: false, sanctioned: false},
+    ];
+
+    if (depth >= 3) {
+        nodes.push(
+            {id: 'tier2_1', label: 'Raw Material Co.', type: 'company', risk_score: 55, country: 'China'},
+            {id: 'region_cn', label: 'China', type: 'region', risk_score: 58},
+        );
+        edges.push(
+            {source: 'supplier_1', target: 'tier2_1', label: 'SUPPLIES', inferred: true, sanctioned: false},
+            {source: 'tier2_1', target: 'region_cn', label: 'LOCATED_IN', inferred: true, sanctioned: false},
+        );
+    }
+
+    return {nodes, edges, metadata: {total_nodes: nodes.length, total_edges: edges.length, demo: true}};
+}
+
+function renderGraph(data) {
+    const container = document.getElementById('graph-canvas');
+    container.innerHTML = '';
+
+    const width = container.clientWidth;
+    const height = container.clientHeight || 600;
+
+    // 統計表示
+    document.getElementById('graph-stats').textContent =
+        `Nodes: ${data.nodes.length} | Edges: ${data.edges.length}` +
+        (data.metadata && data.metadata.demo ? ' (Demo)' : '');
+
+    // SVG作成
+    const svg = d3.select('#graph-canvas')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+
+    graphSvg = svg;
+
+    // ズーム
+    const g = svg.append('g');
+    svg.call(d3.zoom()
+        .scaleExtent([0.2, 5])
+        .on('zoom', (event) => g.attr('transform', event.transform)));
+
+    // エッジ
+    const link = g.append('g')
+        .selectAll('line')
+        .data(data.edges)
+        .enter().append('line')
+        .attr('stroke', d => edgeColor(d))
+        .attr('stroke-width', d => edgeWidth(d))
+        .attr('stroke-dasharray', d => d.inferred ? '5,5' : 'none')
+        .attr('class', 'graph-edge');
+
+    // エッジラベル
+    const linkLabel = g.append('g')
+        .selectAll('text')
+        .data(data.edges)
+        .enter().append('text')
+        .attr('font-size', '9px')
+        .attr('fill', '#484f58')
+        .attr('text-anchor', 'middle')
+        .text(d => d.label || '');
+
+    // ノード
+    const node = g.append('g')
+        .selectAll('circle')
+        .data(data.nodes)
+        .enter().append('circle')
+        .attr('r', d => nodeRadius(d))
+        .attr('fill', d => NODE_COLORS[d.type] || '#8b949e')
+        .attr('stroke', d => d.is_root ? '#f0f6fc' : '#30363d')
+        .attr('stroke-width', d => d.is_root ? 3 : 1)
+        .attr('cursor', 'pointer')
+        .attr('class', 'graph-node')
+        .call(d3.drag()
+            .on('start', dragStarted)
+            .on('drag', dragged)
+            .on('end', dragEnded));
+
+    // ノードラベル
+    const label = g.append('g')
+        .selectAll('text')
+        .data(data.nodes)
+        .enter().append('text')
+        .attr('font-size', d => d.is_root ? '13px' : '11px')
+        .attr('fill', '#c9d1d9')
+        .attr('font-weight', d => d.is_root ? '600' : '400')
+        .attr('text-anchor', 'middle')
+        .attr('dy', d => nodeRadius(d) + 14)
+        .text(d => d.label);
+
+    // ツールチップ（ホバーでリスクスコア表示）
+    const tooltip = d3.select('#graph-canvas')
+        .append('div')
+        .style('position', 'absolute')
+        .style('background', '#21262d')
+        .style('border', '1px solid #30363d')
+        .style('border-radius', '6px')
+        .style('padding', '8px 12px')
+        .style('font-size', '12px')
+        .style('color', '#c9d1d9')
+        .style('pointer-events', 'none')
+        .style('display', 'none')
+        .style('z-index', '10');
+
+    node.on('mouseover', function(event, d) {
+        let html = `<strong>${d.label}</strong><br>Type: ${d.type}`;
+        if (d.country) html += `<br>Country: ${d.country}`;
+        if (d.risk_score !== null && d.risk_score !== undefined) {
+            const color = riskColor(d.risk_score);
+            html += `<br>Risk Score: <span style="color:${color};font-weight:600;">${d.risk_score}</span>`;
+        }
+        tooltip.html(html)
+            .style('display', 'block')
+            .style('left', (event.offsetX + 12) + 'px')
+            .style('top', (event.offsetY - 10) + 'px');
+        d3.select(this).attr('stroke', '#f0f6fc').attr('stroke-width', 3);
+    })
+    .on('mousemove', function(event) {
+        tooltip.style('left', (event.offsetX + 12) + 'px').style('top', (event.offsetY - 10) + 'px');
+    })
+    .on('mouseout', function(event, d) {
+        tooltip.style('display', 'none');
+        d3.select(this).attr('stroke', d.is_root ? '#f0f6fc' : '#30363d').attr('stroke-width', d.is_root ? 3 : 1);
+    })
+    .on('click', function(event, d) {
+        showNodeDetails(d);
+    });
+
+    // Force simulation
+    graphSimulation = d3.forceSimulation(data.nodes)
+        .force('link', d3.forceLink(data.edges).id(d => d.id).distance(100))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 5))
+        .on('tick', () => {
+            link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+            linkLabel.attr('x', d => (d.source.x + d.target.x) / 2)
+                     .attr('y', d => (d.source.y + d.target.y) / 2);
+            node.attr('cx', d => d.x).attr('cy', d => d.y);
+            label.attr('x', d => d.x).attr('y', d => d.y);
+        });
+
+    function dragStarted(event, d) {
+        if (!event.active) graphSimulation.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+    }
+    function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+    function dragEnded(event, d) {
+        if (!event.active) graphSimulation.alphaTarget(0);
+        d.fx = null; d.fy = null;
+    }
+}
+
+function showNodeDetails(node) {
+    const card = document.getElementById('graph-details-card');
+    card.style.display = 'block';
+    let html = `<table style="width:100%;font-size:13px;">`;
+    html += `<tr><td style="color:#8b949e;padding:4px 8px;">Name</td><td style="padding:4px 8px;font-weight:600;">${node.label}</td></tr>`;
+    html += `<tr><td style="color:#8b949e;padding:4px 8px;">Type</td><td style="padding:4px 8px;">${node.type}</td></tr>`;
+    if (node.country) html += `<tr><td style="color:#8b949e;padding:4px 8px;">Country</td><td style="padding:4px 8px;">${node.country}</td></tr>`;
+    if (node.risk_score !== null && node.risk_score !== undefined) {
+        const level = riskLevel(node.risk_score);
+        html += `<tr><td style="color:#8b949e;padding:4px 8px;">Risk Score</td><td style="padding:4px 8px;"><span class="${badgeClass(level)}">${level}</span> ${node.risk_score}</td></tr>`;
+    }
+    html += `</table>`;
+    document.getElementById('graph-node-details').innerHTML = html;
+}
+
+async function findSanctionsPath() {
+    if (!graphData) return;
+
+    const company = document.getElementById('graph-company-input').value.trim();
+
+    try {
+        const resp = await fetch('/api/v1/graph/sanctions-path', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({company_name: company}),
+        });
+
+        let pathData;
+        if (!resp.ok) {
+            // デモ: ランダムにパスをハイライト
+            pathData = {paths: [{nodes: [company, 'supplier_1', 'person_1'], sanctioned_entity: 'person_1'}]};
+        } else {
+            pathData = await resp.json();
+        }
+
+        highlightSanctionsPaths(pathData);
+    } catch (e) {
+        // デモハイライト
+        highlightSanctionsPaths({paths: [{nodes: [company, 'supplier_1', 'person_1'], sanctioned_entity: 'person_1'}]});
+    }
+}
+
+function highlightSanctionsPaths(pathData) {
+    if (!graphSvg || !pathData.paths || pathData.paths.length === 0) {
+        alert('制裁パスが見つかりませんでした');
+        return;
+    }
+
+    // 全パスのノードIDを収集
+    const pathNodeIds = new Set();
+    const pathEdgePairs = new Set();
+
+    pathData.paths.forEach(path => {
+        if (path.nodes) {
+            path.nodes.forEach(n => pathNodeIds.add(n));
+            for (let i = 0; i < path.nodes.length - 1; i++) {
+                pathEdgePairs.add(`${path.nodes[i]}|${path.nodes[i+1]}`);
+                pathEdgePairs.add(`${path.nodes[i+1]}|${path.nodes[i]}`);
+            }
+        }
+    });
+
+    // エッジをハイライト
+    graphSvg.selectAll('.graph-edge')
+        .attr('stroke', function(d) {
+            const srcId = typeof d.source === 'object' ? d.source.id : d.source;
+            const tgtId = typeof d.target === 'object' ? d.target.id : d.target;
+            if (pathEdgePairs.has(`${srcId}|${tgtId}`)) return '#ff1744';
+            return edgeColor(d);
+        })
+        .attr('stroke-width', function(d) {
+            const srcId = typeof d.source === 'object' ? d.source.id : d.source;
+            const tgtId = typeof d.target === 'object' ? d.target.id : d.target;
+            if (pathEdgePairs.has(`${srcId}|${tgtId}`)) return 4;
+            return edgeWidth(d);
+        });
+
+    // ノードをハイライト
+    graphSvg.selectAll('.graph-node')
+        .attr('stroke', function(d) {
+            if (pathNodeIds.has(d.id)) return '#ff1744';
+            return d.is_root ? '#f0f6fc' : '#30363d';
+        })
+        .attr('stroke-width', function(d) {
+            if (pathNodeIds.has(d.id)) return 3;
+            return d.is_root ? 3 : 1;
+        });
+}
+
+/* ================================================================
+   TAB 9: Digital Twin — 在庫枯渇・拠点リスク・輸送リスク
+   ================================================================ */
+let twinMap = null;
+
+async function loadStockoutData() {
+    const loading = document.getElementById('twin-stockout-loading');
+    loading.style.display = 'inline';
+    try {
+        let data;
+        try {
+            const resp = await fetch('/api/v1/twin/stockout-scan', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({location_id: '', risk_threshold: 50}),
+            });
+            if (resp.ok) {
+                const json = await resp.json();
+                data = json.results || json;
+            }
+        } catch (e) {}
+        // デモデータフォールバック
+        if (!data || !data.watchlist) {
+            data = {
+                watchlist: [
+                    {part_name: 'MCU STM32F4', days_remaining: 5, risk_factor: 'リードタイム長+台湾リスク', severity: 'CRITICAL'},
+                    {part_name: 'コネクタ USB-C', days_remaining: 5, risk_factor: '台湾サプライヤー集中', severity: 'CRITICAL'},
+                    {part_name: 'リチウム電池セル', days_remaining: 6, risk_factor: '中国単一ソース', severity: 'CRITICAL'},
+                    {part_name: 'パワーMOSFET', days_remaining: 12, risk_factor: 'リードタイム長', severity: 'HIGH'},
+                    {part_name: 'CANトランシーバ', days_remaining: 22, risk_factor: '欧州物流遅延', severity: 'MEDIUM'},
+                    {part_name: 'MLCC 0402', days_remaining: 24, risk_factor: '需要急増', severity: 'MEDIUM'},
+                ],
+                summary: {critical_count: 3, production_risk_30d: 2, total_exposure_jpy: 485000000}
+            };
+        }
+        // サマリーカード更新
+        document.getElementById('twin-critical-parts').textContent = data.summary?.critical_count ?? '--';
+        document.getElementById('twin-production-risk').textContent = data.summary?.production_risk_30d ?? '--';
+
+        // テーブル描画
+        const tbody = document.getElementById('twin-stockout-tbody');
+        tbody.innerHTML = '';
+        (data.watchlist || []).forEach(item => {
+            const colorClass = item.days_remaining < 7 ? 'color:#f85149' :
+                               item.days_remaining < 14 ? 'color:#ff9100' : 'color:#58a6ff';
+            const badgeCls = item.severity === 'CRITICAL' ? 'badge-critical' :
+                             item.severity === 'HIGH' ? 'badge-high' : 'badge-medium';
+            tbody.innerHTML += `<tr>
+                <td>${item.part_name}</td>
+                <td style="${colorClass};font-weight:700;">${item.days_remaining}日</td>
+                <td style="font-size:12px;">${item.risk_factor}</td>
+                <td><span class="badge ${badgeCls}">${item.severity}</span></td>
+            </tr>`;
+        });
+    } catch (e) {
+        console.error('ストックアウトデータ取得失敗:', e);
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+async function loadFacilityRisks() {
+    const loading = document.getElementById('twin-facility-loading');
+    loading.style.display = 'inline';
+    try {
+        let facilities;
+        try {
+            const resp = await fetch('/api/v1/twin/facility-risks');
+            if (resp.ok) {
+                const json = await resp.json();
+                facilities = json.facility_risks || json;
+            }
+        } catch (e) {}
+        // デモデータフォールバック
+        if (!facilities || !Array.isArray(facilities)) {
+            facilities = [
+                {name: '名古屋工場', lat: 35.18, lon: 136.91, country: 'Japan', risk_score: 28, exposure_jpy: 200000000},
+                {name: '大阪工場', lat: 34.69, lon: 135.50, country: 'Japan', risk_score: 25, exposure_jpy: 150000000},
+                {name: 'バンコク工場', lat: 13.76, lon: 100.50, country: 'Thailand', risk_score: 38, exposure_jpy: 80000000},
+                {name: '深圳工場', lat: 22.54, lon: 114.06, country: 'China', risk_score: 52, exposure_jpy: 120000000},
+                {name: '横浜倉庫', lat: 35.44, lon: 139.64, country: 'Japan', risk_score: 15, exposure_jpy: 55000000},
+            ];
+        }
+
+        // 曝露額合計
+        const totalExposure = facilities.reduce((s, f) => s + (f.exposure_jpy || 0), 0);
+        document.getElementById('twin-facility-exposure').textContent =
+            (totalExposure / 100000000).toFixed(1) + '億円';
+
+        // Leafletマップ初期化
+        const mapDiv = document.getElementById('twin-facility-map');
+        if (twinMap) { twinMap.remove(); }
+        twinMap = L.map(mapDiv).setView([28, 110], 3);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 18,
+        }).addTo(twinMap);
+
+        facilities.forEach(f => {
+            const color = f.risk_score >= 60 ? '#f85149' :
+                          f.risk_score >= 40 ? '#ff9100' :
+                          f.risk_score >= 20 ? '#ffd600' : '#00e676';
+            const circle = L.circleMarker([f.lat, f.lon], {
+                radius: 8 + Math.min(f.risk_score / 5, 12),
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.6,
+                weight: 2,
+            }).addTo(twinMap);
+            circle.bindPopup(`<b>${f.name}</b><br>Country: ${f.country}<br>Risk: ${f.risk_score}<br>Exposure: ${(f.exposure_jpy/10000).toLocaleString()}万円`);
+        });
+    } catch (e) {
+        console.error('拠点リスクデータ取得失敗:', e);
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+async function loadTransportRisks() {
+    const loading = document.getElementById('twin-transport-loading');
+    loading.style.display = 'inline';
+    try {
+        let transports;
+        try {
+            const resp = await fetch('/api/v1/twin/transport-analysis', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({origin_country: 'China', dest_country: 'Japan', transport_mode: 'sea'}),
+            });
+            if (resp.ok) {
+                const json = await resp.json();
+                transports = json.routes || json.analysis?.routes;
+            }
+        } catch (e) {}
+        // デモデータフォールバック
+        if (!transports || !Array.isArray(transports)) {
+            transports = [
+                {name: 'SH-NGO-001', origin: '上海', dest: '名古屋', mode: 'sea', risk_score: 62, risk_level: 'HIGH', chokepoints: '台湾海峡'},
+                {name: 'SZ-OSA-002', origin: '深圳', dest: '大阪', mode: 'sea', risk_score: 58, risk_level: 'HIGH', chokepoints: '台湾海峡'},
+                {name: 'BKK-YKH-003', origin: 'バンコク', dest: '横浜', mode: 'sea', risk_score: 45, risk_level: 'MEDIUM', chokepoints: 'マラッカ海峡'},
+                {name: 'AMS-NRT-004', origin: 'アムステルダム', dest: '成田', mode: 'air', risk_score: 22, risk_level: 'LOW', chokepoints: '-'},
+                {name: 'PAR-NGO-005', origin: 'パリ', dest: '名古屋', mode: 'sea', risk_score: 48, risk_level: 'MEDIUM', chokepoints: 'スエズ運河'},
+            ];
+        }
+
+        // HIGHリスク便数カウント
+        const highCount = transports.filter(t => t.risk_level === 'HIGH' || t.risk_level === 'CRITICAL').length;
+        document.getElementById('twin-transport-high').textContent = highCount;
+
+        const tbody = document.getElementById('twin-transport-tbody');
+        tbody.innerHTML = '';
+        transports.forEach(t => {
+            const badgeCls = t.risk_level === 'CRITICAL' ? 'badge-critical' :
+                             t.risk_level === 'HIGH' ? 'badge-high' :
+                             t.risk_level === 'MEDIUM' ? 'badge-medium' : 'badge-low';
+            tbody.innerHTML += `<tr>
+                <td style="font-weight:600;">${t.name}</td>
+                <td>${t.origin}</td>
+                <td>${t.dest}</td>
+                <td>${t.mode}</td>
+                <td>${t.risk_score}</td>
+                <td><span class="badge ${badgeCls}">${t.risk_level}</span></td>
+                <td style="font-size:12px;">${t.chokepoints}</td>
+            </tr>`;
+        });
+    } catch (e) {
+        console.error('輸送リスクデータ取得失敗:', e);
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+/* ================================================================
+   TAB 10: Scenario Simulator — What-If シナリオ
+   ================================================================ */
+const SCENARIO_MAP = {
+    suez_closure: {scenario: 'port_closure', affected_countries: ['Egypt'], label: 'スエズ運河閉鎖'},
+    china_lockdown: {scenario: 'pandemic', affected_countries: ['China'], label: '中国ロックダウン'},
+    taiwan_blockade: {scenario: 'war', affected_countries: ['Taiwan'], label: '台湾海峡封鎖'},
+};
+
+async function runScenarioSimulation() {
+    const scenarioKey = document.getElementById('scenario-type').value;
+    const durationDays = parseInt(document.getElementById('scenario-duration').value);
+    const config = SCENARIO_MAP[scenarioKey];
+
+    const loading = document.getElementById('scenario-loading');
+    loading.style.display = 'inline';
+    document.getElementById('scenario-results').style.display = 'none';
+
+    try {
+        let result;
+        try {
+            const resp = await fetch('/api/v1/twin/scenario', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    scenario: config.scenario,
+                    duration_days: durationDays,
+                    affected_countries: config.affected_countries,
+                    parameters: {},
+                }),
+            });
+            if (resp.ok) {
+                result = await resp.json();
+            }
+        } catch (e) {}
+
+        // デモデータフォールバック
+        if (!result || !result.success) {
+            const scale = durationDays / 30;
+            result = {
+                success: true,
+                affected_parts_count: Math.round({suez_closure: 4, china_lockdown: 6, taiwan_blockade: 5}[scenarioKey] * Math.min(scale, 2)),
+                production_risk_level: scale > 2 ? 'CRITICAL' : scale > 1 ? 'HIGH' : 'MEDIUM',
+                financial_impact_jpy: Math.round({suez_closure: 320, china_lockdown: 580, taiwan_blockade: 890}[scenarioKey] * scale * 10000),
+                recovery_days: Math.round({suez_closure: 45, china_lockdown: 60, taiwan_blockade: 90}[scenarioKey] * Math.max(scale, 0.5)),
+                timeline: Array.from({length: Math.min(durationDays, 60)}, (_, i) => ({
+                    day: i + 1,
+                    cumulative_impact_jpy: Math.round(i * i * 50000 * ({suez_closure: 1, china_lockdown: 1.8, taiwan_blockade: 2.5}[scenarioKey])),
+                    active_disruptions: Math.min(i, 5),
+                })),
+                affected_parts: [
+                    {part: 'MCU STM32F4', impact_day: 5, type: '供給停止', severity: 'CRITICAL'},
+                    {part: 'コネクタ USB-C', impact_day: 8, type: '供給停止', severity: 'CRITICAL'},
+                    {part: 'リチウム電池セル', impact_day: 12, type: '供給遅延', severity: 'HIGH'},
+                    {part: 'MLCC 0402', impact_day: 18, type: '代替調達必要', severity: 'MEDIUM'},
+                    {part: 'パワーMOSFET', impact_day: 25, type: '価格高騰', severity: 'MEDIUM'},
+                ],
+                financial_breakdown: {
+                    procurement_premium: 35,
+                    logistics_surcharge: 25,
+                    production_loss: 30,
+                    recovery_cost: 10,
+                },
+            };
+        }
+
+        // サマリーカード更新
+        document.getElementById('scenario-affected-parts').textContent = result.affected_parts_count ?? '--';
+        document.getElementById('scenario-production-risk').textContent = result.production_risk_level ?? '--';
+        const impact = result.financial_impact_jpy || 0;
+        document.getElementById('scenario-financial-impact').textContent = (impact / 10000).toLocaleString();
+        document.getElementById('scenario-recovery-days').textContent = result.recovery_days ?? '--';
+
+        // タイムラインチャート
+        if (result.timeline && result.timeline.length > 0) {
+            const days = result.timeline.map(t => t.day);
+            const impacts = result.timeline.map(t => t.cumulative_impact_jpy / 10000);
+            Plotly.newPlot('scenario-timeline-chart', [{
+                x: days, y: impacts,
+                type: 'scatter', mode: 'lines+markers',
+                fill: 'tozeroy',
+                line: {color: '#f85149', width: 2},
+                marker: {size: 3},
+                name: '累積影響（万円）',
+            }], {
+                paper_bgcolor: '#161b22', plot_bgcolor: '#0d1117',
+                font: {color: '#c9d1d9', size: 12},
+                xaxis: {title: '経過日数', gridcolor: '#21262d'},
+                yaxis: {title: '累積影響額（万円）', gridcolor: '#21262d'},
+                margin: {l: 60, r: 20, t: 30, b: 50},
+            }, {responsive: true});
+        }
+
+        // 影響部品テーブル
+        const partsTbody = document.getElementById('scenario-parts-tbody');
+        partsTbody.innerHTML = '';
+        (result.affected_parts || []).forEach(p => {
+            const badgeCls = p.severity === 'CRITICAL' ? 'badge-critical' :
+                             p.severity === 'HIGH' ? 'badge-high' : 'badge-medium';
+            partsTbody.innerHTML += `<tr>
+                <td>${p.part}</td>
+                <td>${p.impact_day}日目</td>
+                <td>${p.type}</td>
+                <td><span class="badge ${badgeCls}">${p.severity}</span></td>
+            </tr>`;
+        });
+
+        // 財務影響円グラフ
+        if (result.financial_breakdown) {
+            const fb = result.financial_breakdown;
+            Plotly.newPlot('scenario-financial-chart', [{
+                labels: ['調達プレミアム', '物流追加費用', '生産損失', '復旧コスト'],
+                values: [fb.procurement_premium, fb.logistics_surcharge, fb.production_loss, fb.recovery_cost],
+                type: 'pie',
+                marker: {colors: ['#f85149', '#ff9100', '#ffd600', '#58a6ff']},
+                textfont: {color: '#f0f6fc'},
+            }], {
+                paper_bgcolor: '#161b22', plot_bgcolor: '#0d1117',
+                font: {color: '#c9d1d9', size: 12},
+                margin: {l: 20, r: 20, t: 30, b: 20},
+                showlegend: true,
+                legend: {font: {color: '#c9d1d9'}},
+            }, {responsive: true});
+        }
+
+        document.getElementById('scenario-results').style.display = 'block';
+    } catch (e) {
+        console.error('シナリオシミュレーション失敗:', e);
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+</script>
+
+<div style="text-align:center;padding:16px;color:#484f58;font-size:11px;border-top:1px solid #21262d;margin-top:20px;">
+    SCRI Platform v1.1.0 &middot; Dashboard generated 2026-03-28 &middot; 50 countries &middot; 26 dimensions &middot; 10 tabs
+</div>
+
+</body>
+</html>

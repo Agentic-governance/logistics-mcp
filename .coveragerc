@@ -1,0 +1,8 @@
+[run]
+source = .
+omit =
+    .venv311/*
+    venv/*
+    tests/*
+    scripts/*
+    __pycache__/*

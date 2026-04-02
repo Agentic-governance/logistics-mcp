@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Risk Intelligence</title>
+    <style>
+        :root {
+            --bg: #0a0f1a;
+            --surface: #111827;
+            --surface2: #1f2937;
+            --border: #374151;
+            --text: #f9fafb;
+            --text-secondary: #9ca3af;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --critical-bg: rgba(239, 68, 68, 0.1);
+            --high-bg: rgba(245, 158, 11, 0.1);
+            --medium-bg: rgba(59, 130, 246, 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        /* --- Hero --- */
+        .hero {
+            padding: 80px 24px 60px;
+            text-align: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .hero h1 {
+            font-size: 2.4rem;
+            font-weight: 800;
+            line-height: 1.3;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #f9fafb 0%, #93c5fd 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            max-width: 640px;
+            margin: 0 auto 40px;
+        }
+
+        /* --- Screening Tool --- */
+        .screen-section {
+            max-width: 720px;
+            margin: 0 auto 60px;
+            padding: 0 24px;
+        }
+
+        .screen-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+        }
+
+        .screen-card h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .input-row input {
+            flex: 1;
+            padding: 12px 16px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-row input:focus {
+            border-color: var(--accent);
+        }
+
+        .input-row input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .btn {
+            padding: 12px 28px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn:hover { background: var(--accent-hover); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* --- Result --- */
+        .result {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .result.show { display: block; }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .result-header.matched { background: var(--critical-bg); border-left: 4px solid var(--danger); }
+        .result-header.clear { background: rgba(16, 185, 129, 0.1); border-left: 4px solid var(--success); }
+
+        .result-header .score {
+            font-size: 2rem;
+            font-weight: 800;
+        }
+
+        .result-header.matched .score { color: var(--danger); }
+        .result-header.clear .score { color: var(--success); }
+
+        .evidence-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .evidence-list li {
+            padding: 8px 16px;
+            border-left: 2px solid var(--border);
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* --- Value Props --- */
+        .values {
+            max-width: 960px;
+            margin: 0 auto 60px;
+            padding: 0 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .value-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px;
+        }
+
+        .value-card h3 {
+            font-size: 1.05rem;
+            margin-bottom: 8px;
+        }
+
+        .value-card p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .value-icon {
+            font-size: 1.6rem;
+            margin-bottom: 12px;
+        }
+
+        /* --- Comparison Table --- */
+        .compare-section {
+            max-width: 900px;
+            margin: 0 auto 60px;
+            padding: 0 24px;
+        }
+
+        .compare-section h2 {
+            text-align: center;
+            font-size: 1.5rem;
+            margin-bottom: 24px;
+        }
+
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .compare-table th, .compare-table td {
+            padding: 14px 18px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        .compare-table th {
+            background: var(--surface2);
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .compare-table td:first-child {
+            font-weight: 500;
+        }
+
+        .tag-yes {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .tag-no {
+            color: var(--text-secondary);
+        }
+
+        .tag-partial {
+            color: var(--warning);
+        }
+
+        /* --- Stats Bar --- */
+        .stats-bar {
+            max-width: 960px;
+            margin: 0 auto 60px;
+            padding: 0 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-card .num {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--accent);
+        }
+
+        .stat-card .label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* --- Footer --- */
+        footer {
+            text-align: center;
+            padding: 40px 24px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+
+        @media (max-width: 640px) {
+            .hero h1 { font-size: 1.7rem; }
+            .input-row { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+    <h1>サプライヤーへのアンケートは、<br>リスクを隠す儀式だった。</h1>
+    <p>外部観察のみ。アンケートゼロ。サプライヤーが知らないリスクも、15分で検知。</p>
+</section>
+
+<!-- Screening Tool -->
+<section class="screen-section">
+    <div class="screen-card">
+        <h2>制裁リストスクリーニング</h2>
+        <div class="input-row">
+            <input type="text" id="companyName" placeholder="企業名（例: Rosneft, 華為技術）">
+            <input type="text" id="country" placeholder="国名（任意）" style="max-width:180px">
+            <button class="btn" id="screenBtn" onclick="runScreen()">検索</button>
+        </div>
+        <div class="result" id="result">
+            <div class="result-header" id="resultHeader">
+                <div>
+                    <div class="score" id="resultScore"></div>
+                    <div id="resultLabel" style="font-size:0.85rem"></div>
+                </div>
+                <div style="margin-left:auto;text-align:right">
+                    <div id="resultSource" style="font-size:0.85rem;color:var(--text-secondary)"></div>
+                    <div id="resultEntity" style="font-size:0.9rem"></div>
+                </div>
+            </div>
+            <ul class="evidence-list" id="evidenceList"></ul>
+        </div>
+    </div>
+</section>
+
+<!-- Stats -->
+<section class="stats-bar" id="statsBar">
+    <div class="stat-card">
+        <div class="num" id="statEntities">-</div>
+        <div class="label">制裁エンティティ</div>
+    </div>
+    <div class="stat-card">
+        <div class="num" id="statSources">5</div>
+        <div class="label">データソース</div>
+    </div>
+    <div class="stat-card">
+        <div class="num" id="statScreenings">-</div>
+        <div class="label">スクリーニング実行数</div>
+    </div>
+    <div class="stat-card">
+        <div class="num" id="statMonitors">-</div>
+        <div class="label">監視中サプライヤー</div>
+    </div>
+</section>
+
+<!-- Value Props -->
+<section class="values">
+    <div class="value-card">
+        <div class="value-icon">&#x1F6E1;</div>
+        <h3>アンケートゼロ</h3>
+        <p>相手に頼らない。OFAC/EU/UN/BIS/METI 5つの制裁リストと GDELT リアルタイム報道を外部データのみで判定。</p>
+    </div>
+    <div class="value-card">
+        <div class="value-icon">&#x1F4CA;</div>
+        <h3>証拠付きスコア</h3>
+        <p>「なぜ危険か」をエビデンスで説明。購買部門の上司説明に使える根拠リスト付きスコアカード。</p>
+    </div>
+    <div class="value-card">
+        <div class="value-icon">&#x1F310;</div>
+        <h3>Tier-2 以降を可視化</h3>
+        <p>取引先の取引先まで。NetworkX グラフで見えなかったリスクを構造化。サプライチェーンの死角を排除。</p>
+    </div>
+</section>
+
+<!-- Comparison Table -->
+<section class="compare-section">
+    <h2>従来型との比較</h2>
+    <table class="compare-table">
+        <thead>
+            <tr>
+                <th>比較軸</th>
+                <th>従来型（Resilire等）</th>
+                <th>本プラットフォーム</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>検知手法</td>
+                <td class="tag-partial">アンケート依存</td>
+                <td class="tag-yes">外部観察のみ</td>
+            </tr>
+            <tr>
+                <td>制裁リスト</td>
+                <td class="tag-partial">限定的</td>
+                <td class="tag-yes">OFAC+EU+UN+BIS+METI 統合</td>
+            </tr>
+            <tr>
+                <td>検知速度</td>
+                <td class="tag-no">回答待ち（数日〜数週間）</td>
+                <td class="tag-yes">15分（GDELT更新頻度）</td>
+            </tr>
+            <tr>
+                <td>Tier-2 以降</td>
+                <td class="tag-no">非対応</td>
+                <td class="tag-yes">グラフ推定で対応</td>
+            </tr>
+            <tr>
+                <td>METI 外国ユーザーリスト</td>
+                <td class="tag-no">非対応</td>
+                <td class="tag-yes">日本唯一の対応</td>
+            </tr>
+            <tr>
+                <td>エビデンス出力</td>
+                <td class="tag-partial">限定的</td>
+                <td class="tag-yes">全スコアに根拠付き</td>
+            </tr>
+            <tr>
+                <td>EU CSDD 指令対応</td>
+                <td class="tag-partial">一部</td>
+                <td class="tag-yes">強制労働DDに特化</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- Footer -->
+<footer>
+    Supply Chain Risk Intelligence Platform &mdash; Passive Risk Detection
+</footer>
+
+<script>
+    // Load stats on page load
+    async function loadStats() {
+        try {
+            const resp = await fetch('/api/v1/stats');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            document.getElementById('statEntities').textContent =
+                data.sanctions_entities?.toLocaleString() || '0';
+            document.getElementById('statScreenings').textContent =
+                data.screenings_performed?.toLocaleString() || '0';
+            document.getElementById('statMonitors').textContent =
+                data.monitored_suppliers?.toLocaleString() || '0';
+        } catch (e) {
+            // API might not be running
+        }
+    }
+
+    // Run screening
+    async function runScreen() {
+        const name = document.getElementById('companyName').value.trim();
+        if (!name) return;
+
+        const country = document.getElementById('country').value.trim() || null;
+        const btn = document.getElementById('screenBtn');
+        btn.disabled = true;
+        btn.textContent = '検索中...';
+
+        try {
+            const resp = await fetch('/api/v1/screen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ company_name: name, country: country }),
+            });
+            const data = await resp.json();
+            showResult(data);
+        } catch (e) {
+            alert('API接続エラー: サーバーが起動しているか確認してください。');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '検索';
+        }
+    }
+
+    function showResult(data) {
+        const el = document.getElementById('result');
+        const header = document.getElementById('resultHeader');
+        const scoreEl = document.getElementById('resultScore');
+        const labelEl = document.getElementById('resultLabel');
+        const sourceEl = document.getElementById('resultSource');
+        const entityEl = document.getElementById('resultEntity');
+        const evidenceEl = document.getElementById('evidenceList');
+
+        el.classList.add('show');
+
+        if (data.matched) {
+            header.className = 'result-header matched';
+            scoreEl.textContent = data.match_score.toFixed(1) + '%';
+            labelEl.textContent = 'MATCH - 制裁リストに一致';
+            sourceEl.textContent = 'ソース: ' + (data.source || '').toUpperCase();
+            entityEl.textContent = data.matched_entity?.name || '';
+        } else {
+            header.className = 'result-header clear';
+            scoreEl.textContent = data.match_score.toFixed(1) + '%';
+            labelEl.textContent = 'CLEAR - 制裁リストに一致なし';
+            sourceEl.textContent = '';
+            entityEl.textContent = '';
+        }
+
+        evidenceEl.innerHTML = '';
+        (data.evidence || []).forEach(e => {
+            const li = document.createElement('li');
+            li.textContent = e;
+            evidenceEl.appendChild(li);
+        });
+
+        // Reload stats after screening
+        loadStats();
+    }
+
+    // Enter key triggers search
+    document.getElementById('companyName').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') runScreen();
+    });
+    document.getElementById('country').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') runScreen();
+    });
+
+    loadStats();
+</script>
+</body>
+</html>

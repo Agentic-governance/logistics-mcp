@@ -1,0 +1,34 @@
+# SCRI Platform Alert Configuration
+
+alert_channels:
+  log: true
+  file: true
+  webhook: false  # Future: Slack/Teams integration
+
+alert_thresholds:
+  score_jump: 20          # overall score daily change threshold
+  dimension_jump: 30      # dimension score change threshold
+  new_sanctions_hit: true  # always alert on new sanctions match
+  source_failure_count: 3  # consecutive failures before alert
+  high_correlation: 0.90   # correlation coefficient threshold
+
+file_settings:
+  output_dir: "data/alerts"
+  format: "jsonl"          # one JSON per line
+  rotation: "daily"        # new file each day
+  retention_days: 90       # keep files for 90 days
+
+severity_levels:
+  critical:
+    - sanctions_match
+    - score_above_80
+    - source_outage_extended
+  high:
+    - score_jump_above_20
+    - new_high_correlation
+  medium:
+    - dimension_jump
+    - source_single_failure
+  low:
+    - score_minor_change
+    - data_staleness

@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCRI Inbound Risk Dashboard - インバウンドリスク分析</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://d3js.org/topojson.v3.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0f1117;color:#c9d1d9;min-height:100vh;overflow-x:hidden}
+a{color:#58a6ff;text-decoration:none}
+
+/* ヘッダー */
+.header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:16px 28px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #30363d;box-shadow:0 2px 16px rgba(0,0,0,0.4)}
+.header h1{font-size:20px;font-weight:700;color:#f0f6fc;letter-spacing:.5px}
+.header h1 span{color:#58a6ff}
+.header .meta{font-size:11px;color:#8b949e;text-align:right}
+.header-controls{display:flex;align-items:center;gap:14px}
+select.market-select{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:6px 10px;border-radius:6px;font-size:13px;outline:none}
+select.market-select:focus{border-color:#58a6ff}
+.r2-badge{background:rgba(88,166,255,.12);border:1px solid #30363d;border-radius:6px;padding:5px 12px;font-size:12px;color:#58a6ff;font-weight:600}
+
+/* マップコンテナ */
+.maps-row{display:grid;grid-template-columns:1fr 1fr;gap:0;height:52vh;min-height:380px;border-bottom:1px solid #30363d}
+.map-panel{position:relative;overflow:hidden;border-right:1px solid #30363d}
+.map-panel:last-child{border-right:none}
+.map-label{position:absolute;top:10px;left:14px;font-size:13px;font-weight:600;color:#f0f6fc;z-index:5;background:rgba(15,17,23,.7);padding:4px 10px;border-radius:4px;border:1px solid #30363d}
+.map-label small{color:#8b949e;font-weight:400;margin-left:6px;font-size:11px}
+svg.map{width:100%;height:100%}
+
+/* ツールチップ */
+.tooltip{position:absolute;pointer-events:none;background:rgba(22,27,34,.95);border:1px solid #30363d;border-radius:6px;padding:10px 14px;font-size:12px;color:#c9d1d9;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:100;max-width:240px;line-height:1.5}
+.tooltip .tt-title{font-weight:700;color:#f0f6fc;font-size:13px;margin-bottom:4px}
+.tooltip .tt-row{display:flex;justify-content:space-between;gap:12px}
+.tooltip .tt-val{font-weight:600}
+.tt-risk-hi{color:#ff1744}
+.tt-risk-mid{color:#ff9100}
+.tt-risk-lo{color:#00e676}
+
+/* 下部パネル */
+.bottom-row{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:0;flex:1}
+.panel{background:#161b22;border-right:1px solid #30363d;padding:16px 18px;overflow-y:auto;max-height:38vh}
+.panel:last-child{border-right:none}
+.panel-title{font-size:14px;font-weight:600;color:#f0f6fc;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #21262d}
+
+/* ランキングバー */
+.rank-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;padding:4px 6px;border-radius:4px;transition:background .15s}
+.rank-item:hover{background:rgba(88,166,255,.08)}
+.rank-item.selected{background:rgba(88,166,255,.12);border-left:2px solid #58a6ff}
+.rank-num{font-size:11px;color:#8b949e;width:18px;text-align:right;flex-shrink:0}
+.rank-name{font-size:12px;color:#c9d1d9;width:56px;flex-shrink:0}
+.rank-bar-bg{flex:1;height:16px;background:#21262d;border-radius:3px;overflow:hidden;position:relative}
+.rank-bar{height:100%;border-radius:3px;transition:width .4s ease}
+.rank-val{font-size:11px;font-weight:600;width:40px;text-align:right;flex-shrink:0}
+
+/* 市場詳細パネル */
+.detail-empty{color:#8b949e;font-size:13px;text-align:center;padding:40px 0}
+.detail-header{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.detail-header h3{font-size:18px;color:#f0f6fc}
+.detail-risk-score{font-size:28px;font-weight:700;margin-bottom:4px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.detail-stat{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px 12px}
+.detail-stat-label{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px}
+.detail-stat-value{font-size:16px;font-weight:600;color:#f0f6fc;margin-top:2px}
+.risk-factors{margin-top:10px}
+.risk-factors h4{font-size:12px;color:#8b949e;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.factor-tag{display:inline-block;padding:3px 8px;border-radius:10px;font-size:11px;margin:2px 4px 2px 0;background:rgba(255,145,0,.12);color:#ff9100;border:1px solid rgba(255,145,0,.2)}
+
+/* 都道府県ランキング */
+.pref-item{display:flex;align-items:center;gap:8px;margin-bottom:5px;padding:3px 6px;border-radius:4px}
+.pref-item:hover{background:rgba(88,166,255,.06)}
+.pref-rank{font-size:11px;color:#8b949e;width:18px;text-align:right;flex-shrink:0}
+.pref-name{font-size:12px;color:#c9d1d9;width:48px;flex-shrink:0}
+.pref-bar-bg{flex:1;height:14px;background:#21262d;border-radius:3px;overflow:hidden}
+.pref-bar{height:100%;border-radius:3px}
+.pref-val{font-size:11px;color:#8b949e;width:52px;text-align:right;flex-shrink:0}
+
+/* レジェンド */
+.legend{position:absolute;bottom:10px;right:14px;background:rgba(15,17,23,.8);border:1px solid #30363d;border-radius:6px;padding:8px 12px;z-index:5}
+.legend-title{font-size:10px;color:#8b949e;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.legend-bar{width:120px;height:10px;border-radius:3px;margin-bottom:2px}
+.legend-labels{display:flex;justify-content:space-between;font-size:9px;color:#8b949e}
+
+/* バッジ */
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
+.badge-critical{background:rgba(255,23,68,.2);color:#ff1744}
+.badge-high{background:rgba(255,145,0,.2);color:#ff9100}
+.badge-medium{background:rgba(255,234,0,.15);color:#ffd600}
+.badge-low{background:rgba(0,230,118,.15);color:#00e676}
+
+/* 都市ラベル */
+.city-label{font-size:9px;fill:#8b949e;pointer-events:none;text-anchor:middle}
+.city-dot{fill:#58a6ff;stroke:#0f1117;stroke-width:1}
+
+@media(max-width:900px){
+  .maps-row{grid-template-columns:1fr;height:auto}
+  .map-panel{height:40vh}
+  .bottom-row{grid-template-columns:1fr}
+  .panel{max-height:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div class="header">
+  <div>
+    <h1><span>SCRI</span> Inbound Risk Dashboard</h1>
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">インバウンド観光リスク分析 &middot; 12市場 &middot; 14都道府県</div>
+  </div>
+  <div class="header-controls">
+    <select class="market-select" id="marketFilter" onchange="filterByMarket(this.value)">
+      <option value="ALL">全市場</option>
+      <option value="CN">中国 (CN)</option>
+      <option value="KR">韓国 (KR)</option>
+      <option value="TW">台湾 (TW)</option>
+      <option value="US">米国 (US)</option>
+      <option value="AU">豪州 (AU)</option>
+      <option value="TH">タイ (TH)</option>
+    </select>
+    <div class="r2-badge">重力モデル R² = 0.87</div>
+    <div class="meta">v1.4.0 &middot; 2026-04-02 UTC</div>
+  </div>
+</div>
+
+<!-- 2パネル地図 -->
+<div class="maps-row">
+  <!-- 世界地図パネル -->
+  <div class="map-panel" id="worldPanel">
+    <div class="map-label">World: Source Market Risk<small>Natural Earth</small></div>
+    <svg class="map" id="worldMap"></svg>
+    <div class="legend">
+      <div class="legend-title">Inbound Risk</div>
+      <div class="legend-bar" style="background:linear-gradient(90deg,#00e676,#ffd600,#ff9100,#ff1744)"></div>
+      <div class="legend-labels"><span>Low 0</span><span>50</span><span>High 100</span></div>
+    </div>
+  </div>
+  <!-- 日本地図パネル -->
+  <div class="map-panel" id="japanPanel">
+    <div class="map-label">Japan: 都道府県別インバウンド予測<small>Mercator</small></div>
+    <svg class="map" id="japanMap"></svg>
+    <div class="legend">
+      <div class="legend-title">来訪者数（万人）</div>
+      <div class="legend-bar" style="background:linear-gradient(90deg,#1b5e20,#66bb6a,#fdd835,#ff9100,#d50000)"></div>
+      <div class="legend-labels"><span>少</span><span>多</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- 下部3パネル -->
+<div class="bottom-row">
+  <div class="panel" id="panelRanking">
+    <div class="panel-title">Source Market Ranking（リスク順）</div>
+    <div id="rankingList"></div>
+  </div>
+  <div class="panel" id="panelDetail">
+    <div class="panel-title">Market Detail</div>
+    <div id="detailContent"><div class="detail-empty">地図またはランキングから市場を選択</div></div>
+  </div>
+  <div class="panel" id="panelPref">
+    <div class="panel-title">都道府県ランキング（来訪者数順）</div>
+    <div id="prefList"></div>
+  </div>
+</div>
+
+<!-- ツールチップ -->
+<div class="tooltip" id="tooltip" style="display:none"></div>
+
+<script>
+// ===================== データ定義 =====================
+
+const INBOUND_RISK = {
+  CN: { name:'中国',      nameEn:'China',        risk:72, forecast:-18, factors:['円高','日中関係悪化','景気減速'], pop:1412, distance:2100, gdpPc:12556, visaFree:false },
+  KR: { name:'韓国',      nameEn:'South Korea',  risk:28, forecast:+8,  factors:['円安メリット','K-コンテンツ相互交流'], pop:52, distance:1150, gdpPc:32255, visaFree:true },
+  TW: { name:'台湾',      nameEn:'Taiwan',        risk:32, forecast:+5,  factors:['最大の日本ファン層','台湾海峡リスク'], pop:24, distance:2100, gdpPc:32756, visaFree:true },
+  US: { name:'米国',      nameEn:'United States', risk:18, forecast:+12, factors:['円安','日本文化ブーム','直行便増'], pop:335, distance:10800, gdpPc:76330, visaFree:true },
+  AU: { name:'豪州',      nameEn:'Australia',     risk:22, forecast:+9,  factors:['スキー需要','直行便増便'], pop:26, distance:7800, gdpPc:65100, visaFree:true },
+  TH: { name:'タイ',      nameEn:'Thailand',      risk:42, forecast:-3,  factors:['政情不安','バーツ安','ビザ要件'], pop:72, distance:4600, gdpPc:7066, visaFree:false },
+  SG: { name:'シンガポール', nameEn:'Singapore',  risk:15, forecast:+6,  factors:['高所得','リピーター多'], pop:6, distance:5300, gdpPc:65233, visaFree:true },
+  HK: { name:'香港',      nameEn:'Hong Kong',     risk:38, forecast:+2,  factors:['国安法影響','経済減速'], pop:7, distance:2900, gdpPc:49800, visaFree:true },
+  DE: { name:'ドイツ',    nameEn:'Germany',       risk:25, forecast:+4,  factors:['欧州景気停滞'], pop:84, distance:9300, gdpPc:48718, visaFree:true },
+  FR: { name:'フランス',  nameEn:'France',        risk:24, forecast:+5,  factors:['日仏文化交流'], pop:68, distance:9700, gdpPc:42330, visaFree:true },
+  GB: { name:'英国',      nameEn:'United Kingdom', risk:22, forecast:+7, factors:['ポンド安回復','直行便'], pop:67, distance:9500, gdpPc:46125, visaFree:true },
+  IN: { name:'インド',    nameEn:'India',         risk:35, forecast:+15, factors:['ビザ制約','中間層拡大','IT人材交流'], pop:1428, distance:5800, gdpPc:2485, visaFree:false }
+};
+
+// ISO3コードマッピング（世界地図用）
+const ISO2_TO_ISO3 = {CN:'CHN',KR:'KOR',TW:'TWN',US:'USA',AU:'AUS',TH:'THA',SG:'SGP',HK:'HKG',DE:'DEU',FR:'FRA',GB:'GBR',IN:'IND'};
+const ISO3_TO_ISO2 = {};
+Object.entries(ISO2_TO_ISO3).forEach(([k,v])=> ISO3_TO_ISO2[v]=k);
+
+// 都道府県データ（id = TopoJSON上のproperty）
+const PREF_DATA = [
+  { name:'東京',   id:13, visitors:1800, growth:+6  },
+  { name:'大阪',   id:27, visitors:1000, growth:+9  },
+  { name:'京都',   id:26, visitors:500,  growth:+4  },
+  { name:'北海道', id:1,  visitors:390,  growth:+11 },
+  { name:'福岡',   id:40, visitors:335,  growth:+8  },
+  { name:'沖縄',   id:47, visitors:280,  growth:+13 },
+  { name:'愛知',   id:23, visitors:220,  growth:+5  },
+  { name:'神奈川', id:14, visitors:170,  growth:+3  },
+  { name:'奈良',   id:29, visitors:140,  growth:+7  },
+  { name:'長崎',   id:42, visitors:100,  growth:+10 },
+  { name:'広島',   id:34, visitors:85,   growth:+6  },
+  { name:'長野',   id:20, visitors:67,   growth:+14 },
+  { name:'静岡',   id:22, visitors:56,   growth:+5  },
+  { name:'新潟',   id:15, visitors:45,   growth:+8  },
+];
+const prefById = {};
+PREF_DATA.forEach(p => prefById[p.id] = p);
+
+// 主要都市座標（ラベル表示用）
+const CITIES = [
+  { name:'東京', lat:35.68, lon:139.76 },
+  { name:'大阪', lat:34.69, lon:135.50 },
+  { name:'京都', lat:35.01, lon:135.77 },
+  { name:'札幌', lat:43.06, lon:141.35 },
+  { name:'福岡', lat:33.59, lon:130.40 },
+  { name:'那覇', lat:26.33, lon:127.68 },
+  { name:'名古屋', lat:35.18, lon:136.91 },
+  { name:'広島', lat:34.40, lon:132.46 },
+];
+
+const tooltip = d3.select('#tooltip');
+let selectedMarket = null;
+
+// ===================== リスクカラースケール =====================
+function riskColor(r) {
+  if (r >= 60) return '#ff1744';
+  if (r >= 40) return '#ff9100';
+  if (r >= 25) return '#ffd600';
+  return '#00e676';
+}
+function riskBadgeClass(r) {
+  if (r >= 60) return 'badge-critical';
+  if (r >= 40) return 'badge-high';
+  if (r >= 25) return 'badge-medium';
+  return 'badge-low';
+}
+function riskLabel(r) {
+  if (r >= 60) return 'CRITICAL';
+  if (r >= 40) return 'HIGH';
+  if (r >= 25) return 'MEDIUM';
+  return 'LOW';
+}
+
+// 来訪者数カラースケール（少=緑、多=赤）
+const prefColorScale = d3.scaleSequential()
+  .domain([0, 1800])
+  .interpolator(d3.interpolateRgbBasis(['#1b5e20','#66bb6a','#fdd835','#ff9100','#d50000']));
+
+// ===================== 世界地図 =====================
+function drawWorldMap() {
+  const container = document.getElementById('worldPanel');
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  const svg = d3.select('#worldMap').attr('viewBox', `0 0 ${width} ${height}`);
+  svg.selectAll('*').remove();
+
+  const projection = d3.geoNaturalEarth1()
+    .scale(width / 5.8)
+    .translate([width / 2, height / 2]);
+  const path = d3.geoPath().projection(projection);
+
+  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world => {
+    const countries = topojson.feature(world, world.objects.countries);
+
+    svg.append('g').selectAll('path')
+      .data(countries.features)
+      .join('path')
+      .attr('d', path)
+      .attr('fill', d => {
+        const iso3 = isoFromNumeric(d.id);
+        const iso2 = ISO3_TO_ISO2[iso3];
+        if (iso2 && INBOUND_RISK[iso2]) {
+          return riskColor(INBOUND_RISK[iso2].risk);
+        }
+        return '#21262d';
+      })
+      .attr('stroke', '#30363d')
+      .attr('stroke-width', 0.5)
+      .style('cursor', d => {
+        const iso3 = isoFromNumeric(d.id);
+        const iso2 = ISO3_TO_ISO2[iso3];
+        return (iso2 && INBOUND_RISK[iso2]) ? 'pointer' : 'default';
+      })
+      .on('mouseover', function(event, d) {
+        const iso3 = isoFromNumeric(d.id);
+        const iso2 = ISO3_TO_ISO2[iso3];
+        if (!iso2 || !INBOUND_RISK[iso2]) return;
+        const m = INBOUND_RISK[iso2];
+        d3.select(this).attr('stroke', '#58a6ff').attr('stroke-width', 1.5);
+        const sign = m.forecast >= 0 ? '+' : '';
+        const rClass = m.risk >= 40 ? 'tt-risk-hi' : m.risk >= 25 ? 'tt-risk-mid' : 'tt-risk-lo';
+        tooltip.html(`
+          <div class="tt-title">${m.name} (${iso2})</div>
+          <div class="tt-row"><span>Risk Score</span><span class="tt-val ${rClass}">${m.risk}</span></div>
+          <div class="tt-row"><span>Forecast</span><span class="tt-val">${sign}${m.forecast}%</span></div>
+        `).style('display','block');
+      })
+      .on('mousemove', function(event) {
+        tooltip.style('left', (event.pageX+12)+'px').style('top', (event.pageY-10)+'px');
+      })
+      .on('mouseout', function() {
+        d3.select(this).attr('stroke','#30363d').attr('stroke-width',0.5);
+        tooltip.style('display','none');
+      })
+      .on('click', function(event, d) {
+        const iso3 = isoFromNumeric(d.id);
+        const iso2 = ISO3_TO_ISO2[iso3];
+        if (iso2 && INBOUND_RISK[iso2]) selectMarket(iso2);
+      });
+
+    // 日本を強調
+    svg.append('g').selectAll('circle')
+      .data(countries.features.filter(d => isoFromNumeric(d.id) === 'JPN'))
+      .join('circle')
+      .attr('cx', d => path.centroid(d)[0])
+      .attr('cy', d => path.centroid(d)[1])
+      .attr('r', 4)
+      .attr('fill', '#58a6ff')
+      .attr('stroke', '#f0f6fc')
+      .attr('stroke-width', 1.5)
+      .style('pointer-events', 'none');
+  });
+}
+
+// ISO数値→ISO3変換（世界地図用の簡易テーブル）
+function isoFromNumeric(num) {
+  const map = {
+    156:'CHN',410:'KOR',158:'TWN',840:'USA',36:'AUS',764:'THA',
+    702:'SGP',344:'HKG',276:'DEU',250:'FRA',826:'GBR',356:'IND',392:'JPN',
+    // 追加（主要国）
+    76:'BRA',124:'CAN',484:'MEX',643:'RUS',682:'SAU',710:'ZAF',
+    380:'ITA',724:'ESP',616:'POL',792:'TUR',818:'EGY',566:'NGA',
+    404:'KEN',360:'IDN',458:'MYS',608:'PHL',704:'VNM',764:'THA'
+  };
+  return map[+num] || '';
+}
+
+// ===================== 日本地図 =====================
+function drawJapanMap() {
+  const container = document.getElementById('japanPanel');
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  const svg = d3.select('#japanMap').attr('viewBox', `0 0 ${width} ${height}`);
+  svg.selectAll('*').remove();
+
+  const projection = d3.geoMercator()
+    .center([136.5, 35.5])
+    .scale(width * 2.8)
+    .translate([width / 2, height / 2]);
+  const path = d3.geoPath().projection(projection);
+
+  d3.json('https://raw.githubusercontent.com/dataofjapan/land/master/japan.topojson').then(japan => {
+    const prefectures = topojson.feature(japan, japan.objects.japan);
+
+    svg.append('g').selectAll('path')
+      .data(prefectures.features)
+      .join('path')
+      .attr('d', path)
+      .attr('fill', d => {
+        const pid = d.properties.id;
+        const p = prefById[pid];
+        return p ? prefColorScale(p.visitors) : '#1a1f2e';
+      })
+      .attr('stroke', '#30363d')
+      .attr('stroke-width', 0.5)
+      .on('mouseover', function(event, d) {
+        const pid = d.properties.id;
+        const p = prefById[pid];
+        d3.select(this).attr('stroke', '#58a6ff').attr('stroke-width', 1.5);
+        if (p) {
+          tooltip.html(`
+            <div class="tt-title">${p.name}</div>
+            <div class="tt-row"><span>予測来訪者数</span><span class="tt-val">${p.visitors}万人</span></div>
+            <div class="tt-row"><span>前年比</span><span class="tt-val tt-risk-lo">+${p.growth}%</span></div>
+          `).style('display','block');
+        } else {
+          const pname = d.properties.nam_ja || d.properties.name || `ID:${pid}`;
+          tooltip.html(`<div class="tt-title">${pname}</div><div style="color:#8b949e">データなし</div>`).style('display','block');
+        }
+      })
+      .on('mousemove', function(event) {
+        tooltip.style('left', (event.pageX+12)+'px').style('top', (event.pageY-10)+'px');
+      })
+      .on('mouseout', function() {
+        d3.select(this).attr('stroke','#30363d').attr('stroke-width',0.5);
+        tooltip.style('display','none');
+      });
+
+    // 都市ラベル
+    const g = svg.append('g');
+    CITIES.forEach(c => {
+      const [x, y] = projection([c.lon, c.lat]);
+      g.append('circle').attr('cx', x).attr('cy', y).attr('r', 2.5).attr('class', 'city-dot');
+      g.append('text').attr('x', x).attr('y', y - 6).attr('class', 'city-label').text(c.name);
+    });
+  });
+}
+
+// ===================== ランキングパネル =====================
+function renderRanking(filterIso2) {
+  const list = document.getElementById('rankingList');
+  let entries = Object.entries(INBOUND_RISK).map(([k,v]) => ({iso2:k, ...v}));
+  if (filterIso2 && filterIso2 !== 'ALL') {
+    entries = entries.filter(e => e.iso2 === filterIso2);
+  }
+  entries.sort((a,b) => b.risk - a.risk);
+  const maxRisk = 100;
+
+  list.innerHTML = entries.map((e, i) => {
+    const sel = selectedMarket === e.iso2 ? ' selected' : '';
+    return `
+    <div class="rank-item${sel}" onclick="selectMarket('${e.iso2}')">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-name">${e.name}</div>
+      <div class="rank-bar-bg">
+        <div class="rank-bar" style="width:${e.risk}%;background:${riskColor(e.risk)}"></div>
+      </div>
+      <div class="rank-val" style="color:${riskColor(e.risk)}">${e.risk}</div>
+    </div>`;
+  }).join('');
+}
+
+// ===================== 市場詳細パネル =====================
+function selectMarket(iso2) {
+  selectedMarket = iso2;
+  renderRanking(document.getElementById('marketFilter').value);
+  const m = INBOUND_RISK[iso2];
+  if (!m) return;
+  const sign = m.forecast >= 0 ? '+' : '';
+  const rClass = riskBadgeClass(m.risk);
+
+  document.getElementById('detailContent').innerHTML = `
+    <div class="detail-header">
+      <h3>${m.name} (${iso2})</h3>
+      <span class="badge ${rClass}">${riskLabel(m.risk)}</span>
+    </div>
+    <div class="detail-risk-score" style="color:${riskColor(m.risk)}">${m.risk}<span style="font-size:14px;color:#8b949e"> / 100</span></div>
+    <div class="detail-grid">
+      <div class="detail-stat">
+        <div class="detail-stat-label">Forecast Change</div>
+        <div class="detail-stat-value" style="color:${m.forecast>=0?'#00e676':'#ff1744'}">${sign}${m.forecast}%</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Population</div>
+        <div class="detail-stat-value">${m.pop}M</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Distance to Tokyo</div>
+        <div class="detail-stat-value">${m.distance.toLocaleString()} km</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">GDP per Capita</div>
+        <div class="detail-stat-value">$${m.gdpPc.toLocaleString()}</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Visa-Free</div>
+        <div class="detail-stat-value">${m.visaFree ? '✓ Yes' : '✗ No'}</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Gravity Score</div>
+        <div class="detail-stat-value">${((m.pop * m.gdpPc) / (m.distance * m.distance) * 1000).toFixed(1)}</div>
+      </div>
+    </div>
+    <div class="risk-factors">
+      <h4>主要リスク要因</h4>
+      ${m.factors.map(f => `<span class="factor-tag">${f}</span>`).join('')}
+    </div>
+  `;
+}
+
+// ===================== 都道府県ランキング =====================
+function renderPrefRanking() {
+  const list = document.getElementById('prefList');
+  const sorted = [...PREF_DATA].sort((a,b) => b.visitors - a.visitors);
+  const maxV = sorted[0].visitors;
+
+  list.innerHTML = sorted.map((p, i) => `
+    <div class="pref-item">
+      <div class="pref-rank">${i+1}</div>
+      <div class="pref-name">${p.name}</div>
+      <div class="pref-bar-bg">
+        <div class="pref-bar" style="width:${(p.visitors/maxV*100).toFixed(1)}%;background:${prefColorScale(p.visitors)}"></div>
+      </div>
+      <div class="pref-val">${p.visitors}万 <span style="color:${p.growth>=0?'#00e676':'#ff1744'}">+${p.growth}%</span></div>
+    </div>
+  `).join('');
+}
+
+// ===================== マーケットフィルタ =====================
+function filterByMarket(val) {
+  renderRanking(val);
+}
+
+// ===================== APIデータ取得 =====================
+async function loadTourismData() {
+  try {
+    const resp = await fetch('/api/v1/tourism/market-ranking');
+    if (resp.ok) {
+      const data = await resp.json();
+      console.log('Tourism API data loaded:', data);
+      // 動的データで更新可能
+    }
+  } catch(e) {
+    console.log('Tourism API unavailable, using static data');
+  }
+}
+
+// ===================== リサイズ対応 =====================
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    drawWorldMap();
+    drawJapanMap();
+  }, 250);
+});
+
+// ===================== 初期化 =====================
+drawWorldMap();
+drawJapanMap();
+renderRanking('ALL');
+renderPrefRanking();
+loadTourismData();
+</script>
+</body>
+</html>

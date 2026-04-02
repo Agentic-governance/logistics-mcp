@@ -1,0 +1,43 @@
+# 仮想環境
+.venv311/
+venv/
+.venv/
+env/
+
+# 認証情報・設定
+.env
+.env.*
+!.env.example
+claude_desktop_config.json
+
+# データベース・キャッシュ
+data/*.db
+data/*.pkl
+data/*.json
+data/baci/
+data/comtrade_cache/
+data/backups/
+logs/
+errors/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.DS_Store
+.vscode/
+.idea/
+
+# テスト・カバレッジ
+.coverage
+coverage.json
+htmlcov/
+.pytest_cache/
+
+# レポート（大きいもの）
+reports/*.txt

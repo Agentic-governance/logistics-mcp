@@ -1,0 +1,12 @@
+拠点コード,拠点名,国,緯度,経度,拠点種別,面積(m2),機能
+PLT-JP01,愛知工場,JP,34.97,137.17,factory,45000,"組立,塗装"
+PLT-CN01,蘇州工場,CN,31.3,120.59,factory,60000,"組立,加工"
+PLT-TH01,ラヨーン工場,TH,12.68,101.28,factory,35000,組立
+WH-JP01,名古屋DC,JP,35.18,136.91,warehouse,15000,"保管,仕分"
+WH-JP02,横浜DC,JP,35.44,139.64,warehouse,12000,"保管,輸出"
+WH-CN01,上海DC,CN,31.23,121.47,warehouse,20000,"保管,通関"
+WH-TH01,バンコクDC,TH,13.76,100.5,warehouse,10000,保管
+WH-SG01,シンガポールDC,SG,1.35,103.82,warehouse,8000,"ハブ,保管"
+PORT-TOKYO,東京港,JP,35.63,139.77,port,,海上輸送
+PORT-SHANGHAI,上海港,CN,31.37,121.61,port,,海上輸送
+PORT-LAEMCHABANG,レムチャバン港,TH,13.08,100.88,port,,海上輸送

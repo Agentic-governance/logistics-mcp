@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCRI Logistics Risk Dashboard v1.4.0</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<style>
+/* ===== グローバルスタイル ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0f1117;
+  color: #c9d1d9;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ===== ヘッダー ===== */
+.header {
+  background: linear-gradient(135deg, #0f1117 0%, #161b22 100%);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #30363d;
+  height: 48px;
+  z-index: 100;
+  position: relative;
+}
+.header h1 { font-size: 16px; font-weight: 700; color: #f0f6fc; }
+.header h1 span { color: #58a6ff; }
+.header .meta { font-size: 11px; color: #8b949e; text-align: right; }
+
+/* ===== メインレイアウト ===== */
+.main-container {
+  display: flex;
+  height: calc(100vh - 48px);
+  position: relative;
+}
+
+/* ===== 左サイドバー ===== */
+.sidebar {
+  width: 300px;
+  min-width: 300px;
+  background: #161b22;
+  border-right: 1px solid #30363d;
+  overflow-y: auto;
+  padding: 16px;
+  z-index: 50;
+}
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+/* KPIカード */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.kpi-card {
+  background: #0f1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.kpi-card.full-width { grid-column: 1 / -1; }
+.kpi-value { font-size: 28px; font-weight: 700; }
+.kpi-label { font-size: 10px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+.kpi-critical .kpi-value { color: #ff1744; }
+.kpi-high .kpi-value { color: #ff9100; }
+.kpi-monitor .kpi-value { color: #58a6ff; }
+
+/* セクション */
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 16px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #21262d;
+}
+
+/* 輸送モードトグル */
+.mode-toggles {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.mode-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0f1117;
+  color: #8b949e;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+.mode-btn:hover { border-color: #58a6ff; color: #c9d1d9; }
+.mode-btn.active { background: rgba(88,166,255,0.15); border-color: #58a6ff; color: #58a6ff; }
+
+/* 次元セレクト */
+.dimension-select {
+  width: 100%;
+  background: #0f1117;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.dimension-select:focus { border-color: #58a6ff; outline: none; }
+
+/* チョークポイントリスト */
+.chokepoint-list { list-style: none; }
+.chokepoint-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+.chokepoint-item:hover { background: rgba(88,166,255,0.08); }
+.chokepoint-marker {
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid #ff9100;
+  flex-shrink: 0;
+}
+.chokepoint-name { flex: 1; color: #c9d1d9; }
+.chokepoint-risk { font-weight: 600; font-size: 11px; }
+.risk-high { color: #ff1744; }
+.risk-medium { color: #ff9100; }
+.risk-low { color: #00e676; }
+
+/* ===== 地図エリア ===== */
+.map-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #0f1117;
+}
+svg.world-map { width: 100%; height: 100%; }
+
+/* ===== ツールチップ ===== */
+.tooltip {
+  position: absolute;
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 200;
+  max-width: 280px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  display: none;
+}
+.tooltip-title { font-size: 14px; font-weight: 700; color: #f0f6fc; margin-bottom: 4px; }
+.tooltip-score { font-size: 20px; font-weight: 700; }
+.tooltip-dims { margin-top: 6px; font-size: 11px; color: #8b949e; }
+.tooltip-dim-row { display: flex; justify-content: space-between; padding: 2px 0; }
+.tooltip-dim-bar { height: 3px; background: #21262d; border-radius: 2px; margin-top: 2px; }
+.tooltip-dim-fill { height: 100%; border-radius: 2px; }
+
+/* ===== 詳細パネル（右下） ===== */
+.detail-panel {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 360px;
+  max-height: 400px;
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 16px;
+  z-index: 80;
+  display: none;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow-y: auto;
+}
+.detail-panel::-webkit-scrollbar { width: 4px; }
+.detail-panel::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.detail-country { font-size: 18px; font-weight: 700; color: #f0f6fc; }
+.detail-close {
+  background: none; border: none; color: #8b949e; font-size: 18px;
+  cursor: pointer; padding: 4px;
+}
+.detail-close:hover { color: #f0f6fc; }
+.detail-overall {
+  text-align: center;
+  padding: 12px;
+  background: #0f1117;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.detail-overall-score { font-size: 36px; font-weight: 700; }
+.detail-overall-label { font-size: 11px; color: #8b949e; text-transform: uppercase; }
+.dim-bar-container { margin-bottom: 6px; }
+.dim-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+.dim-bar-name { color: #c9d1d9; }
+.dim-bar-value { font-weight: 600; }
+.dim-bar-track {
+  height: 6px;
+  background: #21262d;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dim-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* ===== 凡例（左下） ===== */
+.legend {
+  position: absolute;
+  bottom: 20px;
+  left: 320px;
+  background: rgba(22, 27, 34, 0.9);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 14px;
+  z-index: 60;
+  font-size: 11px;
+}
+.legend-title { font-weight: 600; color: #f0f6fc; margin-bottom: 6px; }
+.legend-gradient {
+  width: 180px;
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #00e676, #ffd600, #ff9100, #ff1744);
+  margin-bottom: 4px;
+}
+.legend-labels { display: flex; justify-content: space-between; color: #8b949e; font-size: 10px; }
+.legend-items { margin-top: 8px; }
+.legend-item { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.legend-swatch {
+  width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;
+}
+.legend-line {
+  width: 20px; height: 2px; border-radius: 1px; flex-shrink: 0;
+}
+.legend-triangle {
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid #ff9100;
+  flex-shrink: 0;
+}
+
+/* ===== 脈動アニメーション ===== */
+@keyframes pulse {
+  0% { r: 4; opacity: 0.8; }
+  50% { r: 10; opacity: 0.2; }
+  100% { r: 4; opacity: 0.8; }
+}
+.chokepoint-pulse {
+  animation: pulse 2s ease-in-out infinite;
+  fill: #ff9100;
+  opacity: 0.4;
+}
+
+/* ===== ルートアニメーション ===== */
+@keyframes dash {
+  to { stroke-dashoffset: -20; }
+}
+.route-animated {
+  stroke-dasharray: 8, 12;
+  animation: dash 1.5s linear infinite;
+}
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div class="header">
+  <h1><span>SCRI</span> Logistics Risk Map</h1>
+  <div class="meta">
+    v1.4.0 &middot; 40 countries &middot; 22 dimensions<br>
+    <span id="update-time">Updated: --</span>
+  </div>
+</div>
+
+<div class="main-container">
+  <!-- 左サイドバー -->
+  <div class="sidebar">
+    <!-- KPIカード -->
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-critical">
+        <div class="kpi-value" id="kpi-critical">--</div>
+        <div class="kpi-label">Critical</div>
+      </div>
+      <div class="kpi-card kpi-high">
+        <div class="kpi-value" id="kpi-high">--</div>
+        <div class="kpi-label">High</div>
+      </div>
+      <div class="kpi-card kpi-monitor full-width">
+        <div class="kpi-value" id="kpi-monitor">--</div>
+        <div class="kpi-label">Countries Monitored</div>
+      </div>
+    </div>
+
+    <!-- 次元セレクト -->
+    <div class="section-title">Dimension View</div>
+    <select class="dimension-select" id="dimension-select">
+      <option value="overall">Overall Risk</option>
+      <option value="conflict">Conflict</option>
+      <option value="sanctions">Sanctions</option>
+      <option value="maritime">Maritime</option>
+      <option value="disaster">Disaster</option>
+      <option value="political">Political</option>
+      <option value="trade">Trade</option>
+      <option value="economic">Economic</option>
+      <option value="cyber_risk">Cyber Risk</option>
+      <option value="climate_risk">Climate Risk</option>
+    </select>
+
+    <!-- 輸送モードトグル -->
+    <div class="section-title">Transport Mode</div>
+    <div class="mode-toggles">
+      <button class="mode-btn active" data-mode="all" onclick="toggleMode('all', this)">All</button>
+      <button class="mode-btn" data-mode="sea" onclick="toggleMode('sea', this)">Sea</button>
+      <button class="mode-btn" data-mode="air" onclick="toggleMode('air', this)">Air</button>
+    </div>
+
+    <!-- チョークポイントリスト -->
+    <div class="section-title">Chokepoints</div>
+    <ul class="chokepoint-list" id="chokepoint-list"></ul>
+
+    <!-- 国リスト上位 -->
+    <div class="section-title">Highest Risk Countries</div>
+    <div id="risk-country-list"></div>
+  </div>
+
+  <!-- 地図エリア -->
+  <div class="map-container" id="map-container">
+    <svg class="world-map" id="world-map"></svg>
+
+    <!-- ツールチップ -->
+    <div class="tooltip" id="tooltip"></div>
+
+    <!-- 詳細パネル -->
+    <div class="detail-panel" id="detail-panel">
+      <div class="detail-header">
+        <span class="detail-country" id="detail-country"></span>
+        <button class="detail-close" onclick="closeDetail()">&times;</button>
+      </div>
+      <div class="detail-overall">
+        <div class="detail-overall-score" id="detail-score"></div>
+        <div class="detail-overall-label" id="detail-level"></div>
+      </div>
+      <div id="detail-bars"></div>
+    </div>
+
+    <!-- 凡例 -->
+    <div class="legend">
+      <div class="legend-title">Risk Level</div>
+      <div class="legend-gradient"></div>
+      <div class="legend-labels">
+        <span>0 Minimal</span>
+        <span>50 Medium</span>
+        <span>100 Critical</span>
+      </div>
+      <div class="legend-items">
+        <div class="legend-item">
+          <div class="legend-line" style="background:#4fc3f7;"></div>
+          <span>Sea Route</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-line" style="background:#ce93d8; border-style:dashed;"></div>
+          <span>Air Route</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-triangle"></div>
+          <span>Chokepoint</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// データ定義
+// ============================================================
+
+// ISO3→ISO2 マッピング
+const iso3ToIso2 = {
+  AFG:"AF",AGO:"AO",ALB:"AL",ARE:"AE",ARG:"AR",AUS:"AU",AUT:"AT",AZE:"AZ",
+  BDI:"BI",BEL:"BE",BEN:"BJ",BFA:"BF",BGD:"BD",BGR:"BG",BHR:"BH",BIH:"BA",
+  BLR:"BY",BLZ:"BZ",BOL:"BO",BRA:"BR",BRN:"BN",BTN:"BT",BWA:"BW",CAF:"CF",
+  CAN:"CA",CHE:"CH",CHL:"CL",CHN:"CN",CIV:"CI",CMR:"CM",COD:"CD",COG:"CG",
+  COL:"CO",CRI:"CR",CUB:"CU",CYP:"CY",CZE:"CZ",DEU:"DE",DJI:"DJ",DNK:"DK",
+  DOM:"DO",DZA:"DZ",ECU:"EC",EGY:"EG",ERI:"ER",ESP:"ES",EST:"EE",ETH:"ET",
+  FIN:"FI",FRA:"FR",GAB:"GA",GBR:"GB",GEO:"GE",GHA:"GH",GIN:"GN",GMB:"GM",
+  GNB:"GW",GNQ:"GQ",GRC:"GR",GTM:"GT",GUY:"GY",HND:"HN",HRV:"HR",HTI:"HT",
+  HUN:"HU",IDN:"ID",IND:"IN",IRL:"IE",IRN:"IR",IRQ:"IQ",ISL:"IS",ISR:"IL",
+  ITA:"IT",JAM:"JA",JOR:"JO",JPN:"JP",KAZ:"KZ",KEN:"KE",KGZ:"KG",KHM:"KH",
+  KOR:"KR",KWT:"KW",LAO:"LA",LBN:"LB",LBR:"LR",LBY:"LY",LKA:"LK",LSO:"LS",
+  LTU:"LT",LVA:"LV",MAR:"MA",MDA:"MD",MDG:"MG",MEX:"MX",MKD:"MK",MLI:"ML",
+  MMR:"MM",MNG:"MN",MOZ:"MZ",MRT:"MR",MWI:"MW",MYS:"MY",NAM:"NA",NER:"NE",
+  NGA:"NG",NIC:"NI",NLD:"NL",NOR:"NO",NPL:"NP",NZL:"NZ",OMN:"OM",PAK:"PK",
+  PAN:"PA",PER:"PE",PHL:"PH",PNG:"PG",POL:"PL",PRK:"KP",PRT:"PT",PRY:"PY",
+  QAT:"QA",ROU:"RO",RUS:"RU",RWA:"RW",SAU:"SA",SDN:"SD",SEN:"SN",SGP:"SG",
+  SLE:"SL",SLV:"SV",SOM:"SO",SRB:"RS",SSD:"SS",SUR:"SR",SVK:"SK",SVN:"SI",
+  SWE:"SE",SWZ:"SZ",SYR:"SY",TCD:"TD",TGO:"TG",THA:"TH",TJK:"TJ",TKM:"TM",
+  TLS:"TL",TUN:"TN",TUR:"TR",TWN:"TW",TZA:"TZ",UGA:"UG",UKR:"UA",URY:"UY",
+  USA:"US",UZB:"UZ",VEN:"VE",VNM:"VN",YEM:"YE",ZAF:"ZA",ZMB:"ZM",ZWE:"ZW"
+};
+
+// 40カ国リスクデータ（ハードコード / 静的データ）
+const RISK_DATA = {
+  JPN: { name:"Japan", iso2:"JP", lat:36.2, lon:139.7, overall:18,
+    sanctions:0, conflict:2, disaster:45, maritime:15, political:8, trade:12,
+    economic:10, cyber_risk:22, climate_risk:35, geo_risk:5, health:8,
+    humanitarian:3, weather:38, compliance:5, food_security:8, labor:10,
+    port_congestion:20, aviation:5, energy:25, currency:15 },
+  CHN: { name:"China", iso2:"CN", lat:35.9, lon:104.2, overall:52,
+    sanctions:35, conflict:15, disaster:40, maritime:45, political:55, trade:48,
+    economic:35, cyber_risk:65, climate_risk:38, geo_risk:30, health:25,
+    humanitarian:20, weather:35, compliance:50, food_security:18, labor:45,
+    port_congestion:55, aviation:20, energy:40, currency:30 },
+  USA: { name:"United States", iso2:"US", lat:37.1, lon:-95.7, overall:22,
+    sanctions:5, conflict:12, disaster:35, maritime:10, political:25, trade:15,
+    economic:12, cyber_risk:30, climate_risk:32, geo_risk:8, health:10,
+    humanitarian:5, weather:30, compliance:8, food_security:5, labor:15,
+    port_congestion:25, aviation:8, energy:18, currency:8 },
+  RUS: { name:"Russia", iso2:"RU", lat:61.5, lon:105.3, overall:88,
+    sanctions:95, conflict:75, disaster:20, maritime:60, political:80, trade:85,
+    economic:70, cyber_risk:80, climate_risk:25, geo_risk:72, health:35,
+    humanitarian:45, weather:20, compliance:90, food_security:30, labor:50,
+    port_congestion:40, aviation:70, energy:55, currency:75 },
+  UKR: { name:"Ukraine", iso2:"UA", lat:48.4, lon:31.2, overall:92,
+    sanctions:20, conflict:95, disaster:30, maritime:85, political:70, trade:80,
+    economic:85, cyber_risk:75, climate_risk:20, geo_risk:90, health:50,
+    humanitarian:80, weather:15, compliance:25, food_security:65, labor:60,
+    port_congestion:90, aviation:95, energy:80, currency:85 },
+  DEU: { name:"Germany", iso2:"DE", lat:51.2, lon:10.5, overall:15,
+    sanctions:2, conflict:3, disaster:12, maritime:8, political:10, trade:10,
+    economic:15, cyber_risk:25, climate_risk:22, geo_risk:3, health:5,
+    humanitarian:2, weather:18, compliance:3, food_security:4, labor:12,
+    port_congestion:18, aviation:5, energy:28, currency:8 },
+  KOR: { name:"South Korea", iso2:"KR", lat:35.9, lon:127.8, overall:28,
+    sanctions:5, conflict:30, disaster:20, maritime:18, political:22, trade:20,
+    economic:15, cyber_risk:35, climate_risk:25, geo_risk:28, health:10,
+    humanitarian:5, weather:22, compliance:8, food_security:10, labor:18,
+    port_congestion:22, aviation:8, energy:30, currency:12 },
+  IND: { name:"India", iso2:"IN", lat:20.6, lon:79.0, overall:42,
+    sanctions:8, conflict:25, disaster:55, maritime:35, political:38, trade:30,
+    economic:35, cyber_risk:40, climate_risk:50, geo_risk:22, health:35,
+    humanitarian:30, weather:48, compliance:15, food_security:28, labor:40,
+    port_congestion:45, aviation:15, energy:35, currency:25 },
+  TWN: { name:"Taiwan", iso2:"TW", lat:23.7, lon:121.0, overall:48,
+    sanctions:10, conflict:55, disaster:50, maritime:40, political:60, trade:35,
+    economic:20, cyber_risk:45, climate_risk:42, geo_risk:50, health:8,
+    humanitarian:5, weather:45, compliance:12, food_security:12, labor:15,
+    port_congestion:30, aviation:15, energy:35, currency:15 },
+  SGP: { name:"Singapore", iso2:"SG", lat:1.35, lon:103.8, overall:12,
+    sanctions:2, conflict:2, disaster:8, maritime:10, political:5, trade:8,
+    economic:5, cyber_risk:18, climate_risk:20, geo_risk:2, health:5,
+    humanitarian:2, weather:15, compliance:3, food_security:15, labor:8,
+    port_congestion:15, aviation:3, energy:12, currency:5 },
+  THA: { name:"Thailand", iso2:"TH", lat:15.9, lon:100.9, overall:32,
+    sanctions:5, conflict:10, disaster:40, maritime:25, political:35, trade:22,
+    economic:25, cyber_risk:30, climate_risk:42, geo_risk:12, health:18,
+    humanitarian:12, weather:45, compliance:8, food_security:15, labor:25,
+    port_congestion:28, aviation:10, energy:22, currency:18 },
+  VNM: { name:"Vietnam", iso2:"VN", lat:14.1, lon:108.3, overall:35,
+    sanctions:8, conflict:8, disaster:48, maritime:30, political:42, trade:28,
+    economic:30, cyber_risk:35, climate_risk:52, geo_risk:10, health:20,
+    humanitarian:15, weather:50, compliance:12, food_security:18, labor:30,
+    port_congestion:32, aviation:12, energy:25, currency:22 },
+  IDN: { name:"Indonesia", iso2:"ID", lat:-0.8, lon:113.9, overall:38,
+    sanctions:5, conflict:15, disaster:60, maritime:35, political:32, trade:25,
+    economic:30, cyber_risk:32, climate_risk:48, geo_risk:18, health:22,
+    humanitarian:18, weather:42, compliance:10, food_security:22, labor:28,
+    port_congestion:35, aviation:12, energy:28, currency:25 },
+  MYS: { name:"Malaysia", iso2:"MY", lat:4.2, lon:101.9, overall:25,
+    sanctions:3, conflict:5, disaster:30, maritime:22, political:28, trade:18,
+    economic:20, cyber_risk:28, climate_risk:35, geo_risk:8, health:12,
+    humanitarian:8, weather:32, compliance:5, food_security:12, labor:18,
+    port_congestion:20, aviation:8, energy:18, currency:15 },
+  PHL: { name:"Philippines", iso2:"PH", lat:12.9, lon:121.8, overall:40,
+    sanctions:5, conflict:22, disaster:65, maritime:38, political:35, trade:25,
+    economic:32, cyber_risk:28, climate_risk:60, geo_risk:20, health:25,
+    humanitarian:20, weather:58, compliance:8, food_security:25, labor:25,
+    port_congestion:30, aviation:12, energy:30, currency:22 },
+  IRN: { name:"Iran", iso2:"IR", lat:32.4, lon:53.7, overall:82,
+    sanctions:90, conflict:55, disaster:35, maritime:65, political:75, trade:80,
+    economic:75, cyber_risk:60, climate_risk:40, geo_risk:55, health:30,
+    humanitarian:35, weather:25, compliance:88, food_security:35, labor:45,
+    port_congestion:45, aviation:65, energy:40, currency:80 },
+  PRK: { name:"North Korea", iso2:"KP", lat:40.3, lon:127.5, overall:95,
+    sanctions:100, conflict:60, disaster:25, maritime:70, political:95, trade:95,
+    economic:90, cyber_risk:70, climate_risk:20, geo_risk:55, health:60,
+    humanitarian:75, weather:18, compliance:100, food_security:70, labor:80,
+    port_congestion:30, aviation:85, energy:65, currency:90 },
+  SAU: { name:"Saudi Arabia", iso2:"SA", lat:23.9, lon:45.1, overall:35,
+    sanctions:15, conflict:25, disaster:15, maritime:30, political:40, trade:22,
+    economic:18, cyber_risk:35, climate_risk:45, geo_risk:25, health:12,
+    humanitarian:15, weather:40, compliance:18, food_security:28, labor:35,
+    port_congestion:20, aviation:10, energy:15, currency:12 },
+  EGY: { name:"Egypt", iso2:"EG", lat:26.8, lon:30.8, overall:45,
+    sanctions:10, conflict:20, disaster:18, maritime:50, political:48, trade:38,
+    economic:45, cyber_risk:30, climate_risk:42, geo_risk:22, health:25,
+    humanitarian:28, weather:20, compliance:12, food_security:40, labor:38,
+    port_congestion:42, aviation:15, energy:35, currency:42 },
+  TUR: { name:"Turkey", iso2:"TR", lat:38.9, lon:35.2, overall:42,
+    sanctions:15, conflict:25, disaster:45, maritime:30, political:48, trade:32,
+    economic:45, cyber_risk:35, climate_risk:30, geo_risk:28, health:18,
+    humanitarian:22, weather:25, compliance:18, food_security:22, labor:30,
+    port_congestion:28, aviation:12, energy:35, currency:50 },
+  GBR: { name:"United Kingdom", iso2:"GB", lat:55.4, lon:-3.4, overall:16,
+    sanctions:3, conflict:5, disaster:10, maritime:8, political:12, trade:10,
+    economic:15, cyber_risk:25, climate_risk:18, geo_risk:5, health:8,
+    humanitarian:3, weather:15, compliance:3, food_security:5, labor:12,
+    port_congestion:15, aviation:5, energy:22, currency:10 },
+  FRA: { name:"France", iso2:"FR", lat:46.2, lon:2.2, overall:17,
+    sanctions:2, conflict:5, disaster:15, maritime:8, political:15, trade:10,
+    economic:12, cyber_risk:22, climate_risk:20, geo_risk:5, health:8,
+    humanitarian:3, weather:18, compliance:3, food_security:5, labor:18,
+    port_congestion:15, aviation:5, energy:20, currency:8 },
+  BRA: { name:"Brazil", iso2:"BR", lat:-14.2, lon:-51.9, overall:35,
+    sanctions:5, conflict:15, disaster:35, maritime:22, political:35, trade:25,
+    economic:32, cyber_risk:28, climate_risk:45, geo_risk:15, health:22,
+    humanitarian:18, weather:35, compliance:8, food_security:15, labor:28,
+    port_congestion:25, aviation:10, energy:20, currency:30 },
+  AUS: { name:"Australia", iso2:"AU", lat:-25.3, lon:133.8, overall:14,
+    sanctions:2, conflict:2, disaster:40, maritime:8, political:8, trade:10,
+    economic:10, cyber_risk:20, climate_risk:45, geo_risk:3, health:5,
+    humanitarian:2, weather:38, compliance:3, food_security:8, labor:10,
+    port_congestion:12, aviation:5, energy:15, currency:8 },
+  MEX: { name:"Mexico", iso2:"MX", lat:23.6, lon:-102.6, overall:38,
+    sanctions:8, conflict:30, disaster:35, maritime:20, political:35, trade:25,
+    economic:30, cyber_risk:32, climate_risk:38, geo_risk:28, health:20,
+    humanitarian:22, weather:32, compliance:10, food_security:18, labor:32,
+    port_congestion:22, aviation:12, energy:25, currency:28 },
+  NGA: { name:"Nigeria", iso2:"NG", lat:9.1, lon:8.7, overall:55,
+    sanctions:15, conflict:50, disaster:30, maritime:45, political:55, trade:40,
+    economic:50, cyber_risk:42, climate_risk:38, geo_risk:45, health:40,
+    humanitarian:42, weather:25, compliance:18, food_security:45, labor:45,
+    port_congestion:48, aviation:25, energy:30, currency:55 },
+  ZAF: { name:"South Africa", iso2:"ZA", lat:-30.6, lon:22.9, overall:35,
+    sanctions:5, conflict:18, disaster:22, maritime:20, political:32, trade:25,
+    economic:35, cyber_risk:30, climate_risk:35, geo_risk:18, health:28,
+    humanitarian:22, weather:20, compliance:8, food_security:22, labor:35,
+    port_congestion:25, aviation:12, energy:42, currency:32 },
+  ISR: { name:"Israel", iso2:"IL", lat:31.0, lon:34.9, overall:55,
+    sanctions:15, conflict:70, disaster:15, maritime:35, political:50, trade:30,
+    economic:20, cyber_risk:40, climate_risk:28, geo_risk:65, health:12,
+    humanitarian:25, weather:18, compliance:15, food_security:15, labor:15,
+    port_congestion:20, aviation:35, energy:25, currency:12 },
+  MMR: { name:"Myanmar", iso2:"MM", lat:21.9, lon:95.9, overall:78,
+    sanctions:75, conflict:80, disaster:50, maritime:55, political:85, trade:70,
+    economic:72, cyber_risk:45, climate_risk:48, geo_risk:75, health:45,
+    humanitarian:70, weather:42, compliance:80, food_security:55, labor:65,
+    port_congestion:35, aviation:55, energy:45, currency:68 },
+  SYR: { name:"Syria", iso2:"SY", lat:34.8, lon:38.9, overall:90,
+    sanctions:85, conflict:90, disaster:25, maritime:60, political:90, trade:88,
+    economic:88, cyber_risk:55, climate_risk:35, geo_risk:88, health:55,
+    humanitarian:85, weather:18, compliance:90, food_security:72, labor:70,
+    port_congestion:45, aviation:80, energy:60, currency:85 },
+  YEM: { name:"Yemen", iso2:"YE", lat:15.6, lon:48.5, overall:88,
+    sanctions:40, conflict:90, disaster:25, maritime:85, political:85, trade:80,
+    economic:85, cyber_risk:40, climate_risk:42, geo_risk:85, health:60,
+    humanitarian:90, weather:20, compliance:45, food_security:85, labor:65,
+    port_congestion:55, aviation:85, energy:50, currency:80 },
+  LBY: { name:"Libya", iso2:"LY", lat:26.3, lon:17.2, overall:72,
+    sanctions:50, conflict:65, disaster:15, maritime:55, political:72, trade:65,
+    economic:68, cyber_risk:38, climate_risk:35, geo_risk:62, health:35,
+    humanitarian:50, weather:15, compliance:55, food_security:40, labor:50,
+    port_congestion:40, aviation:55, energy:35, currency:60 },
+  SDN: { name:"Sudan", iso2:"SD", lat:12.9, lon:30.2, overall:82,
+    sanctions:60, conflict:85, disaster:30, maritime:45, political:80, trade:75,
+    economic:78, cyber_risk:35, climate_risk:45, geo_risk:80, health:50,
+    humanitarian:82, weather:25, compliance:65, food_security:72, labor:58,
+    port_congestion:35, aviation:60, energy:40, currency:72 },
+  PAK: { name:"Pakistan", iso2:"PK", lat:30.4, lon:69.3, overall:52,
+    sanctions:15, conflict:45, disaster:55, maritime:35, political:50, trade:40,
+    economic:48, cyber_risk:35, climate_risk:55, geo_risk:42, health:35,
+    humanitarian:40, weather:48, compliance:20, food_security:40, labor:38,
+    port_congestion:35, aviation:20, energy:38, currency:45 },
+  AFG: { name:"Afghanistan", iso2:"AF", lat:33.9, lon:67.7, overall:90,
+    sanctions:70, conflict:85, disaster:40, maritime:30, political:92, trade:88,
+    economic:85, cyber_risk:40, climate_risk:42, geo_risk:85, health:55,
+    humanitarian:88, weather:25, compliance:75, food_security:80, labor:70,
+    port_congestion:20, aviation:80, energy:50, currency:82 },
+  CUB: { name:"Cuba", iso2:"CU", lat:21.5, lon:-77.8, overall:68,
+    sanctions:80, conflict:10, disaster:40, maritime:35, political:72, trade:75,
+    economic:70, cyber_risk:42, climate_risk:45, geo_risk:12, health:25,
+    humanitarian:30, weather:48, compliance:78, food_security:45, labor:45,
+    port_congestion:25, aviation:50, energy:40, currency:65 },
+  VEN: { name:"Venezuela", iso2:"VE", lat:6.4, lon:-66.6, overall:72,
+    sanctions:70, conflict:25, disaster:25, maritime:35, political:75, trade:72,
+    economic:78, cyber_risk:38, climate_risk:30, geo_risk:25, health:35,
+    humanitarian:55, weather:22, compliance:72, food_security:55, labor:48,
+    port_congestion:30, aviation:42, energy:28, currency:82 },
+  NLD: { name:"Netherlands", iso2:"NL", lat:52.1, lon:5.3, overall:13,
+    sanctions:2, conflict:2, disaster:15, maritime:8, political:8, trade:8,
+    economic:10, cyber_risk:20, climate_risk:25, geo_risk:2, health:5,
+    humanitarian:2, weather:18, compliance:2, food_security:5, labor:10,
+    port_congestion:18, aviation:5, energy:20, currency:5 },
+  PAN: { name:"Panama", iso2:"PA", lat:8.5, lon:-80.8, overall:28,
+    sanctions:8, conflict:5, disaster:25, maritime:35, political:22, trade:15,
+    economic:22, cyber_risk:25, climate_risk:30, geo_risk:5, health:15,
+    humanitarian:10, weather:28, compliance:10, food_security:12, labor:20,
+    port_congestion:40, aviation:8, energy:15, currency:18 },
+  LBN: { name:"Lebanon", iso2:"LB", lat:33.9, lon:35.9, overall:68,
+    sanctions:25, conflict:55, disaster:18, maritime:40, political:65, trade:58,
+    economic:78, cyber_risk:35, climate_risk:25, geo_risk:55, health:30,
+    humanitarian:45, weather:15, compliance:28, food_security:48, labor:42,
+    port_congestion:45, aviation:35, energy:55, currency:80 },
+};
+
+// 主要海路 5本
+const SEA_ROUTES = [
+  { name:"Asia-Europe (Suez)", risk:55, color:"#4fc3f7",
+    points:[[104,1],[95,8],[80,12],[68,15],[55,22],[44,30],[35,32],[20,35],[10,42],[-3,48],[2,52]] },
+  { name:"Trans-Pacific (Asia-US West)", risk:25, color:"#4fc3f7",
+    points:[[121,31],[135,35],[155,38],[170,35],[-170,40],[-155,38],[-140,35],[-125,34]] },
+  { name:"Asia-Africa (Cape Route)", risk:45, color:"#4fc3f7",
+    points:[[104,1],[95,5],[80,-5],[65,-10],[50,-15],[35,-25],[22,-35],[18,-34],[15,-30]] },
+  { name:"Middle East-Asia (Oil Route)", risk:50, color:"#4fc3f7",
+    points:[[50,26],[56,24],[62,22],[68,18],[75,15],[80,10],[95,5],[104,1]] },
+  { name:"Europe-Americas (Atlantic)", risk:20, color:"#4fc3f7",
+    points:[[-5,48],[-15,45],[-25,40],[-35,35],[-45,30],[-55,28],[-65,30],[-75,25],[-80,25]] },
+];
+
+// 主要航空路 5本
+const AIR_ROUTES = [
+  { name:"Tokyo-Frankfurt", risk:15, color:"#ce93d8",
+    points:[[140,36],[120,50],[100,55],[80,55],[60,52],[40,50],[10,50]] },
+  { name:"Shanghai-Los Angeles", risk:22, color:"#ce93d8",
+    points:[[121,31],[140,40],[160,45],[180,48],[-160,48],[-140,42],[-120,34]] },
+  { name:"Singapore-London", risk:18, color:"#ce93d8",
+    points:[[104,1],[95,10],[80,18],[65,25],[50,30],[35,38],[20,42],[5,48],[0,51]] },
+  { name:"Dubai-New York", risk:20, color:"#ce93d8",
+    points:[[55,25],[45,30],[30,35],[15,40],[0,42],[-15,44],[-30,44],[-50,42],[-74,41]] },
+  { name:"Tokyo-Singapore", risk:10, color:"#ce93d8",
+    points:[[140,36],[130,28],[120,20],[115,12],[108,5],[104,1]] },
+];
+
+// チョークポイント 7箇所
+const CHOKEPOINTS = [
+  { name:"Strait of Malacca", lat:2.5, lon:101.5, risk:45 },
+  { name:"Suez Canal", lat:30.5, lon:32.3, risk:55 },
+  { name:"Strait of Hormuz", lat:26.5, lon:56.3, risk:65 },
+  { name:"Bab el-Mandeb", lat:12.6, lon:43.3, risk:72 },
+  { name:"Panama Canal", lat:9.1, lon:-79.7, risk:35 },
+  { name:"Taiwan Strait", lat:24.0, lon:119.5, risk:58 },
+  { name:"Cape of Good Hope", lat:-34.4, lon:18.5, risk:28 },
+];
+
+// 次元表示名
+const DIMENSION_LABELS = {
+  overall:"Overall", sanctions:"Sanctions", conflict:"Conflict", disaster:"Disaster",
+  maritime:"Maritime", political:"Political", trade:"Trade", economic:"Economic",
+  cyber_risk:"Cyber Risk", climate_risk:"Climate Risk", geo_risk:"Geo Risk",
+  health:"Health", humanitarian:"Humanitarian", weather:"Weather",
+  compliance:"Compliance", food_security:"Food Security", labor:"Labor",
+  port_congestion:"Port Congestion", aviation:"Aviation", energy:"Energy", currency:"Currency"
+};
+
+// ============================================================
+// ユーティリティ関数
+// ============================================================
+function riskColor(score) {
+  if (score >= 80) return "#ff1744";
+  if (score >= 60) return "#ff9100";
+  if (score >= 40) return "#ffd600";
+  if (score >= 20) return "#66bb6a";
+  return "#00e676";
+}
+
+function riskColorScale(score) {
+  // 0-100のスムーズなカラースケール
+  const t = score / 100;
+  if (t < 0.25) return d3.interpolateRgb("#00e676", "#66bb6a")(t * 4);
+  if (t < 0.5) return d3.interpolateRgb("#66bb6a", "#ffd600")((t - 0.25) * 4);
+  if (t < 0.75) return d3.interpolateRgb("#ffd600", "#ff9100")((t - 0.5) * 4);
+  return d3.interpolateRgb("#ff9100", "#ff1744")((t - 0.75) * 4);
+}
+
+function riskLevel(score) {
+  if (score >= 80) return "CRITICAL";
+  if (score >= 60) return "HIGH";
+  if (score >= 40) return "MEDIUM";
+  if (score >= 20) return "LOW";
+  return "MINIMAL";
+}
+
+function getCountryScore(iso3, dimension) {
+  const d = RISK_DATA[iso3];
+  if (!d) return null;
+  if (dimension === "overall") return d.overall;
+  return d[dimension] !== undefined ? d[dimension] : null;
+}
+
+// ============================================================
+// 地図描画
+// ============================================================
+const mapContainer = document.getElementById("map-container");
+const svg = d3.select("#world-map");
+const tooltip = document.getElementById("tooltip");
+const width = mapContainer.clientWidth;
+const height = mapContainer.clientHeight;
+
+const projection = d3.geoNaturalEarth1()
+  .scale(width / 5.5)
+  .translate([width / 2, height / 2]);
+
+const path = d3.geoPath().projection(projection);
+
+// ズーム
+const zoom = d3.zoom()
+  .scaleExtent([1, 8])
+  .on("zoom", (event) => {
+    mapGroup.attr("transform", event.transform);
+  });
+svg.call(zoom);
+
+const mapGroup = svg.append("g");
+
+// グラティキュール（経緯線）
+const graticule = d3.geoGraticule();
+mapGroup.append("path")
+  .datum(graticule())
+  .attr("d", path)
+  .attr("fill", "none")
+  .attr("stroke", "#1a1f29")
+  .attr("stroke-width", 0.3);
+
+// 海岸線の球面
+mapGroup.append("path")
+  .datum({type: "Sphere"})
+  .attr("d", path)
+  .attr("fill", "#0a0e15")
+  .attr("stroke", "#1a1f29")
+  .attr("stroke-width", 0.5);
+
+let currentDimension = "overall";
+let currentMode = "all";
+let countryPaths;
+let routeGroupSea, routeGroupAir, chokepointGroup;
+
+// ISO3→RISK_DATA逆引き用マップ
+const nameToIso3 = {};
+Object.keys(RISK_DATA).forEach(k => { nameToIso3[RISK_DATA[k].name] = k; });
+
+// TopoJSON読み込み
+d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(world => {
+  const countries = topojson.feature(world, world.objects.countries);
+
+  // ISO数値→ISO3マッピング（Natural Earth）
+  const numToIso3 = {};
+  // 主要国のISO数値コード
+  const isoNumMap = {
+    4:"AFG",8:"ALB",12:"DZA",24:"AGO",32:"ARG",36:"AUS",40:"AUT",
+    31:"AZE",48:"BHR",50:"BGD",56:"BEL",68:"BOL",70:"BIH",72:"BWA",
+    76:"BRA",96:"BRN",100:"BGR",104:"MMR",108:"BDI",116:"KHM",
+    120:"CMR",124:"CAN",140:"CAF",148:"TCD",152:"CHL",156:"CHN",
+    170:"COL",178:"COG",180:"COD",188:"CRI",191:"HRV",192:"CUB",
+    196:"CYP",203:"CZE",208:"DNK",214:"DOM",218:"ECU",818:"EGY",
+    222:"SLV",226:"GNQ",232:"ERI",233:"EST",231:"ETH",246:"FIN",
+    250:"FRA",266:"GAB",270:"GMB",268:"GEO",276:"DEU",288:"GHA",
+    300:"GRC",320:"GTM",324:"GIN",328:"GUY",332:"HTI",340:"HND",
+    348:"HUN",352:"ISL",356:"IND",360:"IDN",364:"IRN",368:"IRQ",
+    372:"IRL",376:"ISR",380:"ITA",388:"JAM",392:"JPN",400:"JOR",
+    398:"KAZ",404:"KEN",408:"PRK",410:"KOR",414:"KWT",417:"KGZ",
+    418:"LAO",422:"LBN",426:"LSO",430:"LBR",434:"LBY",440:"LTU",
+    442:"LUX",450:"MDG",454:"MWI",458:"MYS",466:"MLI",478:"MRT",
+    484:"MEX",496:"MNG",498:"MDA",504:"MAR",508:"MOZ",516:"NAM",
+    524:"NPL",528:"NLD",540:"NCL",554:"NZL",558:"NIC",562:"NER",
+    566:"NGA",578:"NOR",512:"OMN",586:"PAK",591:"PAN",598:"PNG",
+    600:"PRY",604:"PER",608:"PHL",616:"POL",620:"PRT",634:"QAT",
+    642:"ROU",643:"RUS",646:"RWA",682:"SAU",686:"SEN",688:"SRB",
+    694:"SLE",702:"SGP",703:"SVK",704:"VNM",705:"SVN",706:"SOM",
+    710:"ZAF",724:"ESP",144:"LKA",729:"SDN",740:"SUR",748:"SWZ",
+    752:"SWE",756:"CHE",760:"SYR",762:"TJK",764:"THA",768:"TGO",
+    780:"TTO",788:"TUN",792:"TUR",795:"TKM",800:"UGA",804:"UKR",
+    784:"ARE",826:"GBR",840:"USA",858:"URY",860:"UZB",862:"VEN",
+    887:"YEM",894:"ZMB",716:"ZWE",158:"TWN",275:"PSE",728:"SSD"
+  };
+  Object.keys(isoNumMap).forEach(n => { numToIso3[n] = isoNumMap[n]; });
+
+  // 国を描画
+  countryPaths = mapGroup.selectAll("path.country")
+    .data(countries.features)
+    .enter().append("path")
+    .attr("class", "country")
+    .attr("d", path)
+    .attr("stroke", "#30363d")
+    .attr("stroke-width", 0.5)
+    .attr("fill", d => {
+      const iso3 = numToIso3[d.id];
+      const score = iso3 ? getCountryScore(iso3, currentDimension) : null;
+      return score !== null ? riskColorScale(score) : "#1a1f29";
+    })
+    .attr("cursor", d => {
+      const iso3 = numToIso3[d.id];
+      return RISK_DATA[iso3] ? "pointer" : "default";
+    })
+    .on("mouseover", function(event, d) {
+      const iso3 = numToIso3[d.id];
+      if (!iso3 || !RISK_DATA[iso3]) return;
+      const data = RISK_DATA[iso3];
+      const score = getCountryScore(iso3, currentDimension);
+
+      d3.select(this).attr("stroke", "#58a6ff").attr("stroke-width", 1.5).raise();
+
+      const dims = ["sanctions","conflict","maritime","disaster","political","trade","economic","cyber_risk"];
+      let dimHtml = dims.map(dim => {
+        const val = data[dim] || 0;
+        return `<div class="tooltip-dim-row">
+          <span>${DIMENSION_LABELS[dim] || dim}</span>
+          <span style="color:${riskColor(val)}">${val}</span>
+        </div>
+        <div class="tooltip-dim-bar"><div class="tooltip-dim-fill" style="width:${val}%;background:${riskColorScale(val)}"></div></div>`;
+      }).join("");
+
+      tooltip.innerHTML = `
+        <div class="tooltip-title">${data.name} (${iso3})</div>
+        <div class="tooltip-score" style="color:${riskColor(score)}">${score} <span style="font-size:12px;color:#8b949e">${riskLevel(score)}</span></div>
+        <div class="tooltip-dims">${dimHtml}</div>`;
+      tooltip.style.display = "block";
+    })
+    .on("mousemove", function(event) {
+      const rect = mapContainer.getBoundingClientRect();
+      let x = event.clientX - rect.left + 15;
+      let y = event.clientY - rect.top + 15;
+      if (x + 280 > rect.width) x = event.clientX - rect.left - 290;
+      if (y + 300 > rect.height) y = event.clientY - rect.top - 200;
+      tooltip.style.left = x + "px";
+      tooltip.style.top = y + "px";
+    })
+    .on("mouseout", function() {
+      d3.select(this).attr("stroke", "#30363d").attr("stroke-width", 0.5);
+      tooltip.style.display = "none";
+    })
+    .on("click", function(event, d) {
+      const iso3 = numToIso3[d.id];
+      if (iso3 && RISK_DATA[iso3]) showDetail(iso3);
+    });
+
+  // 境界線
+  mapGroup.append("path")
+    .datum(topojson.mesh(world, world.objects.countries, (a, b) => a !== b))
+    .attr("d", path)
+    .attr("fill", "none")
+    .attr("stroke", "#30363d")
+    .attr("stroke-width", 0.3);
+
+  // ルート描画
+  drawRoutes();
+  drawChokepoints();
+  updateKPIs();
+  updateChokepointList();
+  updateRiskCountryList();
+
+  // 国パスを更新する関数をグローバルに
+  window._numToIso3 = numToIso3;
+});
+
+// ===== ルート描画 =====
+function drawRoutes() {
+  // 既存削除
+  mapGroup.selectAll(".route-sea").remove();
+  mapGroup.selectAll(".route-air").remove();
+
+  const lineGen = d3.line()
+    .x(d => projection(d)[0])
+    .y(d => projection(d)[1])
+    .curve(d3.curveCatmullRom.alpha(0.5));
+
+  // 海路
+  if (currentMode === "all" || currentMode === "sea") {
+    routeGroupSea = mapGroup.append("g").attr("class", "route-sea");
+    SEA_ROUTES.forEach(route => {
+      const coords = route.points.map(p => [p[0], p[1]]);
+      routeGroupSea.append("path")
+        .datum(coords)
+        .attr("d", lineGen)
+        .attr("fill", "none")
+        .attr("stroke", riskColorScale(route.risk))
+        .attr("stroke-width", 2)
+        .attr("stroke-opacity", 0.7)
+        .attr("class", "route-animated")
+        .on("mouseover", function(event) {
+          d3.select(this).attr("stroke-width", 4).attr("stroke-opacity", 1);
+          tooltip.innerHTML = `<div class="tooltip-title">${route.name}</div>
+            <div class="tooltip-score" style="color:${riskColor(route.risk)}">${route.risk} <span style="font-size:12px;color:#8b949e">${riskLevel(route.risk)}</span></div>
+            <div style="font-size:11px;color:#8b949e;margin-top:4px">Sea Route</div>`;
+          tooltip.style.display = "block";
+        })
+        .on("mousemove", function(event) {
+          const rect = mapContainer.getBoundingClientRect();
+          tooltip.style.left = (event.clientX - rect.left + 15) + "px";
+          tooltip.style.top = (event.clientY - rect.top + 15) + "px";
+        })
+        .on("mouseout", function() {
+          d3.select(this).attr("stroke-width", 2).attr("stroke-opacity", 0.7);
+          tooltip.style.display = "none";
+        });
+    });
+  }
+
+  // 航空路
+  if (currentMode === "all" || currentMode === "air") {
+    routeGroupAir = mapGroup.append("g").attr("class", "route-air");
+    AIR_ROUTES.forEach(route => {
+      const coords = route.points.map(p => [p[0], p[1]]);
+      routeGroupAir.append("path")
+        .datum(coords)
+        .attr("d", lineGen)
+        .attr("fill", "none")
+        .attr("stroke", riskColorScale(route.risk))
+        .attr("stroke-width", 1.5)
+        .attr("stroke-opacity", 0.6)
+        .attr("stroke-dasharray", "6,4")
+        .on("mouseover", function(event) {
+          d3.select(this).attr("stroke-width", 3).attr("stroke-opacity", 1);
+          tooltip.innerHTML = `<div class="tooltip-title">${route.name}</div>
+            <div class="tooltip-score" style="color:${riskColor(route.risk)}">${route.risk} <span style="font-size:12px;color:#8b949e">${riskLevel(route.risk)}</span></div>
+            <div style="font-size:11px;color:#8b949e;margin-top:4px">Air Route</div>`;
+          tooltip.style.display = "block";
+        })
+        .on("mousemove", function(event) {
+          const rect = mapContainer.getBoundingClientRect();
+          tooltip.style.left = (event.clientX - rect.left + 15) + "px";
+          tooltip.style.top = (event.clientY - rect.top + 15) + "px";
+        })
+        .on("mouseout", function() {
+          d3.select(this).attr("stroke-width", 1.5).attr("stroke-opacity", 0.6);
+          tooltip.style.display = "none";
+        });
+    });
+  }
+}
+
+// ===== チョークポイント描画 =====
+function drawChokepoints() {
+  mapGroup.selectAll(".chokepoint-group").remove();
+  chokepointGroup = mapGroup.append("g").attr("class", "chokepoint-group");
+
+  CHOKEPOINTS.forEach(cp => {
+    const [x, y] = projection([cp.lon, cp.lat]);
+    if (!x || !y) return;
+
+    const g = chokepointGroup.append("g").attr("transform", `translate(${x},${y})`);
+
+    // 脈動サークル
+    g.append("circle")
+      .attr("class", "chokepoint-pulse")
+      .attr("cx", 0).attr("cy", 0)
+      .attr("r", 6)
+      .attr("fill", riskColor(cp.risk));
+
+    // 三角マーカー
+    g.append("polygon")
+      .attr("points", "0,-7 -5,3 5,3")
+      .attr("fill", riskColor(cp.risk))
+      .attr("stroke", "#0f1117")
+      .attr("stroke-width", 1);
+
+    // インタラクション
+    g.append("circle")
+      .attr("cx", 0).attr("cy", 0).attr("r", 12)
+      .attr("fill", "transparent")
+      .attr("cursor", "pointer")
+      .on("mouseover", function(event) {
+        tooltip.innerHTML = `<div class="tooltip-title">${cp.name}</div>
+          <div class="tooltip-score" style="color:${riskColor(cp.risk)}">${cp.risk} <span style="font-size:12px;color:#8b949e">${riskLevel(cp.risk)}</span></div>
+          <div style="font-size:11px;color:#8b949e;margin-top:4px">Strategic Chokepoint</div>`;
+        tooltip.style.display = "block";
+      })
+      .on("mousemove", function(event) {
+        const rect = mapContainer.getBoundingClientRect();
+        tooltip.style.left = (event.clientX - rect.left + 15) + "px";
+        tooltip.style.top = (event.clientY - rect.top + 15) + "px";
+      })
+      .on("mouseout", function() { tooltip.style.display = "none"; });
+  });
+}
+
+// ============================================================
+// UI更新関数
+// ============================================================
+function updateKPIs() {
+  const countries = Object.values(RISK_DATA);
+  const critical = countries.filter(c => c.overall >= 80).length;
+  const high = countries.filter(c => c.overall >= 60 && c.overall < 80).length;
+  document.getElementById("kpi-critical").textContent = critical;
+  document.getElementById("kpi-high").textContent = high;
+  document.getElementById("kpi-monitor").textContent = countries.length;
+}
+
+function updateChokepointList() {
+  const list = document.getElementById("chokepoint-list");
+  list.innerHTML = CHOKEPOINTS
+    .sort((a, b) => b.risk - a.risk)
+    .map(cp => {
+      const cls = cp.risk >= 60 ? "risk-high" : cp.risk >= 40 ? "risk-medium" : "risk-low";
+      return `<li class="chokepoint-item" onclick="zoomToChokepoint(${cp.lat},${cp.lon})">
+        <div class="chokepoint-marker" style="border-bottom-color:${riskColor(cp.risk)}"></div>
+        <span class="chokepoint-name">${cp.name}</span>
+        <span class="chokepoint-risk ${cls}">${cp.risk}</span>
+      </li>`;
+    }).join("");
+}
+
+function updateRiskCountryList() {
+  const el = document.getElementById("risk-country-list");
+  const sorted = Object.entries(RISK_DATA)
+    .sort((a, b) => b[1].overall - a[1].overall)
+    .slice(0, 10);
+  el.innerHTML = sorted.map(([iso3, data]) => {
+    return `<div class="chokepoint-item" onclick="showDetail('${iso3}')">
+      <span style="font-size:14px">${iso3ToIso2[iso3] ? getFlagEmoji(iso3ToIso2[iso3]) : ""}</span>
+      <span class="chokepoint-name">${data.name}</span>
+      <span class="chokepoint-risk" style="color:${riskColor(data.overall)}">${data.overall}</span>
+    </div>`;
+  }).join("");
+}
+
+function getFlagEmoji(iso2) {
+  if (!iso2 || iso2.length !== 2) return "";
+  const codePoints = [...iso2.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65);
+  return String.fromCodePoint(...codePoints);
+}
+
+// ===== 次元切替 =====
+document.getElementById("dimension-select").addEventListener("change", function() {
+  currentDimension = this.value;
+  updateMap();
+});
+
+function updateMap() {
+  if (!countryPaths || !window._numToIso3) return;
+  countryPaths.transition().duration(500)
+    .attr("fill", d => {
+      const iso3 = window._numToIso3[d.id];
+      const score = iso3 ? getCountryScore(iso3, currentDimension) : null;
+      return score !== null ? riskColorScale(score) : "#1a1f29";
+    });
+}
+
+// ===== 輸送モードトグル =====
+function toggleMode(mode, btn) {
+  currentMode = mode;
+  document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  drawRoutes();
+  drawChokepoints();
+}
+
+// ===== 国詳細パネル =====
+function showDetail(iso3) {
+  const data = RISK_DATA[iso3];
+  if (!data) return;
+  const panel = document.getElementById("detail-panel");
+  document.getElementById("detail-country").textContent = `${getFlagEmoji(data.iso2)} ${data.name}`;
+  document.getElementById("detail-score").textContent = data.overall;
+  document.getElementById("detail-score").style.color = riskColor(data.overall);
+  document.getElementById("detail-level").textContent = riskLevel(data.overall);
+
+  const dims = [
+    "sanctions","conflict","disaster","maritime","political","trade","economic",
+    "cyber_risk","climate_risk","geo_risk","health","humanitarian","weather",
+    "compliance","food_security","labor","port_congestion","aviation","energy","currency"
+  ];
+
+  const barsEl = document.getElementById("detail-bars");
+  barsEl.innerHTML = dims.map(dim => {
+    const val = data[dim] || 0;
+    return `<div class="dim-bar-container">
+      <div class="dim-bar-label">
+        <span class="dim-bar-name">${DIMENSION_LABELS[dim] || dim}</span>
+        <span class="dim-bar-value" style="color:${riskColor(val)}">${val}</span>
+      </div>
+      <div class="dim-bar-track">
+        <div class="dim-bar-fill" style="width:${val}%;background:${riskColorScale(val)}"></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  panel.style.display = "block";
+
+  // 地図上でズーム
+  if (data.lat && data.lon) {
+    const [x, y] = projection([data.lon, data.lat]);
+    svg.transition().duration(750).call(
+      zoom.transform,
+      d3.zoomIdentity.translate(width / 2, height / 2).scale(3).translate(-x, -y)
+    );
+  }
+}
+
+function closeDetail() {
+  document.getElementById("detail-panel").style.display = "none";
+  svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+}
+
+function zoomToChokepoint(lat, lon) {
+  const [x, y] = projection([lon, lat]);
+  svg.transition().duration(750).call(
+    zoom.transform,
+    d3.zoomIdentity.translate(width / 2, height / 2).scale(4).translate(-x, -y)
+  );
+}
+
+// ============================================================
+// API動的データ取得（フォールバック付き）
+// ============================================================
+async function loadRealData() {
+  try {
+    const resp = await fetch('/api/v1/dashboard/global');
+    if (resp.ok) {
+      const data = await resp.json();
+      console.log('API data loaded:', data);
+      document.getElementById("update-time").textContent =
+        `Updated: ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC (Live)`;
+      // 動的データがあればRISK_DATAを上書き可能
+      // TODO: APIレスポンス形式に合わせて各国データを更新
+    }
+  } catch(e) {
+    console.log('API unavailable, using static data');
+    document.getElementById("update-time").textContent =
+      `Updated: 2026-04-02 (Static Data)`;
+  }
+}
+
+// ページロード時に呼び出し
+loadRealData();
+
+// ウィンドウリサイズ対応
+window.addEventListener("resize", () => {
+  const w = mapContainer.clientWidth;
+  const h = mapContainer.clientHeight;
+  projection.scale(w / 5.5).translate([w / 2, h / 2]);
+  if (countryPaths) {
+    countryPaths.attr("d", path);
+    mapGroup.selectAll("path").attr("d", function(d) {
+      if (d && d.type) return path(d);
+      return d3.select(this).attr("d");
+    });
+  }
+  drawRoutes();
+  drawChokepoints();
+});
+</script>
+</body>
+</html>
