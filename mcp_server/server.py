@@ -3251,5 +3251,237 @@ def decompose_visitor_change(
         return safe_error_response("変動要因分解中に内部エラーが発生しました")
 
 
+# ---------------------------------------------------------------------------
+#  v1.4.0: インバウンド確率分布予測ツール
+# ---------------------------------------------------------------------------
+
+_gravity_model = None
+_seasonal_extractor = None
+_inbound_aggregator = None
+
+try:
+    from features.tourism.gravity_model import TourismGravityModel
+    _gravity_model = TourismGravityModel()
+except (ImportError, Exception) as _e:
+    logger.warning("TourismGravityModel 初期化失敗: %s", _e)
+
+try:
+    from features.tourism.seasonal_extractor import SeasonalExtractor
+    _seasonal_extractor = SeasonalExtractor()
+except (ImportError, Exception) as _e:
+    logger.warning("SeasonalExtractor 初期化失敗: %s", _e)
+
+try:
+    from features.tourism.inbound_aggregator import InboundAggregator
+    _inbound_aggregator = InboundAggregator()
+except (ImportError, Exception) as _e:
+    logger.warning("InboundAggregator 初期化失敗: %s", _e)
+
+_risk_adjuster = None
+try:
+    from features.tourism.risk_adjuster import RiskAdjuster
+    _risk_adjuster = RiskAdjuster()
+except (ImportError, Exception) as _e:
+    logger.warning("RiskAdjuster 初期化失敗: %s", _e)
+
+# 月次ベースライン（千人）フォールバック
+_FB_MONTHLY = {
+    "CN": [350, 300, 470, 510, 480, 410, 600, 550, 440, 680, 500, 560],
+    "KR": [640, 570, 710, 690, 630, 560, 720, 660, 610, 760, 650, 720],
+    "TW": [400, 440, 395, 430, 385, 360, 450, 430, 375, 475, 420, 435],
+    "US": [165, 155, 220, 260, 245, 270, 315, 280, 240, 295, 225, 195],
+    "AU": [68, 62, 50, 42, 33, 35, 46, 50, 60, 64, 68, 78],
+}
+_FB_PREF_SHARES = {
+    "東京": 0.25, "大阪": 0.15, "京都": 0.08, "北海道": 0.06,
+    "福岡": 0.05, "沖縄": 0.04, "新潟": 0.01, "長野": 0.01,
+}
+
+
+def _mcp_montecarlo(base_values, n_samples, scenario=None, cv=0.12):
+    """モンテカルロサンプリングで確率分布を生成"""
+    import math as _math
+    import random as _random
+    shock = 1.0
+    if scenario:
+        shock *= (1.0 + scenario.get("exr", 0.0) * 0.8)
+        br = scenario.get("bilateral_risk", 0)
+        if br > 0:
+            shock *= max(0.5, 1.0 - br / 100.0)
+    results = []
+    for base in base_values:
+        adj = base * shock
+        sigma = cv
+        mu = _math.log(max(adj, 1)) - 0.5 * sigma * sigma
+        samples = sorted(_math.exp(_random.gauss(mu, sigma)) for _ in range(n_samples))
+        results.append({
+            "median": round(samples[n_samples // 2]),
+            "p10": round(samples[int(n_samples * 0.10)]),
+            "p25": round(samples[int(n_samples * 0.25)]),
+            "p75": round(samples[int(n_samples * 0.75)]),
+            "p90": round(samples[int(n_samples * 0.90)]),
+        })
+    return results
+
+
+@mcp.tool()
+def forecast_japan_inbound(
+    horizon_months: int = 24, n_samples: int = 1000,
+    scenario: dict = None,
+) -> dict:
+    """
+    日本全国インバウンド訪問者数の確率分布予測。
+    PPML重力モデル＋STL季節分解＋ベイズ推論によるモンテカルロシミュレーション。
+    シナリオショック（円安/円高/二国間関係悪化等）で分布全体をシフト可能。
+
+    Args:
+        horizon_months: 予測期間（1-36ヶ月、デフォルト24）
+        n_samples: モンテカルロサンプル数（100-10000、デフォルト1000）
+        scenario: シナリオショック辞書（例: {"exr": 0.10} で円安10%）
+    """
+    try:
+        if horizon_months < 1 or horizon_months > 36:
+            return safe_error_response("horizon_months は 1〜36 の範囲で指定してください")
+        n_samples = max(100, min(n_samples, 10000))
+
+        months = []
+        for i in range(horizon_months):
+            y = 2025 + (i // 12)
+            m = (i % 12) + 1
+            months.append(f"{y}/{str(m).zfill(2)}")
+
+        # TASK1-3モジュール利用可能時
+        if _gravity_model and _seasonal_extractor and _inbound_aggregator:
+            try:
+                country_forecasts = {}
+                for cc in ["CN", "KR", "TW", "US", "AU", "TH", "HK", "SG"]:
+                    try:
+                        gp = _gravity_model.predict(
+                            source_country=cc, months=months,
+                            n_samples=n_samples, scenario=scenario,
+                        )
+                        sa = _seasonal_extractor.adjust(cc, months, gp)
+                        country_forecasts[cc] = sa
+                    except Exception:
+                        continue
+                agg = _inbound_aggregator.aggregate(country_forecasts, months)
+                return {
+                    "status": "ok",
+                    "months": months,
+                    "median": [a["median"] for a in agg],
+                    "p10": [a["p10"] for a in agg],
+                    "p25": [a["p25"] for a in agg],
+                    "p75": [a["p75"] for a in agg],
+                    "p90": [a["p90"] for a in agg],
+                    "by_country": country_forecasts,
+                    "model_info": {"method": "PPML+STL+Bayesian", "n_samples": n_samples},
+                }
+            except Exception:
+                logger.warning("TASK1-3モジュール予測失敗（フォールバック使用）")
+
+        # フォールバック
+        total_base = []
+        for m_str in months:
+            m_idx = int(m_str.split("/")[1]) - 1
+            total = sum(cd[m_idx % 12] for cd in _FB_MONTHLY.values())
+            total_base.append(int(total * 1.12))
+
+        dist = _mcp_montecarlo(total_base, n_samples, scenario)
+
+        return {
+            "status": "fallback",
+            "message": "TASK1-3モジュール未実装（モンテカルロフォールバック）",
+            "months": months,
+            "median": [d["median"] for d in dist],
+            "p10": [d["p10"] for d in dist],
+            "p25": [d["p25"] for d in dist],
+            "p75": [d["p75"] for d in dist],
+            "p90": [d["p90"] for d in dist],
+            "model_info": {"method": "static_montecarlo_fallback", "n_samples": n_samples},
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception:
+        logger.error("forecast_japan_inbound エラー", exc_info=True)
+        return safe_error_response("インバウンド予測中に内部エラーが発生しました")
+
+
+@mcp.tool()
+def forecast_prefecture_inbound(
+    prefecture: str, horizon_months: int = 24,
+    scenario: dict = None,
+) -> dict:
+    """
+    都道府県別インバウンド訪問者数予測。国別シェア x ローカルリスク調整。
+    全国予測を都道府県シェアで按分し、地域固有リスクで補正。
+
+    Args:
+        prefecture: 都道府県名（例: 東京、大阪、京都）
+        horizon_months: 予測期間（1-36ヶ月、デフォルト24）
+        scenario: シナリオショック辞書
+    """
+    try:
+        if horizon_months < 1 or horizon_months > 36:
+            return safe_error_response("horizon_months は 1〜36 の範囲で指定してください")
+
+        months = []
+        for i in range(horizon_months):
+            y = 2025 + (i // 12)
+            m = (i % 12) + 1
+            months.append(f"{y}/{str(m).zfill(2)}")
+
+        # TASK1-3モジュール利用可能時
+        if _gravity_model and _inbound_aggregator:
+            try:
+                national = _inbound_aggregator.get_national_forecast(months, scenario=scenario)
+                ps = _inbound_aggregator.get_prefecture_share(prefecture)
+                lr = _inbound_aggregator.get_local_risk_factor(prefecture)
+                pf = []
+                for md in national:
+                    pf.append({
+                        k: round(v * ps * lr) if isinstance(v, (int, float)) else v
+                        for k, v in md.items()
+                    })
+                return {
+                    "status": "ok",
+                    "prefecture": prefecture,
+                    "months": months,
+                    "median": [p["median"] for p in pf],
+                    "p10": [p["p10"] for p in pf],
+                    "p90": [p["p90"] for p in pf],
+                    "share_pct": round(ps * 100, 2),
+                    "local_risk_factor": round(lr, 3),
+                }
+            except Exception:
+                logger.warning("都道府県予測モジュール失敗（フォールバック使用）")
+
+        # フォールバック
+        pref_share = _FB_PREF_SHARES.get(prefecture, 0.02)
+        total_base = []
+        for m_str in months:
+            m_idx = int(m_str.split("/")[1]) - 1
+            total = sum(cd[m_idx % 12] for cd in _FB_MONTHLY.values())
+            total_base.append(int(total * 1.12))
+
+        pref_base = [round(v * pref_share) for v in total_base]
+        dist = _mcp_montecarlo(pref_base, min(500, 1000), scenario, cv=0.18)
+
+        return {
+            "status": "fallback",
+            "message": "都道府県予測モジュール未実装（フォールバック）",
+            "prefecture": prefecture,
+            "months": months,
+            "median": [d["median"] for d in dist],
+            "p10": [d["p10"] for d in dist],
+            "p25": [d["p25"] for d in dist],
+            "p75": [d["p75"] for d in dist],
+            "p90": [d["p90"] for d in dist],
+            "share_pct": round(pref_share * 100, 2),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception:
+        logger.error("forecast_prefecture_inbound エラー", exc_info=True)
+        return safe_error_response("都道府県別予測中に内部エラーが発生しました")
+
+
 if __name__ == "__main__":
     mcp.run(transport="sse", host="0.0.0.0", port=8001)

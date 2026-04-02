@@ -1,16 +1,23 @@
 """
-観光需要の重力モデル (Gravity Model of Tourism Demand)
-=====================================================
-SCRI v1.3.0 — ROLE-B
+観光需要の PPML 構造重力モデル (Poisson Pseudo-Maximum Likelihood)
+================================================================
+SCRI v1.4.0
 
-数式:
-  log(T_ij) = α + β1·log(GDP_i) + β2·log(GDP_j) + β3·log(DIST_ij)
-            + β4·log(EXR_ij) + β5·log(FLIGHT_ij) + β6·VISA_ij
-            + β7·BILATERAL_ij + β8·log(T_ij,t-1) + ε
+数式 (レベル形式 — 拡張版):
+  T_ij = exp(α + β1·ln(GDP_i) + β2·ln(EXR_ij) + β3·ln(FLIGHT_ij)
+           + β4·VISA_ij + β5·BILATERAL_ij
+           + β6·LEAVE_UTIL_i + β7·OUTBOUND_PROP_i + β8·TMI_i
+           + β9·ln(RESTAURANT_i) + β10·ln(LANG_LEARNERS_i)
+           + Σγ_i·SOURCE_FE + Σδ_t·YEAR_FE) + ε
+
+PPMLの利点:
+  - ゼロ観測値をそのまま扱える（対数変換不要）
+  - Jensen不等式によるバイアスを回避
+  - 異分散に頑健（Silva & Tenreyro 2006）
 
 学術文献:
+  - Silva & Tenreyro (2006) "The Log of Gravity" REStud
   - Lim (1997) "Review of International Tourism Demand Models"
-  - Khadaroo & Seetanah (2007) "Transport Infrastructure and Tourism"
   - Song & Li (2008) "Tourism demand modelling and forecasting"
 """
 
@@ -26,389 +33,810 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# 定数: 首都間大圏距離 (km)
-# ---------------------------------------------------------------------------
-DISTANCE_TO_JAPAN: Dict[str, int] = {
-    "CHN": 2100, "KOR": 1160, "TWN": 2100, "HKG": 2900,
-    "USA": 10800, "THA": 4600, "SGP": 5300, "AUS": 7800,
-    "PHL": 3000, "MYS": 5300, "VNM": 3600, "IND": 5800,
-    "DEU": 9300, "GBR": 9500, "FRA": 9700, "CAN": 10400,
-}
-
-# ---------------------------------------------------------------------------
-# 定数: ビザ政策 (無査証=True)
-# ---------------------------------------------------------------------------
-VISA_FREE: Dict[str, bool] = {
-    "KOR": True, "TWN": True, "HKG": True, "SGP": True, "THA": True,
-    "MYS": True, "USA": True, "AUS": True, "GBR": True, "DEU": True,
-    "FRA": True, "CAN": True, "ITA": True,
-    "CHN": False, "IND": False, "PHL": False, "VNM": False, "IDN": False,
-}
-
-# ---------------------------------------------------------------------------
-# 学術文献ベースの事前係数（データ不足時のフォールバック）
+# 学術文献ベースの事前係数（PPMLが失敗した場合のフォールバック）
 # ---------------------------------------------------------------------------
 COEFFICIENT_PRIORS: Dict[str, float] = {
-    "exchange_rate": 0.85,   # EXRインデックス上昇=円安=訪日有利 → 正
-    "flight_supply": 0.60,
-    "gdp_source": 1.10,
-    "visa_free": 0.35,
-    "bilateral": -0.40,
-    "distance": -0.80,
-    "lagged_visitors": 0.45,
+    "ln_gdp_source":      1.10,   # ソース国GDP弾性値（正）
+    "ln_exr":             0.85,   # 為替レート弾性値（円安→正）
+    "ln_flight":          0.60,   # 航空供給弾性値（正）
+    "visa_free":          0.35,   # ビザ免除ダミー（正）
+    "bilateral_risk":    -0.40,   # 二国間リスク（負）
+    # --- v1.4.0 拡張変数 ---
+    "leave_utilization":  0.25,   # 有給取得率→余暇需要proxy（正）
+    "outbound_propensity":0.30,   # 出国傾向率→海外旅行習慣（正）
+    "travel_momentum":    0.20,   # TMI（正）— TASK1-Bが生成
+    "ln_restaurant":      0.15,   # 日本食レストラン数対数→文化関心（正）
+    "ln_lang_learners":   0.12,   # 日本語学習者数対数→文化関心（正）
 }
 
 # ---------------------------------------------------------------------------
-# 日本のGDP（兆USD）— 被説明変数の回帰に使用
+# v1.4.0 拡張: 余暇proxy + 文化的関心proxy（11カ国ハードコード）
 # ---------------------------------------------------------------------------
-_JAPAN_GDP_TRILLION: Dict[int, float] = {
-    2019: 5.08, 2022: 4.23, 2023: 4.21, 2024: 4.07, 2025: 4.30,
+LEAVE_UTILIZATION: Dict[str, float] = {
+    "KOR": 0.65, "CHN": 0.55, "TWN": 0.70, "USA": 0.75, "AUS": 0.80,
+    "THA": 0.60, "HKG": 0.72, "SGP": 0.78, "DEU": 0.85, "FRA": 0.90, "GBR": 0.82,
+}
+
+OUTBOUND_PROPENSITY: Dict[str, float] = {
+    "KOR": 0.54, "CHN": 0.11, "TWN": 0.72, "USA": 0.29, "AUS": 0.42,
+    "THA": 0.17, "HKG": 1.28, "SGP": 1.55, "DEU": 1.33, "FRA": 1.05, "GBR": 1.07,
+}
+
+RESTAURANT_INDEX: Dict[str, float] = {  # 日本食レストラン指数 (2019=100)
+    "KOR": 110, "CHN": 125, "TWN": 108, "USA": 135, "AUS": 120,
+    "THA": 115, "HKG": 105, "SGP": 112, "DEU": 118, "FRA": 122, "GBR": 128,
+}
+
+# 日本語学習者数（千人）— 国際交流基金2021年調査ベース
+LANGUAGE_LEARNERS: Dict[str, float] = {
+    "KOR": 470, "CHN": 1060, "TWN": 170, "USA": 170, "AUS": 405,
+    "THA": 184, "HKG": 25, "SGP": 50, "DEU": 14, "FRA": 14, "GBR": 20,
+}
+
+# Travel Momentum Index (TMI) — TASK1-Bが生成するが、デフォルト値をハードコード
+# 0-1スケール。COVID回復度×構造トレンド
+TRAVEL_MOMENTUM_DEFAULT: Dict[str, float] = {
+    "KOR": 0.85, "CHN": 0.60, "TWN": 0.80, "USA": 0.72, "AUS": 0.75,
+    "THA": 0.70, "HKG": 0.78, "SGP": 0.82, "DEU": 0.68, "FRA": 0.70, "GBR": 0.73,
 }
 
 # ---------------------------------------------------------------------------
-# 内蔵サンプルパネルデータ: 主要15カ国 × 5年 (2019, 2022-2025)
-# JNTO公開データ + World Bank GDP + 年平均為替レート
-# コロナ期間(2020-2021)を除外
+# ISO2→ISO3 マッピング（タスク仕様のISO2コードとの変換用）
 # ---------------------------------------------------------------------------
-# 各レコード: (country, year, visitors_to_japan[千人], gdp_usd_trillion,
-#              exchange_rate_index, flight_index, visa_free, bilateral_score, distance_km)
-_SAMPLE_PANEL: List[Dict[str, Any]] = [
-    # --- 中国 CHN ---
-    {"country": "CHN", "year": 2019, "visitors": 9594, "gdp": 14.28, "exr": 1.00, "flight": 1.00, "visa": 0, "bilateral": 0.45, "dist": 2100},
-    {"country": "CHN", "year": 2022, "visitors": 189,  "gdp": 17.96, "exr": 1.03, "flight": 0.12, "visa": 0, "bilateral": 0.38, "dist": 2100},
-    {"country": "CHN", "year": 2023, "visitors": 2426, "gdp": 17.79, "exr": 1.05, "flight": 0.55, "visa": 0, "bilateral": 0.35, "dist": 2100},
-    {"country": "CHN", "year": 2024, "visitors": 6924, "gdp": 18.27, "exr": 1.08, "flight": 0.78, "visa": 0, "bilateral": 0.37, "dist": 2100},
-    {"country": "CHN", "year": 2025, "visitors": 5700, "gdp": 18.80, "exr": 1.06, "flight": 0.82, "visa": 0, "bilateral": 0.36, "dist": 2100},
-    # --- 韓国 KOR ---
-    {"country": "KOR", "year": 2019, "visitors": 5585, "gdp": 1.65, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.50, "dist": 1160},
-    {"country": "KOR", "year": 2022, "visitors": 1013, "gdp": 1.67, "exr": 1.10, "flight": 0.35, "visa": 1, "bilateral": 0.55, "dist": 1160},
-    {"country": "KOR", "year": 2023, "visitors": 6958, "gdp": 1.71, "exr": 1.18, "flight": 0.88, "visa": 1, "bilateral": 0.58, "dist": 1160},
-    {"country": "KOR", "year": 2024, "visitors": 8818, "gdp": 1.76, "exr": 1.25, "flight": 0.95, "visa": 1, "bilateral": 0.60, "dist": 1160},
-    {"country": "KOR", "year": 2025, "visitors": 8200, "gdp": 1.80, "exr": 1.22, "flight": 0.97, "visa": 1, "bilateral": 0.60, "dist": 1160},
-    # --- 台湾 TWN ---
-    {"country": "TWN", "year": 2019, "visitors": 4891, "gdp": 0.61, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.72, "dist": 2100},
-    {"country": "TWN", "year": 2022, "visitors": 332,  "gdp": 0.76, "exr": 1.05, "flight": 0.20, "visa": 1, "bilateral": 0.72, "dist": 2100},
-    {"country": "TWN", "year": 2023, "visitors": 4202, "gdp": 0.75, "exr": 1.12, "flight": 0.82, "visa": 1, "bilateral": 0.73, "dist": 2100},
-    {"country": "TWN", "year": 2024, "visitors": 5876, "gdp": 0.80, "exr": 1.18, "flight": 0.92, "visa": 1, "bilateral": 0.74, "dist": 2100},
-    {"country": "TWN", "year": 2025, "visitors": 5500, "gdp": 0.84, "exr": 1.15, "flight": 0.95, "visa": 1, "bilateral": 0.74, "dist": 2100},
-    # --- 香港 HKG ---
-    {"country": "HKG", "year": 2019, "visitors": 2291, "gdp": 0.36, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.65, "dist": 2900},
-    {"country": "HKG", "year": 2022, "visitors": 257,  "gdp": 0.36, "exr": 1.00, "flight": 0.18, "visa": 1, "bilateral": 0.63, "dist": 2900},
-    {"country": "HKG", "year": 2023, "visitors": 2114, "gdp": 0.38, "exr": 1.06, "flight": 0.75, "visa": 1, "bilateral": 0.64, "dist": 2900},
-    {"country": "HKG", "year": 2024, "visitors": 2600, "gdp": 0.40, "exr": 1.10, "flight": 0.88, "visa": 1, "bilateral": 0.65, "dist": 2900},
-    {"country": "HKG", "year": 2025, "visitors": 2500, "gdp": 0.41, "exr": 1.08, "flight": 0.90, "visa": 1, "bilateral": 0.65, "dist": 2900},
-    # --- 米国 USA ---
-    {"country": "USA", "year": 2019, "visitors": 1724, "gdp": 21.43, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.82, "dist": 10800},
-    {"country": "USA", "year": 2022, "visitors": 323,  "gdp": 25.46, "exr": 1.15, "flight": 0.30, "visa": 1, "bilateral": 0.83, "dist": 10800},
-    {"country": "USA", "year": 2023, "visitors": 2045, "gdp": 27.36, "exr": 1.28, "flight": 0.80, "visa": 1, "bilateral": 0.85, "dist": 10800},
-    {"country": "USA", "year": 2024, "visitors": 2529, "gdp": 28.78, "exr": 1.35, "flight": 0.90, "visa": 1, "bilateral": 0.84, "dist": 10800},
-    {"country": "USA", "year": 2025, "visitors": 2400, "gdp": 29.50, "exr": 1.30, "flight": 0.92, "visa": 1, "bilateral": 0.83, "dist": 10800},
-    # --- タイ THA ---
-    {"country": "THA", "year": 2019, "visitors": 1319, "gdp": 0.54, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.78, "dist": 4600},
-    {"country": "THA", "year": 2022, "visitors": 195,  "gdp": 0.50, "exr": 0.95, "flight": 0.22, "visa": 1, "bilateral": 0.78, "dist": 4600},
-    {"country": "THA", "year": 2023, "visitors": 995,  "gdp": 0.51, "exr": 1.05, "flight": 0.70, "visa": 1, "bilateral": 0.80, "dist": 4600},
-    {"country": "THA", "year": 2024, "visitors": 1250, "gdp": 0.53, "exr": 1.12, "flight": 0.85, "visa": 1, "bilateral": 0.80, "dist": 4600},
-    {"country": "THA", "year": 2025, "visitors": 1200, "gdp": 0.55, "exr": 1.08, "flight": 0.88, "visa": 1, "bilateral": 0.80, "dist": 4600},
-    # --- シンガポール SGP ---
-    {"country": "SGP", "year": 2019, "visitors": 492,  "gdp": 0.37, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.75, "dist": 5300},
-    {"country": "SGP", "year": 2022, "visitors": 115,  "gdp": 0.47, "exr": 1.05, "flight": 0.25, "visa": 1, "bilateral": 0.76, "dist": 5300},
-    {"country": "SGP", "year": 2023, "visitors": 469,  "gdp": 0.50, "exr": 1.12, "flight": 0.78, "visa": 1, "bilateral": 0.77, "dist": 5300},
-    {"country": "SGP", "year": 2024, "visitors": 585,  "gdp": 0.52, "exr": 1.18, "flight": 0.90, "visa": 1, "bilateral": 0.78, "dist": 5300},
-    {"country": "SGP", "year": 2025, "visitors": 560,  "gdp": 0.54, "exr": 1.15, "flight": 0.92, "visa": 1, "bilateral": 0.78, "dist": 5300},
-    # --- オーストラリア AUS ---
-    {"country": "AUS", "year": 2019, "visitors": 621,  "gdp": 1.40, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.78, "dist": 7800},
-    {"country": "AUS", "year": 2022, "visitors": 159,  "gdp": 1.68, "exr": 1.02, "flight": 0.20, "visa": 1, "bilateral": 0.80, "dist": 7800},
-    {"country": "AUS", "year": 2023, "visitors": 596,  "gdp": 1.69, "exr": 1.10, "flight": 0.72, "visa": 1, "bilateral": 0.81, "dist": 7800},
-    {"country": "AUS", "year": 2024, "visitors": 750,  "gdp": 1.72, "exr": 1.16, "flight": 0.88, "visa": 1, "bilateral": 0.82, "dist": 7800},
-    {"country": "AUS", "year": 2025, "visitors": 720,  "gdp": 1.75, "exr": 1.12, "flight": 0.90, "visa": 1, "bilateral": 0.82, "dist": 7800},
-    # --- フィリピン PHL ---
-    {"country": "PHL", "year": 2019, "visitors": 613,  "gdp": 0.38, "exr": 1.00, "flight": 1.00, "visa": 0, "bilateral": 0.70, "dist": 3000},
-    {"country": "PHL", "year": 2022, "visitors": 118,  "gdp": 0.40, "exr": 0.98, "flight": 0.18, "visa": 0, "bilateral": 0.70, "dist": 3000},
-    {"country": "PHL", "year": 2023, "visitors": 563,  "gdp": 0.44, "exr": 1.03, "flight": 0.72, "visa": 0, "bilateral": 0.72, "dist": 3000},
-    {"country": "PHL", "year": 2024, "visitors": 700,  "gdp": 0.47, "exr": 1.08, "flight": 0.85, "visa": 0, "bilateral": 0.73, "dist": 3000},
-    {"country": "PHL", "year": 2025, "visitors": 670,  "gdp": 0.49, "exr": 1.05, "flight": 0.87, "visa": 0, "bilateral": 0.73, "dist": 3000},
-    # --- マレーシア MYS ---
-    {"country": "MYS", "year": 2019, "visitors": 502,  "gdp": 0.36, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.72, "dist": 5300},
-    {"country": "MYS", "year": 2022, "visitors": 62,   "gdp": 0.41, "exr": 0.96, "flight": 0.15, "visa": 1, "bilateral": 0.72, "dist": 5300},
-    {"country": "MYS", "year": 2023, "visitors": 412,  "gdp": 0.40, "exr": 1.05, "flight": 0.68, "visa": 1, "bilateral": 0.74, "dist": 5300},
-    {"country": "MYS", "year": 2024, "visitors": 530,  "gdp": 0.42, "exr": 1.12, "flight": 0.85, "visa": 1, "bilateral": 0.75, "dist": 5300},
-    {"country": "MYS", "year": 2025, "visitors": 510,  "gdp": 0.44, "exr": 1.08, "flight": 0.87, "visa": 1, "bilateral": 0.75, "dist": 5300},
-    # --- ベトナム VNM ---
-    {"country": "VNM", "year": 2019, "visitors": 495,  "gdp": 0.26, "exr": 1.00, "flight": 1.00, "visa": 0, "bilateral": 0.72, "dist": 3600},
-    {"country": "VNM", "year": 2022, "visitors": 72,   "gdp": 0.41, "exr": 0.92, "flight": 0.15, "visa": 0, "bilateral": 0.73, "dist": 3600},
-    {"country": "VNM", "year": 2023, "visitors": 375,  "gdp": 0.43, "exr": 0.98, "flight": 0.62, "visa": 0, "bilateral": 0.74, "dist": 3600},
-    {"country": "VNM", "year": 2024, "visitors": 520,  "gdp": 0.47, "exr": 1.05, "flight": 0.80, "visa": 0, "bilateral": 0.75, "dist": 3600},
-    {"country": "VNM", "year": 2025, "visitors": 500,  "gdp": 0.50, "exr": 1.02, "flight": 0.82, "visa": 0, "bilateral": 0.75, "dist": 3600},
-    # --- インド IND ---
-    {"country": "IND", "year": 2019, "visitors": 175,  "gdp": 2.87, "exr": 1.00, "flight": 1.00, "visa": 0, "bilateral": 0.65, "dist": 5800},
-    {"country": "IND", "year": 2022, "visitors": 33,   "gdp": 3.39, "exr": 0.92, "flight": 0.18, "visa": 0, "bilateral": 0.66, "dist": 5800},
-    {"country": "IND", "year": 2023, "visitors": 157,  "gdp": 3.57, "exr": 0.98, "flight": 0.60, "visa": 0, "bilateral": 0.68, "dist": 5800},
-    {"country": "IND", "year": 2024, "visitors": 220,  "gdp": 3.89, "exr": 1.03, "flight": 0.78, "visa": 0, "bilateral": 0.70, "dist": 5800},
-    {"country": "IND", "year": 2025, "visitors": 210,  "gdp": 4.10, "exr": 1.00, "flight": 0.80, "visa": 0, "bilateral": 0.70, "dist": 5800},
-    # --- ドイツ DEU ---
-    {"country": "DEU", "year": 2019, "visitors": 236,  "gdp": 3.86, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.75, "dist": 9300},
-    {"country": "DEU", "year": 2022, "visitors": 52,   "gdp": 4.07, "exr": 0.95, "flight": 0.22, "visa": 1, "bilateral": 0.76, "dist": 9300},
-    {"country": "DEU", "year": 2023, "visitors": 212,  "gdp": 4.46, "exr": 1.08, "flight": 0.72, "visa": 1, "bilateral": 0.77, "dist": 9300},
-    {"country": "DEU", "year": 2024, "visitors": 275,  "gdp": 4.52, "exr": 1.15, "flight": 0.88, "visa": 1, "bilateral": 0.78, "dist": 9300},
-    {"country": "DEU", "year": 2025, "visitors": 260,  "gdp": 4.55, "exr": 1.10, "flight": 0.90, "visa": 1, "bilateral": 0.78, "dist": 9300},
-    # --- 英国 GBR ---
-    {"country": "GBR", "year": 2019, "visitors": 424,  "gdp": 2.83, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.78, "dist": 9500},
-    {"country": "GBR", "year": 2022, "visitors": 83,   "gdp": 3.07, "exr": 1.02, "flight": 0.20, "visa": 1, "bilateral": 0.79, "dist": 9500},
-    {"country": "GBR", "year": 2023, "visitors": 380,  "gdp": 3.34, "exr": 1.12, "flight": 0.75, "visa": 1, "bilateral": 0.80, "dist": 9500},
-    {"country": "GBR", "year": 2024, "visitors": 480,  "gdp": 3.50, "exr": 1.20, "flight": 0.88, "visa": 1, "bilateral": 0.80, "dist": 9500},
-    {"country": "GBR", "year": 2025, "visitors": 460,  "gdp": 3.55, "exr": 1.16, "flight": 0.90, "visa": 1, "bilateral": 0.80, "dist": 9500},
-    # --- フランス FRA ---
-    {"country": "FRA", "year": 2019, "visitors": 336,  "gdp": 2.72, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.74, "dist": 9700},
-    {"country": "FRA", "year": 2022, "visitors": 68,   "gdp": 2.78, "exr": 0.95, "flight": 0.18, "visa": 1, "bilateral": 0.75, "dist": 9700},
-    {"country": "FRA", "year": 2023, "visitors": 305,  "gdp": 3.05, "exr": 1.08, "flight": 0.72, "visa": 1, "bilateral": 0.76, "dist": 9700},
-    {"country": "FRA", "year": 2024, "visitors": 390,  "gdp": 3.13, "exr": 1.15, "flight": 0.86, "visa": 1, "bilateral": 0.76, "dist": 9700},
-    {"country": "FRA", "year": 2025, "visitors": 375,  "gdp": 3.18, "exr": 1.10, "flight": 0.88, "visa": 1, "bilateral": 0.76, "dist": 9700},
-    # --- カナダ CAN ---
-    {"country": "CAN", "year": 2019, "visitors": 375,  "gdp": 1.74, "exr": 1.00, "flight": 1.00, "visa": 1, "bilateral": 0.76, "dist": 10400},
-    {"country": "CAN", "year": 2022, "visitors": 70,   "gdp": 2.14, "exr": 1.05, "flight": 0.18, "visa": 1, "bilateral": 0.77, "dist": 10400},
-    {"country": "CAN", "year": 2023, "visitors": 338,  "gdp": 2.12, "exr": 1.15, "flight": 0.70, "visa": 1, "bilateral": 0.78, "dist": 10400},
-    {"country": "CAN", "year": 2024, "visitors": 430,  "gdp": 2.18, "exr": 1.22, "flight": 0.85, "visa": 1, "bilateral": 0.78, "dist": 10400},
-    {"country": "CAN", "year": 2025, "visitors": 410,  "gdp": 2.22, "exr": 1.18, "flight": 0.87, "visa": 1, "bilateral": 0.78, "dist": 10400},
+_ISO2_TO_ISO3: Dict[str, str] = {
+    "CN": "CHN", "KR": "KOR", "TW": "TWN", "US": "USA", "AU": "AUS",
+    "TH": "THA", "HK": "HKG", "SG": "SGP", "DE": "DEU", "FR": "FRA",
+    "GB": "GBR",
+}
+_ISO3_TO_ISO2: Dict[str, str] = {v: k for k, v in _ISO2_TO_ISO3.items()}
+
+def _normalize_country(code: str) -> str:
+    """ISO2/ISO3どちらでも受け付けてISO2に正規化"""
+    if code in _ISO2_TO_ISO3:
+        return code
+    if code in _ISO3_TO_ISO2:
+        return _ISO3_TO_ISO2[code]
+    return code
+
+# ---------------------------------------------------------------------------
+# 内蔵パネルデータ: 11カ国 × 2015-2019 + 2022-2024（年次、千人単位）
+# JNTO公開データ / IMF WEO / BOJ為替統計
+# コロナ期間 (2020-2021) は除外
+# ---------------------------------------------------------------------------
+# 各レコード: country(ISO2), year, visitors(千人), gdp_source(10億USD),
+#             exr(ソース通貨/100JPY), flight_supply(2019=100), visa_free(0/1),
+#             bilateral_risk(0-100)
+
+_BUILTIN_PANEL: List[Dict[str, Any]] = [
+    # --- 中国 CN ---
+    {"country": "CN", "year": 2015, "visitors": 4994, "gdp_source": 11016, "exr": 5.73, "flight": 82, "visa_free": 0, "bilateral_risk": 52},
+    {"country": "CN", "year": 2016, "visitors": 6373, "gdp_source": 11233, "exr": 6.19, "flight": 88, "visa_free": 0, "bilateral_risk": 48},
+    {"country": "CN", "year": 2017, "visitors": 7356, "gdp_source": 12310, "exr": 5.95, "flight": 92, "visa_free": 0, "bilateral_risk": 45},
+    {"country": "CN", "year": 2018, "visitors": 8380, "gdp_source": 13895, "exr": 5.82, "flight": 96, "visa_free": 0, "bilateral_risk": 43},
+    {"country": "CN", "year": 2019, "visitors": 9594, "gdp_source": 14280, "exr": 5.92, "flight": 100, "visa_free": 0, "bilateral_risk": 45},
+    {"country": "CN", "year": 2022, "visitors": 189,  "gdp_source": 17960, "exr": 5.50, "flight": 12, "visa_free": 0, "bilateral_risk": 55},
+    {"country": "CN", "year": 2023, "visitors": 2426, "gdp_source": 17790, "exr": 5.28, "flight": 55, "visa_free": 0, "bilateral_risk": 50},
+    {"country": "CN", "year": 2024, "visitors": 6924, "gdp_source": 18270, "exr": 5.10, "flight": 78, "visa_free": 0, "bilateral_risk": 48},
+    # --- 韓国 KR ---
+    {"country": "KR", "year": 2015, "visitors": 4002, "gdp_source": 1383, "exr": 9.30, "flight": 80, "visa_free": 1, "bilateral_risk": 55},
+    {"country": "KR", "year": 2016, "visitors": 5090, "gdp_source": 1415, "exr": 9.50, "flight": 85, "visa_free": 1, "bilateral_risk": 50},
+    {"country": "KR", "year": 2017, "visitors": 7140, "gdp_source": 1531, "exr": 8.80, "flight": 90, "visa_free": 1, "bilateral_risk": 48},
+    {"country": "KR", "year": 2018, "visitors": 7539, "gdp_source": 1619, "exr": 8.90, "flight": 95, "visa_free": 1, "bilateral_risk": 45},
+    {"country": "KR", "year": 2019, "visitors": 5585, "gdp_source": 1647, "exr": 9.10, "flight": 100, "visa_free": 1, "bilateral_risk": 50},
+    {"country": "KR", "year": 2022, "visitors": 1013, "gdp_source": 1665, "exr": 7.60, "flight": 35, "visa_free": 1, "bilateral_risk": 52},
+    {"country": "KR", "year": 2023, "visitors": 6958, "gdp_source": 1713, "exr": 7.50, "flight": 88, "visa_free": 1, "bilateral_risk": 42},
+    {"country": "KR", "year": 2024, "visitors": 8818, "gdp_source": 1760, "exr": 7.20, "flight": 95, "visa_free": 1, "bilateral_risk": 40},
+    # --- 台湾 TW ---
+    {"country": "TW", "year": 2015, "visitors": 3677, "gdp_source": 534, "exr": 3.70, "flight": 82, "visa_free": 1, "bilateral_risk": 28},
+    {"country": "TW", "year": 2016, "visitors": 4168, "gdp_source": 543, "exr": 3.50, "flight": 86, "visa_free": 1, "bilateral_risk": 27},
+    {"country": "TW", "year": 2017, "visitors": 4564, "gdp_source": 575, "exr": 3.60, "flight": 90, "visa_free": 1, "bilateral_risk": 26},
+    {"country": "TW", "year": 2018, "visitors": 4757, "gdp_source": 590, "exr": 3.60, "flight": 95, "visa_free": 1, "bilateral_risk": 26},
+    {"country": "TW", "year": 2019, "visitors": 4891, "gdp_source": 612, "exr": 3.50, "flight": 100, "visa_free": 1, "bilateral_risk": 27},
+    {"country": "TW", "year": 2022, "visitors": 332,  "gdp_source": 762, "exr": 3.30, "flight": 20, "visa_free": 1, "bilateral_risk": 30},
+    {"country": "TW", "year": 2023, "visitors": 4202, "gdp_source": 751, "exr": 3.20, "flight": 82, "visa_free": 1, "bilateral_risk": 28},
+    {"country": "TW", "year": 2024, "visitors": 5876, "gdp_source": 800, "exr": 3.10, "flight": 92, "visa_free": 1, "bilateral_risk": 27},
+    # --- 米国 US ---
+    {"country": "US", "year": 2015, "visitors": 1033, "gdp_source": 18221, "exr": 0.83, "flight": 85, "visa_free": 1, "bilateral_risk": 18},
+    {"country": "US", "year": 2016, "visitors": 1243, "gdp_source": 18745, "exr": 0.92, "flight": 88, "visa_free": 1, "bilateral_risk": 17},
+    {"country": "US", "year": 2017, "visitors": 1375, "gdp_source": 19543, "exr": 0.89, "flight": 92, "visa_free": 1, "bilateral_risk": 17},
+    {"country": "US", "year": 2018, "visitors": 1526, "gdp_source": 20580, "exr": 0.91, "flight": 96, "visa_free": 1, "bilateral_risk": 16},
+    {"country": "US", "year": 2019, "visitors": 1724, "gdp_source": 21430, "exr": 0.92, "flight": 100, "visa_free": 1, "bilateral_risk": 17},
+    {"country": "US", "year": 2022, "visitors": 323,  "gdp_source": 25460, "exr": 0.75, "flight": 30, "visa_free": 1, "bilateral_risk": 18},
+    {"country": "US", "year": 2023, "visitors": 2045, "gdp_source": 27360, "exr": 0.71, "flight": 80, "visa_free": 1, "bilateral_risk": 16},
+    {"country": "US", "year": 2024, "visitors": 2529, "gdp_source": 28780, "exr": 0.66, "flight": 90, "visa_free": 1, "bilateral_risk": 17},
+    # --- オーストラリア AU ---
+    {"country": "AU", "year": 2015, "visitors": 377, "gdp_source": 1350, "exr": 0.90, "flight": 82, "visa_free": 1, "bilateral_risk": 20},
+    {"country": "AU", "year": 2016, "visitors": 445, "gdp_source": 1268, "exr": 0.84, "flight": 86, "visa_free": 1, "bilateral_risk": 19},
+    {"country": "AU", "year": 2017, "visitors": 493, "gdp_source": 1390, "exr": 0.86, "flight": 90, "visa_free": 1, "bilateral_risk": 19},
+    {"country": "AU", "year": 2018, "visitors": 552, "gdp_source": 1434, "exr": 0.85, "flight": 95, "visa_free": 1, "bilateral_risk": 18},
+    {"country": "AU", "year": 2019, "visitors": 621, "gdp_source": 1397, "exr": 0.83, "flight": 100, "visa_free": 1, "bilateral_risk": 20},
+    {"country": "AU", "year": 2022, "visitors": 159, "gdp_source": 1680, "exr": 0.80, "flight": 20, "visa_free": 1, "bilateral_risk": 18},
+    {"country": "AU", "year": 2023, "visitors": 596, "gdp_source": 1690, "exr": 0.75, "flight": 72, "visa_free": 1, "bilateral_risk": 17},
+    {"country": "AU", "year": 2024, "visitors": 750, "gdp_source": 1720, "exr": 0.72, "flight": 88, "visa_free": 1, "bilateral_risk": 18},
+    # --- タイ TH ---
+    {"country": "TH", "year": 2015, "visitors": 796, "gdp_source": 401, "exr": 2.97, "flight": 80, "visa_free": 1, "bilateral_risk": 25},
+    {"country": "TH", "year": 2016, "visitors": 901, "gdp_source": 413, "exr": 3.10, "flight": 85, "visa_free": 1, "bilateral_risk": 24},
+    {"country": "TH", "year": 2017, "visitors": 987, "gdp_source": 456, "exr": 3.20, "flight": 90, "visa_free": 1, "bilateral_risk": 23},
+    {"country": "TH", "year": 2018, "visitors": 1132, "gdp_source": 507, "exr": 3.25, "flight": 95, "visa_free": 1, "bilateral_risk": 22},
+    {"country": "TH", "year": 2019, "visitors": 1319, "gdp_source": 544, "exr": 3.30, "flight": 100, "visa_free": 1, "bilateral_risk": 22},
+    {"country": "TH", "year": 2022, "visitors": 195, "gdp_source": 495, "exr": 2.80, "flight": 22, "visa_free": 1, "bilateral_risk": 24},
+    {"country": "TH", "year": 2023, "visitors": 995, "gdp_source": 514, "exr": 2.75, "flight": 70, "visa_free": 1, "bilateral_risk": 22},
+    {"country": "TH", "year": 2024, "visitors": 1250, "gdp_source": 530, "exr": 2.70, "flight": 85, "visa_free": 1, "bilateral_risk": 21},
+    # --- 香港 HK ---
+    {"country": "HK", "year": 2015, "visitors": 1524, "gdp_source": 310, "exr": 0.65, "flight": 82, "visa_free": 1, "bilateral_risk": 22},
+    {"country": "HK", "year": 2016, "visitors": 1839, "gdp_source": 321, "exr": 0.70, "flight": 86, "visa_free": 1, "bilateral_risk": 21},
+    {"country": "HK", "year": 2017, "visitors": 2231, "gdp_source": 341, "exr": 0.72, "flight": 90, "visa_free": 1, "bilateral_risk": 20},
+    {"country": "HK", "year": 2018, "visitors": 2208, "gdp_source": 362, "exr": 0.71, "flight": 95, "visa_free": 1, "bilateral_risk": 20},
+    {"country": "HK", "year": 2019, "visitors": 2291, "gdp_source": 363, "exr": 0.72, "flight": 100, "visa_free": 1, "bilateral_risk": 22},
+    {"country": "HK", "year": 2022, "visitors": 257, "gdp_source": 360, "exr": 0.60, "flight": 18, "visa_free": 1, "bilateral_risk": 25},
+    {"country": "HK", "year": 2023, "visitors": 2114, "gdp_source": 383, "exr": 0.58, "flight": 75, "visa_free": 1, "bilateral_risk": 23},
+    {"country": "HK", "year": 2024, "visitors": 2600, "gdp_source": 400, "exr": 0.56, "flight": 88, "visa_free": 1, "bilateral_risk": 22},
+    # --- シンガポール SG ---
+    {"country": "SG", "year": 2015, "visitors": 308, "gdp_source": 307, "exr": 0.82, "flight": 80, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "SG", "year": 2016, "visitors": 362, "gdp_source": 320, "exr": 0.78, "flight": 85, "visa_free": 1, "bilateral_risk": 14},
+    {"country": "SG", "year": 2017, "visitors": 404, "gdp_source": 342, "exr": 0.80, "flight": 90, "visa_free": 1, "bilateral_risk": 14},
+    {"country": "SG", "year": 2018, "visitors": 437, "gdp_source": 373, "exr": 0.81, "flight": 95, "visa_free": 1, "bilateral_risk": 13},
+    {"country": "SG", "year": 2019, "visitors": 492, "gdp_source": 372, "exr": 0.80, "flight": 100, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "SG", "year": 2022, "visitors": 115, "gdp_source": 467, "exr": 0.72, "flight": 25, "visa_free": 1, "bilateral_risk": 14},
+    {"country": "SG", "year": 2023, "visitors": 469, "gdp_source": 497, "exr": 0.70, "flight": 78, "visa_free": 1, "bilateral_risk": 13},
+    {"country": "SG", "year": 2024, "visitors": 585, "gdp_source": 520, "exr": 0.68, "flight": 90, "visa_free": 1, "bilateral_risk": 13},
+    # --- ドイツ DE ---
+    {"country": "DE", "year": 2015, "visitors": 162, "gdp_source": 3358, "exr": 0.83, "flight": 80, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "DE", "year": 2016, "visitors": 183, "gdp_source": 3467, "exr": 0.85, "flight": 85, "visa_free": 1, "bilateral_risk": 14},
+    {"country": "DE", "year": 2017, "visitors": 197, "gdp_source": 3665, "exr": 0.87, "flight": 90, "visa_free": 1, "bilateral_risk": 14},
+    {"country": "DE", "year": 2018, "visitors": 215, "gdp_source": 3950, "exr": 0.86, "flight": 95, "visa_free": 1, "bilateral_risk": 13},
+    {"country": "DE", "year": 2019, "visitors": 236, "gdp_source": 3861, "exr": 0.84, "flight": 100, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "DE", "year": 2022, "visitors": 52,  "gdp_source": 4072, "exr": 0.72, "flight": 22, "visa_free": 1, "bilateral_risk": 14},
+    {"country": "DE", "year": 2023, "visitors": 212, "gdp_source": 4457, "exr": 0.68, "flight": 72, "visa_free": 1, "bilateral_risk": 13},
+    {"country": "DE", "year": 2024, "visitors": 275, "gdp_source": 4520, "exr": 0.65, "flight": 88, "visa_free": 1, "bilateral_risk": 13},
+    # --- フランス FR ---
+    {"country": "FR", "year": 2015, "visitors": 214, "gdp_source": 2438, "exr": 0.83, "flight": 80, "visa_free": 1, "bilateral_risk": 18},
+    {"country": "FR", "year": 2016, "visitors": 254, "gdp_source": 2465, "exr": 0.85, "flight": 85, "visa_free": 1, "bilateral_risk": 17},
+    {"country": "FR", "year": 2017, "visitors": 269, "gdp_source": 2586, "exr": 0.87, "flight": 90, "visa_free": 1, "bilateral_risk": 16},
+    {"country": "FR", "year": 2018, "visitors": 304, "gdp_source": 2790, "exr": 0.86, "flight": 95, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "FR", "year": 2019, "visitors": 336, "gdp_source": 2716, "exr": 0.84, "flight": 100, "visa_free": 1, "bilateral_risk": 18},
+    {"country": "FR", "year": 2022, "visitors": 68,  "gdp_source": 2780, "exr": 0.72, "flight": 18, "visa_free": 1, "bilateral_risk": 16},
+    {"country": "FR", "year": 2023, "visitors": 305, "gdp_source": 3050, "exr": 0.68, "flight": 72, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "FR", "year": 2024, "visitors": 390, "gdp_source": 3130, "exr": 0.65, "flight": 86, "visa_free": 1, "bilateral_risk": 15},
+    # --- 英国 GB ---
+    {"country": "GB", "year": 2015, "visitors": 258, "gdp_source": 2886, "exr": 0.55, "flight": 80, "visa_free": 1, "bilateral_risk": 16},
+    {"country": "GB", "year": 2016, "visitors": 292, "gdp_source": 2660, "exr": 0.48, "flight": 85, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "GB", "year": 2017, "visitors": 328, "gdp_source": 2625, "exr": 0.52, "flight": 90, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "GB", "year": 2018, "visitors": 374, "gdp_source": 2828, "exr": 0.53, "flight": 95, "visa_free": 1, "bilateral_risk": 14},
+    {"country": "GB", "year": 2019, "visitors": 424, "gdp_source": 2830, "exr": 0.52, "flight": 100, "visa_free": 1, "bilateral_risk": 16},
+    {"country": "GB", "year": 2022, "visitors": 83,  "gdp_source": 3070, "exr": 0.45, "flight": 20, "visa_free": 1, "bilateral_risk": 15},
+    {"country": "GB", "year": 2023, "visitors": 380, "gdp_source": 3340, "exr": 0.44, "flight": 75, "visa_free": 1, "bilateral_risk": 14},
+    {"country": "GB", "year": 2024, "visitors": 480, "gdp_source": 3500, "exr": 0.42, "flight": 88, "visa_free": 1, "bilateral_risk": 14},
 ]
 
+# 直近年データ（将来予測のベースライン用）
+_LATEST_YEAR: Dict[str, Dict[str, Any]] = {}
+for _r in _BUILTIN_PANEL:
+    _c = _r["country"]
+    if _c not in _LATEST_YEAR or _r["year"] > _LATEST_YEAR[_c]["year"]:
+        _LATEST_YEAR[_c] = dict(_r)
+
 
 # ---------------------------------------------------------------------------
-# データクラス: 予測結果
+# データクラス
 # ---------------------------------------------------------------------------
+@dataclass
+class FitResult:
+    """PPML推定結果"""
+    method: str
+    n_obs: int
+    coefficients: Dict[str, float]
+    std_errors: Dict[str, float]
+    p_values: Dict[str, float]
+    pseudo_r2: float
+    aic: float
+    bic: float
+    converged: bool
+    summary_text: str = ""
+
+
+@dataclass
+class BayesianForecast:
+    """ベイジアン（モンテカルロ）予測結果"""
+    country: str
+    months: List[str]           # "2026-01" 形式
+    median: List[float]         # 中央値（千人）
+    p10: List[float]
+    p25: List[float]
+    p75: List[float]
+    p90: List[float]
+    samples: Optional[np.ndarray] = None  # shape (n_samples, n_months)
+
+
 @dataclass
 class GravityPrediction:
-    """重力モデル予測結果"""
+    """後方互換: 旧形式の予測結果"""
     source_country: str
-    baseline_forecast: float          # 予測訪日者数（千人）
-    elasticities: Dict[str, float]    # 各変数の弾性値
-    r_squared: float                  # モデルのR²
-    model_method: str                 # 推定手法
-    scenario_forecast: Optional[float] = None  # シナリオ予測値
-    scenario_delta_pct: Optional[float] = None # シナリオ変化率
-
-
-@dataclass
-class ChangeDecomposition:
-    """変化の要因分解結果"""
-    source_country: str
-    total_change_pct: float
-    components: Dict[str, float]      # 要因別寄与率(%)
-    period: str
-
-
-@dataclass
-class MarketShareResult:
-    """市場シェアモデル結果"""
-    source_country: str
-    japan_share: float                # 日本のシェア(0-1)
-    competitor_shares: Dict[str, float]
-    japan_utility: float
+    baseline_forecast: float
+    elasticities: Dict[str, float]
+    r_squared: float
+    model_method: str
+    scenario_forecast: Optional[float] = None
+    scenario_delta_pct: Optional[float] = None
 
 
 # ===========================================================================
-# メインクラス
+# メインクラス: PPML構造重力モデル
 # ===========================================================================
 class TourismGravityModel:
     """
-    観光需要の重力モデル
+    PPML構造重力モデルによる訪日観光需要推定
 
-    log(T_ij) = α + β1·log(GDP_i) + β2·log(GDP_j) + β3·log(DIST_ij)
-              + β4·log(EXR_ij) + β5·log(FLIGHT_ij) + β6·VISA_ij
-              + β7·BILATERAL_ij + β8·log(T_ij,t-1) + ε
+    - statsmodels Poisson GLM (PPML) でゼロ観測値対応
+    - HC3ロバスト標準誤差
+    - ソース国固定効果 + 年固定効果
+    - フォールバック: 学術文献ベースの事前係数
     """
 
+    # 説明変数の列名（v1.4.0拡張: 余暇proxy + 文化関心proxy）
+    _FEATURE_NAMES = [
+        "ln_gdp_source", "ln_exr", "ln_flight", "visa_free", "bilateral_risk",
+        "leave_utilization", "outbound_propensity", "travel_momentum",
+        "ln_restaurant", "ln_lang_learners",
+    ]
+
     def __init__(self) -> None:
-        # 推定結果
         self._coefficients: Optional[Dict[str, float]] = None
+        self._vcov: Optional[np.ndarray] = None     # 分散共分散行列
+        self._param_names: List[str] = []            # パラメータ名（FE含む）
         self._intercept: float = 0.0
-        self._r_squared: float = 0.0
-        self._adj_r_squared: float = 0.0
-        self._model_method: str = "not_fitted"
-        self._ols_result: Any = None  # statsmodels RegressionResults
+        self._pseudo_r2: float = 0.0
         self._fitted: bool = False
-        # 変数名マッピング（回帰列名→意味名）
-        self._var_names: List[str] = [
-            "gdp_source", "gdp_japan", "distance",
-            "exchange_rate", "flight_supply",
-            "visa_free", "bilateral", "lagged_visitors",
-        ]
+        self._model_method: str = "not_fitted"
+        self._glm_result: Any = None
+        self._n_obs: int = 0
+        # 固定効果ダミーの参照カテゴリ
+        self._ref_country: str = "CN"      # ソース国FEの参照
+        self._ref_year: int = 2019         # 年FEの参照
+        self._source_countries: List[str] = []
+        self._years: List[int] = []
 
     # -----------------------------------------------------------------------
-    # パネルデータ→行列変換
+    # パネルデータ → デザイン行列
     # -----------------------------------------------------------------------
     @staticmethod
-    def _build_panel() -> Tuple[np.ndarray, np.ndarray, List[Dict]]:
+    def _build_design_matrix(
+        panel: List[Dict[str, Any]],
+        ref_country: str = "CN",
+        ref_year: int = 2019,
+    ) -> Tuple[np.ndarray, np.ndarray, List[str], List[str], List[int]]:
         """
-        内蔵パネルデータから回帰用の (y, X) 行列を構築。
-        ラグ付き被説明変数を含めるため、各国の先頭1年分は除外。
+        パネルデータからPPML用の (y, X) 行列を構築。
 
         Returns:
-            y: log(visitors) — shape (N,)
-            X: 説明変数行列 — shape (N, 8)
-            meta: 対応するメタ情報
+            y: 訪問者数（レベル、千人） shape (N,)
+            X: デザイン行列 shape (N, K) ※定数項含む
+            col_names: 列名リスト
+            countries: 固有の国コード
+            years: 固有の年
         """
-        # 国別にソート
-        from collections import defaultdict
-        by_country: Dict[str, List[Dict]] = defaultdict(list)
-        for row in _SAMPLE_PANEL:
-            by_country[row["country"]].append(row)
-        for k in by_country:
-            by_country[k].sort(key=lambda r: r["year"])
+        # 固有の国・年を取得
+        countries = sorted(set(r["country"] for r in panel))
+        years = sorted(set(r["year"] for r in panel))
 
-        y_list: List[float] = []
-        X_list: List[List[float]] = []
-        meta: List[Dict] = []
+        # FEダミーの対象（参照カテゴリを除く）
+        fe_countries = [c for c in countries if c != ref_country]
+        fe_years = [y for y in years if y != ref_year]
 
-        for country, rows in by_country.items():
-            for i in range(1, len(rows)):
-                cur = rows[i]
-                prev = rows[i - 1]
-                # 訪問者数が0以下の場合はスキップ
-                if cur["visitors"] <= 0 or prev["visitors"] <= 0:
-                    continue
+        y_list = []
+        X_list = []
 
-                japan_gdp = _JAPAN_GDP_TRILLION.get(cur["year"], 4.20)
+        for row in panel:
+            vis = row["visitors"]
+            if vis < 0:
+                continue
+            gdp = max(row["gdp_source"], 1.0)
+            exr = max(row["exr"], 0.001)
+            flt = max(row["flight"], 1.0)
 
-                y_list.append(math.log(cur["visitors"]))
-                X_list.append([
-                    math.log(max(cur["gdp"], 0.01)),       # log(GDP_i)
-                    math.log(japan_gdp),                     # log(GDP_j)
-                    math.log(cur["dist"]),                   # log(DIST)
-                    math.log(max(cur["exr"], 0.01)),        # log(EXR)
-                    math.log(max(cur["flight"], 0.01)),     # log(FLIGHT)
-                    float(cur["visa"]),                      # VISA (ダミー)
-                    cur["bilateral"],                        # BILATERAL
-                    math.log(prev["visitors"]),              # log(T_{t-1})
-                ])
-                meta.append({"country": country, "year": cur["year"]})
+            # ISO2→ISO3 変換（拡張データ辞書はISO3キー）
+            ctry_iso2 = row["country"]
+            ctry_iso3 = _ISO2_TO_ISO3.get(ctry_iso2, ctry_iso2)
 
-        return np.array(y_list), np.array(X_list), meta
+            # v1.4.0 拡張変数の取得
+            leave_util = row.get("leave_utilization",
+                                 LEAVE_UTILIZATION.get(ctry_iso3, 0.70))
+            outbound_prop = row.get("outbound_propensity",
+                                    OUTBOUND_PROPENSITY.get(ctry_iso3, 0.50))
+            tmi = row.get("travel_momentum",
+                          TRAVEL_MOMENTUM_DEFAULT.get(ctry_iso3, 0.70))
+            restaurant = row.get("restaurant_index",
+                                 RESTAURANT_INDEX.get(ctry_iso3, 100))
+            lang_learners = row.get("lang_learners",
+                                    LANGUAGE_LEARNERS.get(ctry_iso3, 50))
+
+            features = [
+                1.0,                                  # 定数項
+                math.log(gdp),                        # ln_gdp_source
+                math.log(exr),                        # ln_exr
+                math.log(flt),                        # ln_flight
+                float(row["visa_free"]),              # visa_free
+                row["bilateral_risk"] / 100.0,        # bilateral_risk (0-1に正規化)
+                # v1.4.0 拡張変数
+                leave_util,                           # leave_utilization (0-1)
+                outbound_prop,                        # outbound_propensity
+                tmi,                                  # travel_momentum (0-1)
+                math.log(max(restaurant, 1.0)),       # ln_restaurant
+                math.log(max(lang_learners, 1.0)),    # ln_lang_learners
+            ]
+            # ソース国固定効果
+            for c in fe_countries:
+                features.append(1.0 if row["country"] == c else 0.0)
+            # 年固定効果
+            for yr in fe_years:
+                features.append(1.0 if row["year"] == yr else 0.0)
+
+            y_list.append(float(vis))
+            X_list.append(features)
+
+        col_names = ["const", "ln_gdp_source", "ln_exr", "ln_flight",
+                      "visa_free", "bilateral_risk",
+                      "leave_utilization", "outbound_propensity",
+                      "travel_momentum", "ln_restaurant", "ln_lang_learners"]
+        col_names += [f"fe_{c}" for c in fe_countries]
+        col_names += [f"fe_{yr}" for yr in fe_years]
+
+        return (np.array(y_list), np.array(X_list), col_names,
+                countries, years)
 
     # -----------------------------------------------------------------------
     # fit()
     # -----------------------------------------------------------------------
-    def fit(
-        self,
-        training_data: Optional[List[Dict[str, Any]]] = None,
-        method: str = "OLS",
-    ) -> Dict[str, Any]:
+    def fit(self, panel_data: Optional[List[Dict[str, Any]]] = None) -> FitResult:
         """
-        重力モデルをOLSで推定する。
+        PPML（Poisson GLM）で重力モデルを推定する。
 
         Args:
-            training_data: 外部パネルデータ（Noneの場合は内蔵データ使用）
-            method: 推定手法（"OLS"のみ現在サポート）
+            panel_data: 外部パネルデータ。Noneなら内蔵データ使用。
 
         Returns:
-            推定結果の辞書
+            FitResult
         """
-        try:
-            import statsmodels.api as sm
-        except ImportError:
-            logger.warning("statsmodels未インストール — 事前係数をフォールバック使用")
+        data = panel_data if panel_data is not None else _BUILTIN_PANEL
+
+        if len(data) < 10:
+            logger.warning("訓練データ不足 (N=%d) — 事前係数フォールバック", len(data))
             return self._fallback_priors()
 
-        # パネルデータ構築
-        if training_data is not None:
-            # 外部データが提供された場合、同じフォーマットに変換
-            # (将来拡張用、現時点では内蔵データと同じ構造を想定)
-            global _SAMPLE_PANEL
-            original = _SAMPLE_PANEL
-            _SAMPLE_PANEL = training_data
-            y, X, meta = self._build_panel()
-            _SAMPLE_PANEL = original
-        else:
-            y, X, meta = self._build_panel()
+        y, X, col_names, countries, years = self._build_design_matrix(
+            data, self._ref_country, self._ref_year
+        )
+        self._source_countries = list(countries)
+        self._years = list(years)
 
         if len(y) < 10:
-            logger.warning("訓練データ不足 (N=%d) — 事前係数をフォールバック使用", len(y))
+            logger.warning("有効観測数不足 (N=%d) — 事前係数フォールバック", len(y))
             return self._fallback_priors()
-
-        # 定数項を追加
-        X_const = sm.add_constant(X)
 
         try:
-            model = sm.OLS(y, X_const)
-            results = model.fit()
-            self._ols_result = results
+            import statsmodels.api as sm
+            from statsmodels.genmod.families import Poisson
 
-            # 係数を保存
-            params = results.params
+            # PPML = Poisson GLM + log link
+            model = sm.GLM(y, X, family=Poisson())
+            result = model.fit(cov_type="HC3", maxiter=100)
+
+            self._glm_result = result
+            self._param_names = col_names
+            self._n_obs = len(y)
+
+            # 係数の保存
+            params = result.params
             self._intercept = float(params[0])
             self._coefficients = {}
-            for i, name in enumerate(self._var_names):
-                self._coefficients[name] = float(params[i + 1])
+            for i, name in enumerate(col_names):
+                self._coefficients[name] = float(params[i])
 
-            self._r_squared = float(results.rsquared)
-            self._adj_r_squared = float(results.rsquared_adj)
-            self._model_method = method
+            # 分散共分散行列
+            self._vcov = np.array(result.cov_params())
+
+            # McFadden疑似R²
+            self._pseudo_r2 = self._calc_pseudo_r2(y, X, result)
+            self._model_method = "PPML_HC3"
             self._fitted = True
 
-            # 係数の妥当性チェック（学術的に合理的な範囲か確認）
-            self._validate_coefficients()
+            # 標準誤差・p値
+            se_dict = {col_names[i]: float(result.bse[i]) for i in range(len(col_names))}
+            pv_dict = {col_names[i]: float(result.pvalues[i]) for i in range(len(col_names))}
 
             logger.info(
-                "重力モデル推定完了: R²=%.4f, Adj.R²=%.4f, N=%d",
-                self._r_squared, self._adj_r_squared, len(y),
+                "PPML推定完了: pseudo-R²=%.4f, N=%d, AIC=%.1f",
+                self._pseudo_r2, len(y), float(result.aic),
             )
 
-            return {
-                "method": method,
-                "n_observations": len(y),
-                "r_squared": self._r_squared,
-                "adj_r_squared": self._adj_r_squared,
-                "coefficients": {**self._coefficients, "intercept": self._intercept},
-                "p_values": {
-                    name: float(results.pvalues[i + 1])
-                    for i, name in enumerate(self._var_names)
-                },
-                "summary": str(results.summary()),
-            }
+            return FitResult(
+                method="PPML_HC3",
+                n_obs=len(y),
+                coefficients=dict(self._coefficients),
+                std_errors=se_dict,
+                p_values=pv_dict,
+                pseudo_r2=self._pseudo_r2,
+                aic=float(result.aic),
+                bic=float(result.bic),
+                converged=True,
+                summary_text=str(result.summary()),
+            )
 
         except Exception as e:
-            logger.error("OLS推定失敗: %s — 事前係数フォールバック", e)
+            logger.error("PPML推定失敗: %s — 事前係数フォールバック", e)
             return self._fallback_priors()
 
-    def _fallback_priors(self) -> Dict[str, Any]:
-        """学術文献ベースの事前係数でフォールバック"""
-        self._coefficients = dict(COEFFICIENT_PRIORS)
-        self._coefficients["gdp_japan"] = 0.50
-        self._intercept = 3.5  # 合理的なベースライン
-        self._r_squared = 0.0
-        self._adj_r_squared = 0.0
-        self._model_method = "prior_fallback"
-        self._fitted = True
+    # -----------------------------------------------------------------------
+    # fit_from_db()
+    # -----------------------------------------------------------------------
+    def fit_from_db(self) -> FitResult:
+        """tourism_stats.db からデータを読んでPPML推定"""
+        try:
+            from pipeline.tourism.tourism_db import TourismDB
+            import sqlite3
 
-        logger.info("事前係数によるフォールバック初期化完了")
-        return {
-            "method": "prior_fallback",
-            "n_observations": 0,
-            "r_squared": 0.0,
-            "coefficients": {**self._coefficients, "intercept": self._intercept},
-            "note": "学術文献ベースの事前係数を使用（データ不足のため）",
-        }
+            db = TourismDB()
+            conn = sqlite3.connect(db.db_path)
+            conn.row_factory = sqlite3.Row
 
-    def _validate_coefficients(self) -> None:
-        """推定係数が学術的に妥当な範囲内かチェック"""
-        if self._coefficients is None:
-            return
-        # 為替レート弾性値: EXRインデックスは「ソース国通貨の対円購買力」
-        # インデックス上昇=円安=訪日有利 → 正の係数が理論的に正しい
-        # 通常 +0.3 ～ +1.5 (対数モデルなので符号は正)
-        exr = self._coefficients.get("exchange_rate", 0)
-        if exr < -0.5:
-            logger.warning("為替レート弾性値が負 (%.3f): EXRインデックス定義と不整合の可能性", exr)
-        # 距離: 通常負
-        dist = self._coefficients.get("distance", 0)
-        if dist > 0.3:
-            logger.warning("距離弾性値が正 (%.3f): 理論と不整合の可能性", dist)
-        # GDP: 通常正
-        gdp = self._coefficients.get("gdp_source", 0)
-        if gdp < -0.5:
-            logger.warning("GDP弾性値が負 (%.3f): 理論と不整合の可能性", gdp)
+            query = """
+                SELECT
+                    g.source_country AS country,
+                    g.year,
+                    COALESCE(j.arrivals, 0) AS visitors,
+                    g.gdp_source_usd AS gdp_source,
+                    g.exchange_rate_jpy AS exr,
+                    g.flight_supply_index AS flight,
+                    g.visa_free,
+                    g.bilateral_risk
+                FROM gravity_variables g
+                LEFT JOIN japan_inbound j
+                    ON g.source_country = j.source_country AND g.year = j.year
+                WHERE g.gdp_source_usd IS NOT NULL
+                ORDER BY g.source_country, g.year
+            """
+            rows = conn.execute(query).fetchall()
+            conn.close()
+
+            if not rows or len(rows) < 10:
+                logger.info("DB データ不足 → 内蔵データにフォールバック")
+                return self.fit()
+
+            panel = []
+            for r in rows:
+                panel.append({
+                    "country": _normalize_country(r["country"]),
+                    "year": r["year"],
+                    "visitors": float(r["visitors"]),
+                    "gdp_source": float(r["gdp_source"]) if r["gdp_source"] else 1.0,
+                    "exr": float(r["exr"]) if r["exr"] else 1.0,
+                    "flight": float(r["flight"]) if r["flight"] else 50,
+                    "visa_free": int(r["visa_free"]) if r["visa_free"] is not None else 0,
+                    "bilateral_risk": float(r["bilateral_risk"]) if r["bilateral_risk"] else 30,
+                })
+
+            return self.fit(panel_data=panel)
+
+        except Exception as e:
+            logger.info("DB読み込み失敗 (%s) → 内蔵データにフォールバック", e)
+            return self.fit()
 
     # -----------------------------------------------------------------------
-    # predict()
+    # _fallback_priors()
+    # -----------------------------------------------------------------------
+    def _fallback_priors(self) -> FitResult:
+        """学術文献ベースの事前係数でフォールバック"""
+        self._coefficients = {"const": 3.5}
+        self._coefficients.update(COEFFICIENT_PRIORS)
+        self._intercept = 3.5
+        self._pseudo_r2 = 0.0
+        self._model_method = "prior_fallback"
+        self._fitted = True
+        self._param_names = list(self._coefficients.keys())
+
+        # フォールバック用の近似分散共分散行列（大きめの分散）
+        n_params = len(self._param_names)
+        self._vcov = np.eye(n_params) * 0.25  # σ=0.5 の事前不確実性
+
+        logger.info("事前係数によるフォールバック初期化完了")
+
+        return FitResult(
+            method="prior_fallback",
+            n_obs=0,
+            coefficients=dict(self._coefficients),
+            std_errors={k: 0.5 for k in self._param_names},
+            p_values={k: 1.0 for k in self._param_names},
+            pseudo_r2=0.0,
+            aic=0.0,
+            bic=0.0,
+            converged=False,
+            summary_text="フォールバック: 学術文献ベースの事前係数を使用",
+        )
+
+    # -----------------------------------------------------------------------
+    # predict_with_uncertainty() — モンテカルロサンプリング
+    # -----------------------------------------------------------------------
+    def predict_with_uncertainty(
+        self,
+        source_country: str,
+        months: List[str],
+        n_samples: int = 1000,
+        scenario: Optional[Dict[str, float]] = None,
+    ) -> BayesianForecast:
+        """
+        係数の事後分布からモンテカルロサンプリングで不確実性付き予測。
+
+        Args:
+            source_country: ISO2国コード (例: "KR")
+            months: ["2026-01", "2026-02", ...] 形式
+            n_samples: サンプル数
+            scenario: {"ln_gdp_source": 7.5, "ln_exr": 0.8, ...} ショック変数
+
+        Returns:
+            BayesianForecast
+        """
+        if not self._fitted:
+            self.fit()
+
+        country = _normalize_country(source_country)
+        X_future = self._build_future_X(country, months, scenario or {})
+
+        # 係数ベクトルと共分散行列
+        coef_vec = np.array([self._coefficients.get(n, 0.0) for n in self._param_names])
+        vcov = self._vcov if self._vcov is not None else np.eye(len(coef_vec)) * 0.25
+
+        # 正規分布から係数サンプリング
+        rng = np.random.default_rng(42)
+        try:
+            coef_samples = rng.multivariate_normal(coef_vec, vcov, size=n_samples)
+        except np.linalg.LinAlgError:
+            # 共分散行列が正定値でない場合 → 対角近似
+            stds = np.sqrt(np.abs(np.diag(vcov)))
+            coef_samples = coef_vec + rng.normal(0, 1, (n_samples, len(coef_vec))) * stds
+
+        # 予測: exp(X @ β) で各サンプルの予測値を計算
+        # X_future: shape (n_months, n_params)
+        # coef_samples: shape (n_samples, n_params)
+        log_pred = X_future @ coef_samples.T  # shape (n_months, n_samples)
+        # クリッピング（数値安定性）
+        log_pred = np.clip(log_pred, -10, 15)
+        pred_samples = np.exp(log_pred)  # 千人単位
+
+        # パーセンタイル計算
+        median = np.median(pred_samples, axis=1).tolist()
+        p10 = np.percentile(pred_samples, 10, axis=1).tolist()
+        p25 = np.percentile(pred_samples, 25, axis=1).tolist()
+        p75 = np.percentile(pred_samples, 75, axis=1).tolist()
+        p90 = np.percentile(pred_samples, 90, axis=1).tolist()
+
+        return BayesianForecast(
+            country=source_country,
+            months=months,
+            median=[round(v, 1) for v in median],
+            p10=[round(v, 1) for v in p10],
+            p25=[round(v, 1) for v in p25],
+            p75=[round(v, 1) for v in p75],
+            p90=[round(v, 1) for v in p90],
+            samples=pred_samples.T,  # shape (n_samples, n_months)
+        )
+
+    # -----------------------------------------------------------------------
+    # predict_point()
+    # -----------------------------------------------------------------------
+    def predict_point(
+        self,
+        source_country: str,
+        year_month: str,
+        shock: Optional[Dict[str, float]] = None,
+    ) -> float:
+        """
+        単一月のポイント予測（千人単位）。
+
+        Args:
+            source_country: ISO2国コード
+            year_month: "2026-07" 形式
+            shock: 変数ショック辞書
+
+        Returns:
+            予測訪問者数（千人）
+        """
+        if not self._fitted:
+            self.fit()
+
+        country = _normalize_country(source_country)
+        X = self._build_future_X(country, [year_month], shock or {})
+        coef_vec = np.array([self._coefficients.get(n, 0.0) for n in self._param_names])
+        log_pred = float(X[0] @ coef_vec)
+        return round(math.exp(np.clip(log_pred, -10, 15)), 1)
+
+    # -----------------------------------------------------------------------
+    # decompose_forecast_by_variable()
+    # -----------------------------------------------------------------------
+    def decompose_forecast_by_variable(
+        self,
+        source_country: str,
+        year_month: str,
+    ) -> Dict[str, float]:
+        """
+        予測値を各説明変数の寄与に分解する。
+
+        exp(Σ β_k * x_k) なので、各変数の寄与 = β_k * x_k を計算し、
+        予測値のログスケールでの寄与割合を返す。
+
+        Returns:
+            {"ln_gdp_source": 45.2, "ln_exr": 12.1, ...} (%)
+        """
+        if not self._fitted:
+            self.fit()
+
+        country = _normalize_country(source_country)
+        X = self._build_future_X(country, [year_month], {})[0]
+        coef_vec = np.array([self._coefficients.get(n, 0.0) for n in self._param_names])
+
+        # 各変数の寄与（ログスケール）
+        contributions = X * coef_vec
+        total = float(np.sum(contributions))
+
+        result = {}
+        for i, name in enumerate(self._param_names):
+            if name.startswith("fe_") or name == "const":
+                continue
+            if total != 0:
+                result[name] = round(float(contributions[i]) / total * 100, 1)
+            else:
+                result[name] = 0.0
+
+        return result
+
+    # -----------------------------------------------------------------------
+    # _build_future_X()
+    # -----------------------------------------------------------------------
+    def _build_future_X(
+        self,
+        country: str,
+        months: List[str],
+        scenario: Dict[str, float],
+    ) -> np.ndarray:
+        """
+        将来月のデザイン行列を構築。
+
+        Args:
+            country: ISO2国コード
+            months: ["2026-01", ...] 形式
+            scenario: 変数オーバーライド
+
+        Returns:
+            X: shape (n_months, n_params)
+        """
+        latest = _LATEST_YEAR.get(country)
+        if latest is None:
+            # フォールバック: 平均的な値
+            latest = {
+                "gdp_source": 5000, "exr": 1.0, "flight": 80,
+                "visa_free": 1, "bilateral_risk": 30,
+            }
+
+        # ISO2→ISO3 変換（拡張データ辞書はISO3キー）
+        country_iso3 = _ISO2_TO_ISO3.get(country, country)
+
+        n_months = len(months)
+        n_params = len(self._param_names)
+        X = np.zeros((n_months, n_params))
+
+        # ベース値（シナリオでオーバーライド可能）
+        gdp = scenario.get("ln_gdp_source", math.log(max(latest["gdp_source"], 1.0)))
+        if "ln_gdp_source" not in scenario:
+            gdp = math.log(max(latest["gdp_source"], 1.0))
+        exr = scenario.get("ln_exr", math.log(max(latest["exr"], 0.001)))
+        if "ln_exr" not in scenario:
+            exr = math.log(max(latest["exr"], 0.001))
+        flt = scenario.get("ln_flight", math.log(max(latest["flight"], 1.0)))
+        if "ln_flight" not in scenario:
+            flt = math.log(max(latest["flight"], 1.0))
+        visa = scenario.get("visa_free", float(latest["visa_free"]))
+        bilat = scenario.get("bilateral_risk", latest["bilateral_risk"] / 100.0)
+        if "bilateral_risk" not in scenario:
+            bilat = latest["bilateral_risk"] / 100.0
+
+        # v1.4.0 拡張変数のベース値
+        leave_util = scenario.get("leave_utilization",
+                                  LEAVE_UTILIZATION.get(country_iso3, 0.70))
+        outbound_prop = scenario.get("outbound_propensity",
+                                     OUTBOUND_PROPENSITY.get(country_iso3, 0.50))
+        tmi = scenario.get("travel_momentum",
+                           TRAVEL_MOMENTUM_DEFAULT.get(country_iso3, 0.70))
+        ln_rest = scenario.get("ln_restaurant",
+                               math.log(max(RESTAURANT_INDEX.get(country_iso3, 100), 1.0)))
+        if "ln_restaurant" not in scenario:
+            ln_rest = math.log(max(RESTAURANT_INDEX.get(country_iso3, 100), 1.0))
+        ln_lang = scenario.get("ln_lang_learners",
+                               math.log(max(LANGUAGE_LEARNERS.get(country_iso3, 50), 1.0)))
+        if "ln_lang_learners" not in scenario:
+            ln_lang = math.log(max(LANGUAGE_LEARNERS.get(country_iso3, 50), 1.0))
+
+        # ソース国FEと年FEのダミー
+        fe_countries = [c for c in self._source_countries if c != self._ref_country]
+        fe_years_list = [y for y in self._years if y != self._ref_year]
+
+        for t in range(n_months):
+            row = np.zeros(n_params)
+            # パラメータ名→インデックスのマッピング
+            idx = {name: i for i, name in enumerate(self._param_names)}
+
+            if "const" in idx:
+                row[idx["const"]] = 1.0
+            if "ln_gdp_source" in idx:
+                row[idx["ln_gdp_source"]] = gdp
+            if "ln_exr" in idx:
+                row[idx["ln_exr"]] = exr
+            if "ln_flight" in idx:
+                # 年内の月次変動は将来予測では一定と仮定
+                row[idx["ln_flight"]] = flt
+            if "visa_free" in idx:
+                row[idx["visa_free"]] = visa
+            if "bilateral_risk" in idx:
+                row[idx["bilateral_risk"]] = bilat
+
+            # v1.4.0 拡張変数
+            if "leave_utilization" in idx:
+                row[idx["leave_utilization"]] = leave_util
+            if "outbound_propensity" in idx:
+                row[idx["outbound_propensity"]] = outbound_prop
+            if "travel_momentum" in idx:
+                row[idx["travel_momentum"]] = tmi
+            if "ln_restaurant" in idx:
+                row[idx["ln_restaurant"]] = ln_rest
+            if "ln_lang_learners" in idx:
+                row[idx["ln_lang_learners"]] = ln_lang
+
+            # ソース国FE
+            fe_name = f"fe_{country}"
+            if fe_name in idx:
+                row[idx[fe_name]] = 1.0
+
+            # 年FE（将来年は最新年のFEを使用）
+            # 予測月から年を取得
+            try:
+                pred_year = int(months[t][:4])
+            except (ValueError, IndexError):
+                pred_year = 2026
+            # 最も近い年のFEを使用
+            closest_fe_year = None
+            if fe_years_list:
+                closest_fe_year = min(fe_years_list, key=lambda y: abs(y - pred_year))
+            if closest_fe_year is not None:
+                fe_yr_name = f"fe_{closest_fe_year}"
+                if fe_yr_name in idx:
+                    row[idx[fe_yr_name]] = 1.0
+
+            X[t] = row
+
+        return X
+
+    # -----------------------------------------------------------------------
+    # _calc_pseudo_r2() — McFadden's pseudo R²
+    # -----------------------------------------------------------------------
+    @staticmethod
+    def _calc_pseudo_r2(y: np.ndarray, X: np.ndarray, result: Any) -> float:
+        """McFadden's pseudo R² = 1 - LL(model) / LL(null)"""
+        try:
+            ll_model = result.llf
+            # Null モデル: 定数項のみ
+            import statsmodels.api as sm
+            from statsmodels.genmod.families import Poisson
+            X_null = np.ones((len(y), 1))
+            null_model = sm.GLM(y, X_null, family=Poisson())
+            null_result = null_model.fit()
+            ll_null = null_result.llf
+
+            if ll_null == 0:
+                return 0.0
+            return round(1.0 - ll_model / ll_null, 4)
+        except Exception:
+            return 0.0
+
+    # -----------------------------------------------------------------------
+    # 後方互換メソッド
     # -----------------------------------------------------------------------
     def predict(
         self,
@@ -416,304 +844,38 @@ class TourismGravityModel:
         horizon_months: int = 12,
         scenario: Optional[Dict[str, float]] = None,
     ) -> GravityPrediction:
-        """
-        指定国からの訪日観光客数を予測する。
-
-        Args:
-            source_country: ISO3国コード
-            horizon_months: 予測期間（月）
-            scenario: シナリオ変数 {"exchange_rate": 1.2, "flight_supply": 0.9, ...}
-
-        Returns:
-            GravityPrediction
-        """
+        """後方互換: 旧形式のpredict()"""
         if not self._fitted:
             self.fit()
 
-        coef = self._coefficients
-        assert coef is not None
+        country = _normalize_country(source_country)
+        # 年間予測
+        year = 2026
+        months = [f"{year}-{m:02d}" for m in range(1, min(horizon_months + 1, 13))]
+        total = sum(self.predict_point(country, m) for m in months)
 
-        # 最新の観測データを取得
-        latest = self._get_latest_data(source_country)
-        if latest is None:
-            raise ValueError(f"国コード {source_country} のデータが見つかりません")
+        elasticities = {}
+        for name in self._FEATURE_NAMES:
+            elasticities[name] = self._coefficients.get(name, COEFFICIENT_PRIORS.get(name, 0))
 
-        prev_data = self._get_previous_data(source_country)
-        lagged = prev_data["visitors"] if prev_data else latest["visitors"] * 0.9
-
-        japan_gdp = _JAPAN_GDP_TRILLION.get(2025, 4.30)
-
-        # ベースライン予測
-        log_pred = self._intercept
-        log_pred += coef.get("gdp_source", 0) * math.log(max(latest["gdp"], 0.01))
-        log_pred += coef.get("gdp_japan", 0) * math.log(japan_gdp)
-        log_pred += coef.get("distance", 0) * math.log(latest["dist"])
-        log_pred += coef.get("exchange_rate", 0) * math.log(max(latest["exr"], 0.01))
-        log_pred += coef.get("flight_supply", 0) * math.log(max(latest["flight"], 0.01))
-        log_pred += coef.get("visa_free", 0) * float(latest["visa"])
-        log_pred += coef.get("bilateral", 0) * latest["bilateral"]
-        log_pred += coef.get("lagged_visitors", 0) * math.log(max(lagged, 1))
-
-        baseline = math.exp(log_pred)
-
-        # 期間調整（年次→月次近似）
-        monthly_factor = horizon_months / 12.0
-        baseline_adjusted = baseline * monthly_factor
-
-        # 弾性値（係数そのもの = 対数モデルの弾性値）
-        elasticities = {
-            "exchange_rate": coef.get("exchange_rate", COEFFICIENT_PRIORS["exchange_rate"]),
-            "flight_supply": coef.get("flight_supply", COEFFICIENT_PRIORS["flight_supply"]),
-            "gdp_source": coef.get("gdp_source", COEFFICIENT_PRIORS["gdp_source"]),
-            "visa_free": coef.get("visa_free", COEFFICIENT_PRIORS["visa_free"]),
-            "bilateral": coef.get("bilateral", COEFFICIENT_PRIORS["bilateral"]),
-            "distance": coef.get("distance", COEFFICIENT_PRIORS["distance"]),
-        }
-
-        result = GravityPrediction(
+        return GravityPrediction(
             source_country=source_country,
-            baseline_forecast=round(baseline_adjusted, 1),
+            baseline_forecast=round(total, 1),
             elasticities=elasticities,
-            r_squared=self._r_squared,
+            r_squared=self._pseudo_r2,
             model_method=self._model_method,
         )
 
-        # シナリオ分析
-        if scenario:
-            log_scenario = log_pred  # ベースラインからの偏差
-            for var_name, shock_value in scenario.items():
-                if var_name in coef and shock_value > 0:
-                    # ベースライン値との差分で計算
-                    base_val = self._get_base_value(latest, var_name)
-                    if base_val and base_val > 0:
-                        delta_log = math.log(shock_value) - math.log(base_val)
-                        log_scenario += coef[var_name] * delta_log
-
-            scenario_forecast = math.exp(log_scenario) * monthly_factor
-            result.scenario_forecast = round(scenario_forecast, 1)
-            if baseline_adjusted > 0:
-                result.scenario_delta_pct = round(
-                    (scenario_forecast - baseline_adjusted) / baseline_adjusted * 100, 2
-                )
-
-        return result
-
-    # -----------------------------------------------------------------------
-    # decompose_change()
-    # -----------------------------------------------------------------------
-    def decompose_change(
-        self,
-        source_country: str,
-        period_months: int = 12,
-    ) -> ChangeDecomposition:
-        """
-        実績変化を要因分解する。
-
-        各要因の寄与 = β_k × Δlog(x_k) / Δlog(T)
-
-        Args:
-            source_country: ISO3国コード
-            period_months: 分解期間（月、12=年次比較）
-
-        Returns:
-            ChangeDecomposition
-        """
+    def get_coefficients(self) -> Dict[str, float]:
+        """推定係数を辞書で返す"""
         if not self._fitted:
             self.fit()
+        return dict(self._coefficients or {})
 
-        coef = self._coefficients
-        assert coef is not None
+    @property
+    def is_fitted(self) -> bool:
+        return self._fitted
 
-        # 直近2期間のデータを取得
-        latest = self._get_latest_data(source_country)
-        prev = self._get_previous_data(source_country)
-
-        if latest is None or prev is None:
-            raise ValueError(f"国コード {source_country} の時系列データが不足しています")
-
-        # 実績変化率
-        if prev["visitors"] <= 0:
-            raise ValueError(f"{source_country}: 前期の訪問者数が0")
-        total_change = (latest["visitors"] - prev["visitors"]) / prev["visitors"] * 100
-
-        # 要因別分解: β × Δlog(x) を各要因について計算
-        components: Dict[str, float] = {}
-
-        # 各変数のΔlog計算
-        factor_deltas = {
-            "exchange_rate": self._safe_delta_log(latest["exr"], prev["exr"]),
-            "flight_supply": self._safe_delta_log(latest["flight"], prev["flight"]),
-            "gdp_source": self._safe_delta_log(latest["gdp"], prev["gdp"]),
-            "bilateral": latest["bilateral"] - prev["bilateral"],  # レベル変数
-            "visa_free": float(latest["visa"]) - float(prev["visa"]),  # ダミー変数
-        }
-
-        # 各要因の寄与率（%ポイント）
-        total_explained = 0.0
-        for name, delta in factor_deltas.items():
-            beta = coef.get(name, COEFFICIENT_PRIORS.get(name, 0))
-            # 対数モデルなので β × Δlog(x) ≈ 変化率への寄与
-            contribution_pct = beta * delta * 100
-            components[name] = round(contribution_pct, 2)
-            total_explained += contribution_pct
-
-        # 残差（説明できない部分）
-        components["residual"] = round(total_change - total_explained, 2)
-
-        period_label = f"{prev['year']}→{latest['year']}"
-
-        return ChangeDecomposition(
-            source_country=source_country,
-            total_change_pct=round(total_change, 2),
-            components=components,
-            period=period_label,
-        )
-
-    # -----------------------------------------------------------------------
-    # calculate_market_share_model()
-    # -----------------------------------------------------------------------
-    def calculate_market_share_model(
-        self,
-        source_country: str,
-        competitors: Optional[List[str]] = None,
-    ) -> MarketShareResult:
-        """
-        ロジットモデルで日本のシェアを推定する。
-
-        多項ロジットモデル:
-          P(日本) = exp(V_jp) / Σ_k exp(V_k)
-          V_k = β_dist·log(DIST_k) + β_exr·log(EXR_k) + β_visa·VISA_k
-
-        Args:
-            source_country: ソース国ISO3コード
-            competitors: 競合デスティネーションのISO3リスト
-
-        Returns:
-            MarketShareResult
-        """
-        if not self._fitted:
-            self.fit()
-
-        coef = self._coefficients
-        assert coef is not None
-
-        # デフォルト競合国（アジア太平洋の人気デスティネーション）
-        if competitors is None:
-            competitors = ["KOR", "THA", "SGP", "TWN", "VNM"]
-
-        # 競合国のパラメータ（日本からの視点ではなく、ソース国からの視点）
-        # ソース国→各デスティネーションの距離近似
-        _COMPETITOR_DIST_FROM_SOURCES: Dict[str, Dict[str, int]] = {
-            "CHN": {"JPN": 2100, "KOR": 950, "THA": 3200, "SGP": 4500, "TWN": 700, "VNM": 2300},
-            "KOR": {"JPN": 1160, "KOR": 0, "THA": 3700, "SGP": 4600, "TWN": 1500, "VNM": 3100},
-            "USA": {"JPN": 10800, "KOR": 11000, "THA": 13900, "SGP": 15300, "TWN": 12500, "VNM": 13600},
-            "AUS": {"JPN": 7800, "KOR": 8300, "THA": 7500, "SGP": 6300, "TWN": 7400, "VNM": 7200},
-        }
-
-        # 一般的な距離近似（データがない場合）
-        default_distances = {
-            "JPN": 5000, "KOR": 5000, "THA": 5000, "SGP": 5500,
-            "TWN": 5000, "VNM": 5000,
-        }
-
-        # 日本の効用関数値
-        japan_dist = DISTANCE_TO_JAPAN.get(source_country, 5000)
-        latest = self._get_latest_data(source_country)
-        japan_exr = latest["exr"] if latest else 1.0
-        japan_visa = float(VISA_FREE.get(source_country, False))
-
-        beta_dist = coef.get("distance", COEFFICIENT_PRIORS["distance"])
-        beta_exr = coef.get("exchange_rate", COEFFICIENT_PRIORS["exchange_rate"])
-        beta_visa = coef.get("visa_free", COEFFICIENT_PRIORS["visa_free"])
-
-        # 日本の効用
-        v_japan = (
-            beta_dist * math.log(japan_dist)
-            + beta_exr * math.log(max(japan_exr, 0.01))
-            + beta_visa * japan_visa
-        )
-
-        # 各競合国の効用
-        utilities: Dict[str, float] = {"JPN": v_japan}
-        src_distances = _COMPETITOR_DIST_FROM_SOURCES.get(source_country, {})
-
-        for comp in competitors:
-            if comp == source_country:
-                continue
-            comp_dist = src_distances.get(comp, default_distances.get(comp, 5000))
-            if comp_dist <= 0:
-                comp_dist = 100  # 国内観光
-            # 競合国の為替・ビザは簡略化（日本との相対値）
-            comp_exr = 1.0  # ベースライン
-            comp_visa = 1.0 if comp in ("THA", "KOR", "SGP") else 0.0
-
-            v_comp = (
-                beta_dist * math.log(comp_dist)
-                + beta_exr * math.log(max(comp_exr, 0.01))
-                + beta_visa * comp_visa
-            )
-            utilities[comp] = v_comp
-
-        # ロジットシェア計算
-        max_v = max(utilities.values())  # オーバーフロー防止
-        exp_utilities = {k: math.exp(v - max_v) for k, v in utilities.items()}
-        total_exp = sum(exp_utilities.values())
-
-        shares = {k: v / total_exp for k, v in exp_utilities.items()}
-        japan_share = shares.pop("JPN", 0.0)
-        competitor_shares = shares
-
-        return MarketShareResult(
-            source_country=source_country,
-            japan_share=round(japan_share, 4),
-            competitor_shares={k: round(v, 4) for k, v in competitor_shares.items()},
-            japan_utility=round(v_japan, 4),
-        )
-
-    # -----------------------------------------------------------------------
-    # ヘルパーメソッド
-    # -----------------------------------------------------------------------
-    def _get_latest_data(self, country: str) -> Optional[Dict]:
-        """指定国の最新データを取得"""
-        rows = [r for r in _SAMPLE_PANEL if r["country"] == country]
-        if not rows:
-            return None
-        return max(rows, key=lambda r: r["year"])
-
-    def _get_previous_data(self, country: str) -> Optional[Dict]:
-        """指定国の1期前データを取得"""
-        rows = sorted(
-            [r for r in _SAMPLE_PANEL if r["country"] == country],
-            key=lambda r: r["year"],
-        )
-        if len(rows) < 2:
-            return None
-        return rows[-2]
-
-    @staticmethod
-    def _safe_delta_log(current: float, previous: float) -> float:
-        """安全なΔlog計算"""
-        if current <= 0 or previous <= 0:
-            return 0.0
-        return math.log(current) - math.log(previous)
-
-    @staticmethod
-    def _get_base_value(data: Dict, var_name: str) -> Optional[float]:
-        """データ辞書から変数名に対応する値を取得"""
-        mapping = {
-            "exchange_rate": "exr",
-            "flight_supply": "flight",
-            "gdp_source": "gdp",
-            "bilateral": "bilateral",
-        }
-        key = mapping.get(var_name)
-        if key and key in data:
-            return float(data[key])
-        return None
-
-    # -----------------------------------------------------------------------
-    # ユーティリティ
-    # -----------------------------------------------------------------------
     def summary(self) -> str:
         """モデルのサマリーを文字列で返す"""
         if not self._fitted:
@@ -721,177 +883,24 @@ class TourismGravityModel:
 
         lines = [
             "=" * 60,
-            "観光需要の重力モデル — 推定結果サマリー",
+            "PPML構造重力モデル（拡張版）— 推定結果サマリー",
             "=" * 60,
             f"推定手法: {self._model_method}",
-            f"R²: {self._r_squared:.4f}",
-            f"Adj. R²: {self._adj_r_squared:.4f}",
-            f"切片: {self._intercept:.4f}",
+            f"観測数: {self._n_obs}",
+            f"McFadden pseudo R²: {self._pseudo_r2:.4f}",
             "",
-            "--- 係数 ---",
+            "--- 主要係数 (10変数) ---",
         ]
         if self._coefficients:
-            for name, val in self._coefficients.items():
-                prior = COEFFICIENT_PRIORS.get(name, None)
+            for name in self._FEATURE_NAMES:
+                val = self._coefficients.get(name, 0)
+                prior = COEFFICIENT_PRIORS.get(name)
                 prior_str = f" (事前値: {prior:.2f})" if prior is not None else ""
-                lines.append(f"  {name:20s}: {val:+.4f}{prior_str}")
+                lines.append(f"  {name:24s}: {val:+.4f}{prior_str}")
 
-        if self._ols_result is not None:
+        if self._glm_result is not None:
             lines.append("")
             lines.append("--- statsmodels サマリー ---")
-            lines.append(str(self._ols_result.summary()))
+            lines.append(str(self._glm_result.summary()))
 
         return "\n".join(lines)
-
-    def get_coefficients(self) -> Dict[str, float]:
-        """推定係数を辞書で返す"""
-        if not self._fitted:
-            self.fit()
-        result = dict(self._coefficients or {})
-        result["intercept"] = self._intercept
-        return result
-
-    @property
-    def is_fitted(self) -> bool:
-        return self._fitted
-
-    # -----------------------------------------------------------------------
-    # build_training_dataset() — tourism_stats.db からパネルデータ構築
-    # -----------------------------------------------------------------------
-    def build_training_dataset(self) -> List[Dict[str, Any]]:
-        """
-        tourism_stats.db から outbound_stats × japan_inbound × gravity_variables を
-        JOINしてパネルデータを構築する。
-        DBがない場合は内蔵 _SAMPLE_PANEL にフォールバック。
-
-        Returns:
-            パネルデータ（_SAMPLE_PANEL 互換フォーマット）
-        """
-        try:
-            from pipeline.tourism.tourism_db import TourismDB
-            db = TourismDB()
-
-            import sqlite3
-            conn = sqlite3.connect(db.db_path)
-            conn.row_factory = sqlite3.Row
-
-            # outbound_stats × japan_inbound × gravity_variables を JOIN
-            query = """
-                SELECT
-                    g.source_country AS country,
-                    g.year,
-                    COALESCE(j.arrivals, 0) AS visitors,
-                    g.gdp_source_usd AS gdp,
-                    g.exchange_rate_jpy AS exr,
-                    g.flight_supply_index AS flight,
-                    g.visa_free AS visa,
-                    g.bilateral_risk AS bilateral,
-                    o.outbound_total
-                FROM gravity_variables g
-                LEFT JOIN japan_inbound j
-                    ON g.source_country = j.source_country
-                    AND g.year = j.year
-                    AND g.month = j.month
-                LEFT JOIN outbound_stats o
-                    ON g.source_country = o.source_country
-                    AND g.year = o.year
-                    AND g.month = o.month
-                WHERE g.gdp_source_usd IS NOT NULL
-                    AND g.exchange_rate_jpy IS NOT NULL
-                ORDER BY g.source_country, g.year, g.month
-            """
-            rows = conn.execute(query).fetchall()
-            conn.close()
-
-            if not rows or len(rows) < 10:
-                logger.info("tourism_stats.db データ不足 (%d行) — 内蔵データにフォールバック",
-                            len(rows) if rows else 0)
-                return list(_SAMPLE_PANEL)
-
-            # _SAMPLE_PANEL 互換フォーマットに変換
-            panel = []
-            for r in rows:
-                country = r["country"]
-                dist = DISTANCE_TO_JAPAN.get(country, 5000)
-                visitors = r["visitors"] if r["visitors"] and r["visitors"] > 0 else None
-                if visitors is None:
-                    continue
-
-                # 千人単位に変換（DBは実数、_SAMPLE_PANELは千人）
-                visitors_k = visitors / 1000.0 if visitors > 10000 else float(visitors)
-
-                panel.append({
-                    "country": country,
-                    "year": r["year"],
-                    "visitors": visitors_k,
-                    "gdp": r["gdp"] if r["gdp"] else 0.01,
-                    "exr": r["exr"] if r["exr"] else 1.0,
-                    "flight": r["flight"] if r["flight"] else 0.5,
-                    "visa": int(VISA_FREE.get(country, False)),
-                    "bilateral": (r["bilateral"] or 50) / 100.0,
-                    "dist": dist,
-                })
-
-            if len(panel) < 10:
-                logger.info("DB変換後データ不足 (%d行) — 内蔵データにフォールバック", len(panel))
-                return list(_SAMPLE_PANEL)
-
-            logger.info("tourism_stats.db からパネルデータ構築完了: %d行", len(panel))
-            return panel
-
-        except (ImportError, Exception) as e:
-            logger.info("tourism_stats.db 読み込み不可 — 内蔵データにフォールバック: %s", type(e).__name__)
-            return list(_SAMPLE_PANEL)
-
-    # -----------------------------------------------------------------------
-    # auto_refit() — 新規データ取込後に自動再推定
-    # -----------------------------------------------------------------------
-    def auto_refit(self) -> Dict[str, Any]:
-        """
-        tourism_stats.db から最新データを取得し重力モデルを再推定する。
-        係数変化が±20%超の場合はアラートを含む結果を返す。
-
-        Returns:
-            再推定結果 + アラート情報
-        """
-        # 旧係数を保存
-        old_coefficients = dict(self._coefficients) if self._coefficients else {}
-
-        # DBからパネルデータ構築
-        panel_data = self.build_training_dataset()
-
-        # 再推定
-        fit_result = self.fit(training_data=panel_data)
-
-        # 係数変化チェック（±20%超でアラート）
-        alerts = []
-        if old_coefficients and self._coefficients:
-            for name, new_val in self._coefficients.items():
-                old_val = old_coefficients.get(name)
-                if old_val is None or old_val == 0:
-                    continue
-                change_pct = abs((new_val - old_val) / old_val) * 100
-                if change_pct > 20:
-                    alerts.append({
-                        "variable": name,
-                        "old_value": round(old_val, 4),
-                        "new_value": round(new_val, 4),
-                        "change_pct": round(change_pct, 1),
-                        "severity": "WARNING" if change_pct < 50 else "CRITICAL",
-                    })
-
-        result = {
-            "refit_result": fit_result,
-            "data_source": "tourism_stats.db" if panel_data != list(_SAMPLE_PANEL) else "builtin",
-            "panel_size": len(panel_data),
-            "coefficient_alerts": alerts,
-            "has_alerts": len(alerts) > 0,
-        }
-
-        if alerts:
-            logger.warning(
-                "重力モデル再推定: %d変数で係数変化±20%%超を検出",
-                len(alerts),
-            )
-
-        return result

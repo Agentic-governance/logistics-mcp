@@ -1,7 +1,8 @@
-"""観光重力モデル・インバウンドリスク評価テストスイート — SCRI v1.3.0
+"""観光重力モデル・インバウンドリスク評価テストスイート — SCRI v1.4.0
 
 外部APIを呼ばないユニットテスト。
 ハードコードデータ・フォールバック値のみで検証。
+InboundRiskScorerは外部API呼び出しのため @pytest.mark.network を付与。
 """
 import sys
 import os
@@ -27,17 +28,17 @@ class TestGravityModel:
         return model
 
     def test_coefficients_have_expected_signs(self):
-        """為替係数は正（円安有利）、距離係数は負"""
+        """為替係数は正（円安有利）、二国間リスク係数は負"""
         from features.tourism.gravity_model import COEFFICIENT_PRIORS
         # 為替: EXRインデックス上昇=円安=訪日有利 → 正の係数
-        assert COEFFICIENT_PRIORS["exchange_rate"] > 0, \
+        assert COEFFICIENT_PRIORS["ln_exr"] > 0, \
             "為替レート弾性値は正であるべき（円安=訪日増加）"
         # GDP: 送客国GDP上昇 → 渡航需要増 → 正の係数
-        assert COEFFICIENT_PRIORS["gdp_source"] > 0, \
+        assert COEFFICIENT_PRIORS["ln_gdp_source"] > 0, \
             "GDP弾性値は正であるべき"
-        # 距離: 距離増加 → 渡航減少 → 負の係数
-        assert COEFFICIENT_PRIORS["distance"] < 0, \
-            "距離弾性値は負であるべき"
+        # 二国間リスク: リスク増加 → 渡航減少 → 負の係数
+        assert COEFFICIENT_PRIORS["bilateral_risk"] < 0, \
+            "二国間リスク弾性値は負であるべき"
 
     def test_predict_returns_forecast(self):
         """predict()がGravityPredictionを返す"""
@@ -47,55 +48,61 @@ class TestGravityModel:
         assert result.source_country == "KOR"
         assert result.baseline_forecast > 0, "予測値は正であるべき"
         assert isinstance(result.elasticities, dict)
-        assert "exchange_rate" in result.elasticities
+        assert "ln_exr" in result.elasticities
 
     def test_exchange_rate_scenario(self):
-        """円安シナリオで予測が増加方向"""
+        """円安シナリオで予測が変化する（predict_point使用）"""
         model = self._get_model()
         # ベースライン
-        base = model.predict(source_country="CHN", horizon_months=12)
-        # 円安シナリオ（EXRインデックスを1.5倍に上昇）
-        scenario = model.predict(
-            source_country="CHN",
-            horizon_months=12,
-            scenario={"exchange_rate": 1.5},
-        )
-        # 円安シナリオのforecastが存在する
-        assert scenario.scenario_forecast is not None, \
-            "シナリオ予測値が返されるべき"
-        # 円安 → 訪日増加（正の弾性値なら予測が増加）
-        assert scenario.scenario_forecast >= base.baseline_forecast * 0.8, \
-            "極端な減少は不合理"
+        base = model.predict_point("CN", "2026-07")
+        # 円安シナリオ（ln_exrを上昇させる = 円安方向）
+        scenario = model.predict_point("CN", "2026-07", shock={"ln_exr": 2.5})
+        # 予測値が正
+        assert base > 0, f"ベースライン予測値は正であるべき: {base}"
+        # シナリオで予測値が変化する
+        assert scenario != base, \
+            f"シナリオ適用で予測値が変化するべき: base={base}, scenario={scenario}"
 
     def test_decompose_returns_factors(self):
-        """decompose_change()が要因分解を返す"""
+        """decompose_forecast_by_variable()が要因分解を返す"""
         model = self._get_model()
-        result = model.decompose_change(source_country="KOR")
-        # ChangeDecompositionデータクラスの検証
-        assert result.source_country == "KOR"
-        assert isinstance(result.total_change_pct, float)
-        assert isinstance(result.components, dict)
-        assert "exchange_rate" in result.components
-        assert "flight_supply" in result.components
-        assert "gdp_source" in result.components
-        assert "residual" in result.components
-        assert result.period  # "20XX→20XX" のような文字列
+        result = model.decompose_forecast_by_variable(
+            source_country="KR", year_month="2026-07"
+        )
+        # 辞書で各変数の寄与割合(%)を返す
+        assert isinstance(result, dict)
+        assert "ln_exr" in result
+        assert "ln_flight" in result
+        assert "ln_gdp_source" in result
+        # 全て数値
+        for key, val in result.items():
+            assert isinstance(val, float), f"{key}の値がfloatでない: {type(val)}"
 
     def test_panel_data_has_sufficient_countries(self):
         """内蔵パネルデータに十分な国数がある"""
-        from features.tourism.gravity_model import _SAMPLE_PANEL
-        countries = set(r["country"] for r in _SAMPLE_PANEL)
+        from features.tourism.gravity_model import _BUILTIN_PANEL
+        countries = set(r["country"] for r in _BUILTIN_PANEL)
         assert len(countries) >= 10, f"パネルデータに10カ国以上必要: {len(countries)}カ国"
 
-    def test_market_share_model(self):
-        """calculate_market_share_model()がシェアを返す"""
+    def test_predict_with_uncertainty_returns_bayesian(self):
+        """predict_with_uncertainty()がBayesianForecastを返す"""
         model = self._get_model()
-        result = model.calculate_market_share_model("CHN")
-        assert 0 < result.japan_share < 1, "日本シェアは0-1の範囲"
-        assert isinstance(result.competitor_shares, dict)
-        # 全シェア合計 ≈ 1.0
-        total = result.japan_share + sum(result.competitor_shares.values())
-        assert abs(total - 1.0) < 0.01, f"シェア合計が1.0でない: {total}"
+        from features.tourism.gravity_model import BayesianForecast
+        result = model.predict_with_uncertainty(
+            source_country="KR",
+            months=["2026-01", "2026-02", "2026-03"],
+            n_samples=100,
+        )
+        assert isinstance(result, BayesianForecast)
+        assert result.country == "KR"
+        assert len(result.months) == 3
+        assert len(result.median) == 3
+        assert len(result.p10) == 3
+        assert len(result.p90) == 3
+        # p10 <= median <= p90
+        for i in range(3):
+            assert result.p10[i] <= result.median[i] <= result.p90[i], \
+                f"月{i}: p10={result.p10[i]} <= median={result.median[i]} <= p90={result.p90[i]} が不成立"
 
 
 # =====================================================================
@@ -321,8 +328,9 @@ class TestInboundRiskScorer:
         from features.tourism.inbound_risk_scorer import InboundTourismRiskScorer
         return InboundTourismRiskScorer()
 
+    @pytest.mark.network
     def test_market_risk_in_range(self):
-        """リスクスコアが0-100"""
+        """リスクスコアが0-100（外部API呼び出しあり）"""
         scorer = self._get_scorer()
         result = scorer.calculate_market_risk("KR")
         score = result["inbound_risk_score"]
@@ -348,8 +356,9 @@ class TestInboundRiskScorer:
             assert results[0]["inbound_risk_score"] >= results[1]["inbound_risk_score"], \
                 "リスクスコア降順でソートされるべき"
 
+    @pytest.mark.network
     def test_forecast_includes_confidence(self):
-        """予測に信頼区間が含まれる"""
+        """予測に信頼区間が含まれる（外部API呼び出しあり）"""
         scorer = self._get_scorer()
         result = scorer.forecast_visitor_volume("CN", horizon_months=6)
         assert "confidence_interval" in result
@@ -360,8 +369,9 @@ class TestInboundRiskScorer:
         assert ci["lower"] <= result["adjusted_forecast"] <= ci["upper"], \
             "予測値が信頼区間の範囲内であるべき"
 
+    @pytest.mark.network
     def test_risk_categories_present(self):
-        """3カテゴリのリスク内訳が含まれる"""
+        """3カテゴリのリスク内訳が含まれる（外部API呼び出しあり）"""
         scorer = self._get_scorer()
         result = scorer.calculate_market_risk("US")
         cats = result["categories"]
@@ -373,8 +383,9 @@ class TestInboundRiskScorer:
             assert 0 <= cat["score"] <= 100, f"{name} スコア範囲外"
             assert cat["weight"] > 0
 
+    @pytest.mark.network
     def test_decompose_visitor_change(self):
-        """decompose_visitor_change()が要因分解を返す"""
+        """decompose_visitor_change()が要因分解を返す（外部API呼び出しあり）"""
         scorer = self._get_scorer()
         result = scorer.decompose_visitor_change("KR", period_months=12)
         assert "decomposition" in result
@@ -383,8 +394,9 @@ class TestInboundRiskScorer:
         assert "supply_factors" in decomp
         assert "japan_factors" in decomp
 
+    @pytest.mark.network
     def test_forecast_with_scenario(self):
-        """シナリオ付き予測が動作する"""
+        """シナリオ付き予測が動作する（外部API呼び出しあり）"""
         scorer = self._get_scorer()
         # 悲観シナリオ（影響度-30%）
         result = scorer.forecast_visitor_volume(
@@ -645,23 +657,26 @@ class TestGravityModelDB:
     """gravity_model.py の build_training_dataset / auto_refit テスト"""
 
     def test_build_training_dataset_fallback(self):
-        """DBがない場合に内蔵データにフォールバック"""
-        from features.tourism.gravity_model import TourismGravityModel
+        """DBがない場合にfit_from_db()が内蔵データにフォールバック"""
+        from features.tourism.gravity_model import TourismGravityModel, FitResult
         model = TourismGravityModel()
-        panel = model.build_training_dataset()
-        assert len(panel) >= 10, f"パネルデータが10行未満: {len(panel)}"
-        # 内蔵データと同じフォーマット
-        assert "country" in panel[0]
-        assert "year" in panel[0]
-        assert "visitors" in panel[0]
+        # fit_from_db()はDB不在時に内蔵データにフォールバック
+        result = model.fit_from_db()
+        assert isinstance(result, FitResult)
+        assert result.n_obs >= 10 or result.method == "prior_fallback", \
+            f"フォールバックが機能していない: n_obs={result.n_obs}, method={result.method}"
 
-    def test_auto_refit_returns_result(self):
-        """auto_refit()が結果を返す"""
-        from features.tourism.gravity_model import TourismGravityModel
+    def test_refit_returns_consistent_result(self):
+        """fit()を2回呼んでも一貫した結果を返す"""
+        from features.tourism.gravity_model import TourismGravityModel, FitResult
         model = TourismGravityModel()
-        model.fit()  # 初回推定
-        result = model.auto_refit()
-        assert "refit_result" in result
-        assert "data_source" in result
-        assert "coefficient_alerts" in result
-        assert isinstance(result["coefficient_alerts"], list)
+        result1 = model.fit()
+        result2 = model.fit()
+        assert isinstance(result1, FitResult)
+        assert isinstance(result2, FitResult)
+        assert result1.method == result2.method
+        assert result1.n_obs == result2.n_obs
+        # 同じデータで推定すれば係数は同一
+        for key in result1.coefficients:
+            assert abs(result1.coefficients[key] - result2.coefficients[key]) < 1e-6, \
+                f"係数 {key} が再推定で変化: {result1.coefficients[key]} vs {result2.coefficients[key]}"

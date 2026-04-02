@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SCRI Logistics Risk Dashboard v1.4.0</title>
+<title>SCRI Logistics Risk Dashboard v1.5.0</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 <style>
-/* ===== グローバルスタイル ===== */
+/* ===== リセット・グローバル ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: #0f1117;
-  color: #c9d1d9;
+  color: #e8e6e0;
   overflow: hidden;
   height: 100vh;
   width: 100vw;
@@ -20,231 +20,250 @@ body {
 
 /* ===== ヘッダー ===== */
 .header {
-  background: linear-gradient(135deg, #0f1117 0%, #161b22 100%);
-  padding: 10px 20px;
+  background: linear-gradient(135deg, #0f1117 0%, #1a1d27 100%);
+  padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #30363d;
+  border-bottom: 1px solid #2d2f3e;
   height: 48px;
   z-index: 100;
   position: relative;
 }
-.header h1 { font-size: 16px; font-weight: 700; color: #f0f6fc; }
-.header h1 span { color: #58a6ff; }
-.header .meta { font-size: 11px; color: #8b949e; text-align: right; }
-
-/* ===== メインレイアウト ===== */
-.main-container {
-  display: flex;
-  height: calc(100vh - 48px);
-  position: relative;
-}
-
-/* ===== 左サイドバー ===== */
-.sidebar {
-  width: 300px;
-  min-width: 300px;
-  background: #161b22;
-  border-right: 1px solid #30363d;
-  overflow-y: auto;
-  padding: 16px;
-  z-index: 50;
-}
-.sidebar::-webkit-scrollbar { width: 6px; }
-.sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
-
-/* KPIカード */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.kpi-card {
-  background: #0f1117;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 12px;
-  text-align: center;
-}
-.kpi-card.full-width { grid-column: 1 / -1; }
-.kpi-value { font-size: 28px; font-weight: 700; }
-.kpi-label { font-size: 10px; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
-.kpi-critical .kpi-value { color: #ff1744; }
-.kpi-high .kpi-value { color: #ff9100; }
-.kpi-monitor .kpi-value { color: #58a6ff; }
-
-/* セクション */
-.section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: #8b949e;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin: 16px 0 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #21262d;
-}
-
-/* 輸送モードトグル */
-.mode-toggles {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-.mode-btn {
-  flex: 1;
-  padding: 8px 4px;
-  border: 1px solid #30363d;
+.header-left { display: flex; align-items: center; gap: 20px; }
+.header h1 { font-size: 16px; font-weight: 700; color: #f0f6fc; white-space: nowrap; }
+.header h1 span.accent { color: #4a9eff; }
+.header-controls { display: flex; align-items: center; gap: 12px; }
+.header-select {
+  background: #1a1d27;
+  border: 1px solid #2d2f3e;
+  color: #e8e6e0;
+  padding: 5px 10px;
   border-radius: 6px;
-  background: #0f1117;
-  color: #8b949e;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
-  text-align: center;
+}
+.header-select:focus { border-color: #4a9eff; outline: none; }
+.mode-btn-group { display: flex; gap: 0; }
+.mode-btn {
+  padding: 5px 14px;
+  border: 1px solid #2d2f3e;
+  background: #1a1d27;
+  color: #8b8fa8;
+  font-size: 12px;
+  cursor: pointer;
   transition: all 0.2s;
 }
-.mode-btn:hover { border-color: #58a6ff; color: #c9d1d9; }
-.mode-btn.active { background: rgba(88,166,255,0.15); border-color: #58a6ff; color: #58a6ff; }
+.mode-btn:first-child { border-radius: 6px 0 0 6px; }
+.mode-btn:last-child { border-radius: 0 6px 6px 0; }
+.mode-btn:not(:first-child) { border-left: none; }
+.mode-btn:hover { color: #e8e6e0; }
+.mode-btn.active { background: rgba(74,158,255,0.15); border-color: #4a9eff; color: #4a9eff; }
+.header .meta { font-size: 11px; color: #8b8fa8; text-align: right; white-space: nowrap; }
 
-/* 次元セレクト */
-.dimension-select {
-  width: 100%;
-  background: #0f1117;
-  border: 1px solid #30363d;
-  color: #c9d1d9;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  margin-bottom: 12px;
-  cursor: pointer;
-}
-.dimension-select:focus { border-color: #58a6ff; outline: none; }
-
-/* チョークポイントリスト */
-.chokepoint-list { list-style: none; }
-.chokepoint-item {
+/* ===== メインレイアウト ===== */
+.main-area {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: background 0.2s;
+  height: calc(100vh - 48px - 72px); /* header + bottom bar */
 }
-.chokepoint-item:hover { background: rgba(88,166,255,0.08); }
-.chokepoint-marker {
-  width: 0; height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 9px solid #ff9100;
-  flex-shrink: 0;
-}
-.chokepoint-name { flex: 1; color: #c9d1d9; }
-.chokepoint-risk { font-weight: 600; font-size: 11px; }
-.risk-high { color: #ff1744; }
-.risk-medium { color: #ff9100; }
-.risk-low { color: #00e676; }
 
-/* ===== 地図エリア ===== */
+/* ===== 地図コンテナ（左60%） ===== */
 .map-container {
-  flex: 1;
+  flex: 6;
   position: relative;
   overflow: hidden;
   background: #0f1117;
 }
 svg.world-map { width: 100%; height: 100%; }
 
+/* ===== 右パネル ===== */
+.right-panel {
+  flex: 4;
+  min-width: 320px;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #2d2f3e;
+  background: #1a1d27;
+  overflow: hidden;
+}
+
+/* 右上: チョークポイント状況 */
+.cp-status-panel {
+  padding: 14px 16px;
+  border-bottom: 1px solid #2d2f3e;
+  overflow-y: auto;
+  flex: 0 0 auto;
+  max-height: 45%;
+}
+.cp-status-panel::-webkit-scrollbar { width: 5px; }
+.cp-status-panel::-webkit-scrollbar-thumb { background: #2d2f3e; border-radius: 3px; }
+.panel-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b8fa8;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin-bottom: 10px;
+}
+.cp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-bottom: 2px;
+}
+.cp-item:hover { background: rgba(74,158,255,0.08); }
+.cp-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cp-info { flex: 1; min-width: 0; }
+.cp-name { font-size: 13px; font-weight: 600; color: #e8e6e0; }
+.cp-status-text { font-size: 10px; color: #8b8fa8; }
+.cp-risk-val { font-size: 16px; font-weight: 700; min-width: 32px; text-align: right; }
+
+/* 右下: 選択ルートの詳細 */
+.route-detail-panel {
+  flex: 1;
+  padding: 14px 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.route-detail-panel::-webkit-scrollbar { width: 5px; }
+.route-detail-panel::-webkit-scrollbar-thumb { background: #2d2f3e; border-radius: 3px; }
+.route-detail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #8b8fa8;
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.8;
+}
+.route-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.route-detail-name { font-size: 15px; font-weight: 700; color: #f0f6fc; flex: 1; }
+.route-detail-risk-badge {
+  font-size: 22px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.3);
+}
+.cp-breakdown { margin-bottom: 14px; }
+.cp-breakdown-title { font-size: 11px; font-weight: 600; color: #8b8fa8; text-transform: uppercase; margin-bottom: 8px; }
+.cp-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.cp-bar-name { font-size: 12px; color: #e8e6e0; width: 120px; flex-shrink: 0; }
+.cp-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #0f1117;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cp-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.cp-bar-val { font-size: 12px; font-weight: 700; width: 30px; text-align: right; }
+.alt-route-box {
+  background: #0f1117;
+  border: 1px solid #2d2f3e;
+  border-radius: 8px;
+  padding: 12px;
+}
+.alt-route-label { font-size: 11px; color: #8b8fa8; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+.alt-route-name { font-size: 14px; font-weight: 600; color: #ffd43b; margin-bottom: 6px; }
+.alt-route-stats { display: flex; gap: 20px; }
+.alt-stat { font-size: 12px; color: #e8e6e0; }
+.alt-stat strong { color: #ffd43b; }
+
+/* ===== 下部ルートランキングバー ===== */
+.route-ranking-bar {
+  height: 72px;
+  background: #1a1d27;
+  border-top: 1px solid #2d2f3e;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 10px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.route-ranking-bar::-webkit-scrollbar { height: 4px; }
+.route-ranking-bar::-webkit-scrollbar-thumb { background: #2d2f3e; border-radius: 2px; }
+.ranking-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #8b8fa8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.route-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #0f1117;
+  border: 1px solid #2d2f3e;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.route-chip:hover { border-color: #4a9eff; transform: translateY(-1px); }
+.route-chip.active { border-color: #4a9eff; background: rgba(74,158,255,0.1); }
+.route-chip-icon { font-size: 14px; }
+.route-chip-name { font-size: 11px; color: #e8e6e0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.route-chip-risk { font-size: 16px; font-weight: 700; }
+
 /* ===== ツールチップ ===== */
 .tooltip {
   position: absolute;
-  background: rgba(22, 27, 34, 0.95);
-  border: 1px solid #30363d;
+  background: rgba(26,29,39,0.96);
+  border: 1px solid #2d2f3e;
   border-radius: 8px;
   padding: 12px;
   font-size: 12px;
   pointer-events: none;
   z-index: 200;
-  max-width: 280px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  max-width: 300px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
   display: none;
 }
 .tooltip-title { font-size: 14px; font-weight: 700; color: #f0f6fc; margin-bottom: 4px; }
 .tooltip-score { font-size: 20px; font-weight: 700; }
-.tooltip-dims { margin-top: 6px; font-size: 11px; color: #8b949e; }
+.tooltip-dims { margin-top: 6px; font-size: 11px; color: #8b8fa8; }
 .tooltip-dim-row { display: flex; justify-content: space-between; padding: 2px 0; }
-.tooltip-dim-bar { height: 3px; background: #21262d; border-radius: 2px; margin-top: 2px; }
+.tooltip-dim-bar { height: 3px; background: #0f1117; border-radius: 2px; margin-top: 2px; }
 .tooltip-dim-fill { height: 100%; border-radius: 2px; }
 
-/* ===== 詳細パネル（右下） ===== */
-.detail-panel {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  width: 360px;
-  max-height: 400px;
-  background: rgba(22, 27, 34, 0.95);
-  border: 1px solid #30363d;
-  border-radius: 12px;
-  padding: 16px;
-  z-index: 80;
-  display: none;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  overflow-y: auto;
-}
-.detail-panel::-webkit-scrollbar { width: 4px; }
-.detail-panel::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.detail-country { font-size: 18px; font-weight: 700; color: #f0f6fc; }
-.detail-close {
-  background: none; border: none; color: #8b949e; font-size: 18px;
-  cursor: pointer; padding: 4px;
-}
-.detail-close:hover { color: #f0f6fc; }
-.detail-overall {
-  text-align: center;
-  padding: 12px;
-  background: #0f1117;
-  border-radius: 8px;
-  margin-bottom: 12px;
-}
-.detail-overall-score { font-size: 36px; font-weight: 700; }
-.detail-overall-label { font-size: 11px; color: #8b949e; text-transform: uppercase; }
-.dim-bar-container { margin-bottom: 6px; }
-.dim-bar-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  margin-bottom: 2px;
-}
-.dim-bar-name { color: #c9d1d9; }
-.dim-bar-value { font-weight: 600; }
-.dim-bar-track {
-  height: 6px;
-  background: #21262d;
-  border-radius: 3px;
-  overflow: hidden;
-}
-.dim-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
-
-/* ===== 凡例（左下） ===== */
+/* ===== 凡例（地図左下） ===== */
 .legend {
   position: absolute;
-  bottom: 20px;
-  left: 320px;
-  background: rgba(22, 27, 34, 0.9);
-  border: 1px solid #30363d;
+  bottom: 14px;
+  left: 14px;
+  background: rgba(26,29,39,0.92);
+  border: 1px solid #2d2f3e;
   border-radius: 8px;
   padding: 10px 14px;
   z-index: 60;
@@ -252,39 +271,29 @@ svg.world-map { width: 100%; height: 100%; }
 }
 .legend-title { font-weight: 600; color: #f0f6fc; margin-bottom: 6px; }
 .legend-gradient {
-  width: 180px;
-  height: 10px;
-  border-radius: 4px;
-  background: linear-gradient(to right, #00e676, #ffd600, #ff9100, #ff1744);
+  width: 160px; height: 10px; border-radius: 4px;
+  background: linear-gradient(to right, #4a9eff, #ffd43b, #ff6b35, #ff0000);
   margin-bottom: 4px;
 }
-.legend-labels { display: flex; justify-content: space-between; color: #8b949e; font-size: 10px; }
+.legend-labels { display: flex; justify-content: space-between; color: #8b8fa8; font-size: 10px; }
 .legend-items { margin-top: 8px; }
-.legend-item { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-.legend-swatch {
-  width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;
-}
-.legend-line {
-  width: 20px; height: 2px; border-radius: 1px; flex-shrink: 0;
-}
-.legend-triangle {
-  width: 0; height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 9px solid #ff9100;
-  flex-shrink: 0;
+.legend-item { display: flex; align-items: center; gap: 6px; margin: 3px 0; color: #e8e6e0; }
+.legend-line { width: 20px; height: 3px; border-radius: 1px; flex-shrink: 0; }
+.legend-hex {
+  width: 12px; height: 12px; flex-shrink: 0;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: #ffa94d;
 }
 
-/* ===== 脈動アニメーション ===== */
-@keyframes pulse {
-  0% { r: 4; opacity: 0.8; }
-  50% { r: 10; opacity: 0.2; }
-  100% { r: 4; opacity: 0.8; }
+/* ===== 脈動アニメーション（リスク70+チョークポイント） ===== */
+@keyframes hexPulse {
+  0% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.15; transform: scale(1.8); }
+  100% { opacity: 0.4; transform: scale(1); }
 }
-.chokepoint-pulse {
-  animation: pulse 2s ease-in-out infinite;
-  fill: #ff9100;
-  opacity: 0.4;
+.hex-pulse {
+  animation: hexPulse 2s ease-in-out infinite;
+  transform-origin: center;
 }
 
 /* ===== ルートアニメーション ===== */
@@ -295,115 +304,92 @@ svg.world-map { width: 100%; height: 100%; }
   stroke-dasharray: 8, 12;
   animation: dash 1.5s linear infinite;
 }
+
+/* ===== ルートホバー時の薄暗さ ===== */
+.route-dimmed { opacity: 0.12 !important; }
+.route-highlight { opacity: 1 !important; }
+.country-dimmed { opacity: 0.4 !important; }
 </style>
 </head>
 <body>
 
 <!-- ヘッダー -->
 <div class="header">
-  <h1><span>SCRI</span> Logistics Risk Map</h1>
+  <div class="header-left">
+    <h1><span class="accent">SCRI</span> Logistics</h1>
+    <div class="header-controls">
+      <select class="header-select" id="dimension-select">
+        <option value="overall">Overall Risk</option>
+        <option value="conflict">Conflict</option>
+        <option value="sanctions">Sanctions</option>
+        <option value="maritime">Maritime</option>
+        <option value="disaster">Disaster</option>
+        <option value="political">Political</option>
+        <option value="trade">Trade</option>
+        <option value="economic">Economic</option>
+        <option value="cyber_risk">Cyber Risk</option>
+        <option value="climate_risk">Climate Risk</option>
+      </select>
+      <div class="mode-btn-group">
+        <button class="mode-btn active" data-mode="all" onclick="toggleMode('all',this)">All</button>
+        <button class="mode-btn" data-mode="sea" onclick="toggleMode('sea',this)">Sea</button>
+        <button class="mode-btn" data-mode="air" onclick="toggleMode('air',this)">Air</button>
+      </div>
+    </div>
+  </div>
   <div class="meta">
-    v1.4.0 &middot; 40 countries &middot; 22 dimensions<br>
+    v1.5.0 &middot; 40 countries &middot; 22 dim<br>
     <span id="update-time">Updated: --</span>
   </div>
 </div>
 
-<div class="main-container">
-  <!-- 左サイドバー -->
-  <div class="sidebar">
-    <!-- KPIカード -->
-    <div class="kpi-grid">
-      <div class="kpi-card kpi-critical">
-        <div class="kpi-value" id="kpi-critical">--</div>
-        <div class="kpi-label">Critical</div>
-      </div>
-      <div class="kpi-card kpi-high">
-        <div class="kpi-value" id="kpi-high">--</div>
-        <div class="kpi-label">High</div>
-      </div>
-      <div class="kpi-card kpi-monitor full-width">
-        <div class="kpi-value" id="kpi-monitor">--</div>
-        <div class="kpi-label">Countries Monitored</div>
-      </div>
-    </div>
-
-    <!-- 次元セレクト -->
-    <div class="section-title">Dimension View</div>
-    <select class="dimension-select" id="dimension-select">
-      <option value="overall">Overall Risk</option>
-      <option value="conflict">Conflict</option>
-      <option value="sanctions">Sanctions</option>
-      <option value="maritime">Maritime</option>
-      <option value="disaster">Disaster</option>
-      <option value="political">Political</option>
-      <option value="trade">Trade</option>
-      <option value="economic">Economic</option>
-      <option value="cyber_risk">Cyber Risk</option>
-      <option value="climate_risk">Climate Risk</option>
-    </select>
-
-    <!-- 輸送モードトグル -->
-    <div class="section-title">Transport Mode</div>
-    <div class="mode-toggles">
-      <button class="mode-btn active" data-mode="all" onclick="toggleMode('all', this)">All</button>
-      <button class="mode-btn" data-mode="sea" onclick="toggleMode('sea', this)">Sea</button>
-      <button class="mode-btn" data-mode="air" onclick="toggleMode('air', this)">Air</button>
-    </div>
-
-    <!-- チョークポイントリスト -->
-    <div class="section-title">Chokepoints</div>
-    <ul class="chokepoint-list" id="chokepoint-list"></ul>
-
-    <!-- 国リスト上位 -->
-    <div class="section-title">Highest Risk Countries</div>
-    <div id="risk-country-list"></div>
-  </div>
-
-  <!-- 地図エリア -->
+<!-- メインエリア: 地図 + 右パネル -->
+<div class="main-area">
+  <!-- 地図 -->
   <div class="map-container" id="map-container">
     <svg class="world-map" id="world-map"></svg>
-
-    <!-- ツールチップ -->
     <div class="tooltip" id="tooltip"></div>
-
-    <!-- 詳細パネル -->
-    <div class="detail-panel" id="detail-panel">
-      <div class="detail-header">
-        <span class="detail-country" id="detail-country"></span>
-        <button class="detail-close" onclick="closeDetail()">&times;</button>
-      </div>
-      <div class="detail-overall">
-        <div class="detail-overall-score" id="detail-score"></div>
-        <div class="detail-overall-label" id="detail-level"></div>
-      </div>
-      <div id="detail-bars"></div>
-    </div>
-
     <!-- 凡例 -->
     <div class="legend">
       <div class="legend-title">Risk Level</div>
       <div class="legend-gradient"></div>
-      <div class="legend-labels">
-        <span>0 Minimal</span>
-        <span>50 Medium</span>
-        <span>100 Critical</span>
-      </div>
+      <div class="legend-labels"><span>0 Low</span><span>50</span><span>100 Critical</span></div>
       <div class="legend-items">
         <div class="legend-item">
-          <div class="legend-line" style="background:#4fc3f7;"></div>
-          <span>Sea Route</span>
+          <div class="legend-line" style="background:#4a9eff; height:3px;"></div>
+          <span>Sea Route (width=risk)</span>
         </div>
         <div class="legend-item">
-          <div class="legend-line" style="background:#ce93d8; border-style:dashed;"></div>
+          <div class="legend-line" style="background:#ce93d8; border-top:2px dashed #ce93d8; height:0;"></div>
           <span>Air Route</span>
         </div>
         <div class="legend-item">
-          <div class="legend-triangle"></div>
+          <div class="legend-hex"></div>
           <span>Chokepoint</span>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- 右パネル -->
+  <div class="right-panel">
+    <div class="cp-status-panel" id="cp-status-panel">
+      <div class="panel-title">Chokepoint Status</div>
+      <div id="cp-list"></div>
+    </div>
+    <div class="route-detail-panel" id="route-detail-panel">
+      <div class="panel-title">Route Detail</div>
+      <div class="route-detail-empty" id="route-detail-empty">
+        Route on the map or a chip below to view details
+      </div>
+      <div id="route-detail-content" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 下部ルートランキングバー -->
+<div class="route-ranking-bar" id="route-ranking-bar">
+  <span class="ranking-label">Routes</span>
 </div>
 
 <script>
@@ -411,7 +397,6 @@ svg.world-map { width: 100%; height: 100%; }
 // データ定義
 // ============================================================
 
-// ISO3→ISO2 マッピング
 const iso3ToIso2 = {
   AFG:"AF",AGO:"AO",ALB:"AL",ARE:"AE",ARG:"AR",AUS:"AU",AUT:"AT",AZE:"AZ",
   BDI:"BI",BEL:"BE",BEN:"BJ",BFA:"BF",BGD:"BD",BGR:"BG",BHR:"BH",BIH:"BA",
@@ -435,7 +420,7 @@ const iso3ToIso2 = {
   USA:"US",UZB:"UZ",VEN:"VE",VNM:"VN",YEM:"YE",ZAF:"ZA",ZMB:"ZM",ZWE:"ZW"
 };
 
-// 40カ国リスクデータ（ハードコード / 静的データ）
+// 40カ国リスクデータ
 const RISK_DATA = {
   JPN: { name:"Japan", iso2:"JP", lat:36.2, lon:139.7, overall:18,
     sanctions:0, conflict:2, disaster:45, maritime:15, political:8, trade:12,
@@ -639,43 +624,84 @@ const RISK_DATA = {
     port_congestion:45, aviation:35, energy:55, currency:80 },
 };
 
-// 主要海路 5本
+// ===== 海路データ（チョークポイント情報付き） =====
 const SEA_ROUTES = [
-  { name:"Asia-Europe (Suez)", risk:55, color:"#4fc3f7",
-    points:[[104,1],[95,8],[80,12],[68,15],[55,22],[44,30],[35,32],[20,35],[10,42],[-3,48],[2,52]] },
-  { name:"Trans-Pacific (Asia-US West)", risk:25, color:"#4fc3f7",
-    points:[[121,31],[135,35],[155,38],[170,35],[-170,40],[-155,38],[-140,35],[-125,34]] },
-  { name:"Asia-Africa (Cape Route)", risk:45, color:"#4fc3f7",
-    points:[[104,1],[95,5],[80,-5],[65,-10],[50,-15],[35,-25],[22,-35],[18,-34],[15,-30]] },
-  { name:"Middle East-Asia (Oil Route)", risk:50, color:"#4fc3f7",
-    points:[[50,26],[56,24],[62,22],[68,18],[75,15],[80,10],[95,5],[104,1]] },
-  { name:"Europe-Americas (Atlantic)", risk:20, color:"#4fc3f7",
-    points:[[-5,48],[-15,45],[-25,40],[-35,35],[-45,30],[-55,28],[-65,30],[-75,25],[-80,25]] },
+  {
+    id: "yokohama-rotterdam-suez",
+    name: "横浜 → ロッテルダム（スエズ経由）",
+    points: [[139.65,35.45],[56.25,26.57],[43.47,12.58],[32.35,30.42],[14.5,36.0],[4.47,51.9]],
+    risk: 72,
+    chokepoints: [
+      {name:"バベルマンデブ", risk:82},
+      {name:"スエズ運河", risk:67},
+    ],
+    alternative: {route:"喜望峰迂回", extra_days:12, extra_cost_jpy:18000000},
+    type: "sea"
+  },
+  {
+    id: "shanghai-la-pacific",
+    name: "上海 → ロサンゼルス（太平洋直行）",
+    points: [[121.5,31.2],[180,37.0],[-118.25,34.05]],
+    risk: 35,
+    chokepoints: [],
+    alternative: null,
+    type: "sea"
+  },
+  {
+    id: "sg-dubai-hormuz",
+    name: "シンガポール → ドバイ（ホルムズ経由）",
+    points: [[103.82,1.35],[78.0,7.0],[56.25,26.57],[55.27,25.2]],
+    risk: 72,
+    chokepoints: [
+      {name:"マラッカ海峡", risk:36},
+      {name:"ホルムズ海峡", risk:74},
+    ],
+    alternative: {route:"紅海迂回", extra_days:5, extra_cost_jpy:8000000},
+    type: "sea"
+  },
+  {
+    id: "yokohama-mumbai-malacca",
+    name: "横浜 → ムンバイ（マラッカ経由）",
+    points: [[139.65,35.45],[103.82,1.25],[72.83,18.93]],
+    risk: 42,
+    chokepoints: [
+      {name:"マラッカ海峡", risk:36},
+    ],
+    alternative: null,
+    type: "sea"
+  },
+  {
+    id: "europe-asia-redsea",
+    name: "欧州 → アジア（紅海経由）",
+    points: [[4.47,51.9],[14.5,36.0],[32.35,30.42],[43.47,12.58],[103.82,1.35]],
+    risk: 80,
+    chokepoints: [
+      {name:"スエズ運河", risk:67},
+      {name:"バベルマンデブ", risk:82},
+    ],
+    alternative: {route:"喜望峰迂回", extra_days:14, extra_cost_jpy:22000000},
+    type: "sea"
+  },
 ];
 
-// 主要航空路 5本
+// ===== 航空路データ =====
 const AIR_ROUTES = [
-  { name:"Tokyo-Frankfurt", risk:15, color:"#ce93d8",
-    points:[[140,36],[120,50],[100,55],[80,55],[60,52],[40,50],[10,50]] },
-  { name:"Shanghai-Los Angeles", risk:22, color:"#ce93d8",
-    points:[[121,31],[140,40],[160,45],[180,48],[-160,48],[-140,42],[-120,34]] },
-  { name:"Singapore-London", risk:18, color:"#ce93d8",
-    points:[[104,1],[95,10],[80,18],[65,25],[50,30],[35,38],[20,42],[5,48],[0,51]] },
-  { name:"Dubai-New York", risk:20, color:"#ce93d8",
-    points:[[55,25],[45,30],[30,35],[15,40],[0,42],[-15,44],[-30,44],[-50,42],[-74,41]] },
-  { name:"Tokyo-Singapore", risk:10, color:"#ce93d8",
-    points:[[140,36],[130,28],[120,20],[115,12],[108,5],[104,1]] },
+  {id:"tyo-lon", name:"東京→ロンドン", points:[[139.77,35.65],[60.0,55.0],[-0.12,51.5]], risk:25, type:"air", chokepoints:[], alternative:null},
+  {id:"tyo-nyc", name:"東京→ニューヨーク", points:[[139.77,35.65],[-170.0,55.0],[-74.01,40.71]], risk:20, type:"air", chokepoints:[], alternative:null},
+  {id:"tyo-fra", name:"東京→フランクフルト", points:[[139.77,35.65],[80.0,55.0],[8.68,50.11]], risk:28, type:"air", chokepoints:[], alternative:null},
+  {id:"tyo-sgp", name:"東京→シンガポール", points:[[139.77,35.65],[115.0,20.0],[103.82,1.35]], risk:22, type:"air", chokepoints:[], alternative:null},
+  {id:"tyo-dxb", name:"東京→ドバイ(シベリア回避)", points:[[139.77,35.65],[100.0,20.0],[103.82,1.35],[55.27,25.2]], risk:30, type:"air", chokepoints:[], alternative:null},
 ];
 
-// チョークポイント 7箇所
+// ===== チョークポイントデータ =====
 const CHOKEPOINTS = [
-  { name:"Strait of Malacca", lat:2.5, lon:101.5, risk:45 },
-  { name:"Suez Canal", lat:30.5, lon:32.3, risk:55 },
-  { name:"Strait of Hormuz", lat:26.5, lon:56.3, risk:65 },
-  { name:"Bab el-Mandeb", lat:12.6, lon:43.3, risk:72 },
-  { name:"Panama Canal", lat:9.1, lon:-79.7, risk:35 },
-  { name:"Taiwan Strait", lat:24.0, lon:119.5, risk:58 },
-  { name:"Cape of Good Hope", lat:-34.4, lon:18.5, risk:28 },
+  {id:"bab", name:"バベルマンデブ", lat:12.58, lon:43.47, risk:82, status:"フーシ派攻撃", color:"#ff4d4d"},
+  {id:"suez", name:"スエズ運河", lat:30.42, lon:32.35, risk:67, status:"通航制限", color:"#ffa94d"},
+  {id:"hormuz", name:"ホルムズ海峡", lat:26.57, lon:56.25, risk:74, status:"イラン緊張", color:"#ffa94d"},
+  {id:"malacca", name:"マラッカ海峡", lat:1.25, lon:103.82, risk:36, status:"通常運航", color:"#51cf66"},
+  {id:"panama", name:"パナマ運河", lat:9.08, lon:-79.68, risk:49, status:"水位低下", color:"#74c0fc"},
+  {id:"taiwan", name:"台湾海峡", lat:24.5, lon:119.5, risk:55, status:"監視強化", color:"#74c0fc"},
+  {id:"cape", name:"喜望峰", lat:-34.35, lon:18.47, risk:28, status:"迂回航路利用増", color:"#51cf66"},
 ];
 
 // 次元表示名
@@ -689,23 +715,33 @@ const DIMENSION_LABELS = {
 };
 
 // ============================================================
-// ユーティリティ関数
+// ユーティリティ
 // ============================================================
+const routeColorScale = d3.scaleLinear()
+  .domain([0, 50, 80, 100])
+  .range(["#4a9eff", "#ffd43b", "#ff6b35", "#ff0000"]);
+
 function riskColor(score) {
-  if (score >= 80) return "#ff1744";
-  if (score >= 60) return "#ff9100";
-  if (score >= 40) return "#ffd600";
-  if (score >= 20) return "#66bb6a";
-  return "#00e676";
+  return routeColorScale(Math.max(0, Math.min(100, score)));
 }
 
-function riskColorScale(score) {
-  // 0-100のスムーズなカラースケール
+function riskColorSmooth(score) {
   const t = score / 100;
-  if (t < 0.25) return d3.interpolateRgb("#00e676", "#66bb6a")(t * 4);
-  if (t < 0.5) return d3.interpolateRgb("#66bb6a", "#ffd600")((t - 0.25) * 4);
-  if (t < 0.75) return d3.interpolateRgb("#ffd600", "#ff9100")((t - 0.5) * 4);
-  return d3.interpolateRgb("#ff9100", "#ff1744")((t - 0.75) * 4);
+  if (t < 0.25) return d3.interpolateRgb("#4a9eff", "#5dbfff")(t * 4);
+  if (t < 0.5) return d3.interpolateRgb("#5dbfff", "#ffd43b")((t - 0.25) * 4);
+  if (t < 0.75) return d3.interpolateRgb("#ffd43b", "#ff6b35")((t - 0.5) * 4);
+  return d3.interpolateRgb("#ff6b35", "#ff0000")((t - 0.75) * 4);
+}
+
+// 国塗り分け用（低リスクは暗い青、高リスクは赤）
+function countryFillColor(score) {
+  if (score === null || score === undefined) return "#1a1f29";
+  const t = score / 100;
+  if (t < 0.2) return d3.interpolateRgb("#1a2a3a", "#2a4a5a")(t * 5);
+  if (t < 0.4) return d3.interpolateRgb("#2a4a5a", "#4a6a3a")((t - 0.2) * 5);
+  if (t < 0.6) return d3.interpolateRgb("#4a6a3a", "#6a6a2a")((t - 0.4) * 5);
+  if (t < 0.8) return d3.interpolateRgb("#6a6a2a", "#7a4a2a")((t - 0.6) * 5);
+  return d3.interpolateRgb("#7a4a2a", "#8a2020")((t - 0.8) * 5);
 }
 
 function riskLevel(score) {
@@ -716,11 +752,32 @@ function riskLevel(score) {
   return "MINIMAL";
 }
 
-function getCountryScore(iso3, dimension) {
+function getCountryScore(iso3, dim) {
   const d = RISK_DATA[iso3];
   if (!d) return null;
-  if (dimension === "overall") return d.overall;
-  return d[dimension] !== undefined ? d[dimension] : null;
+  return dim === "overall" ? d.overall : (d[dim] !== undefined ? d[dim] : null);
+}
+
+function getFlagEmoji(iso2) {
+  if (!iso2 || iso2.length !== 2) return "";
+  const cp = [...iso2.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65);
+  return String.fromCodePoint(...cp);
+}
+
+function formatJPY(val) {
+  if (val >= 10000000) return (val / 10000000).toFixed(0) + "00万円";
+  if (val >= 10000) return (val / 10000).toFixed(0) + "万円";
+  return val.toLocaleString() + "円";
+}
+
+// 六角形パスジェネレータ
+function hexPath(size) {
+  const a = Math.PI / 3;
+  let pts = [];
+  for (let i = 0; i < 6; i++) {
+    pts.push([size * Math.sin(a * i), -size * Math.cos(a * i)]);
+  }
+  return "M" + pts.map(p => p.join(",")).join("L") + "Z";
 }
 
 // ============================================================
@@ -729,8 +786,8 @@ function getCountryScore(iso3, dimension) {
 const mapContainer = document.getElementById("map-container");
 const svg = d3.select("#world-map");
 const tooltip = document.getElementById("tooltip");
-const width = mapContainer.clientWidth;
-const height = mapContainer.clientHeight;
+let width = mapContainer.clientWidth;
+let height = mapContainer.clientHeight;
 
 const projection = d3.geoNaturalEarth1()
   .scale(width / 5.5)
@@ -738,26 +795,22 @@ const projection = d3.geoNaturalEarth1()
 
 const path = d3.geoPath().projection(projection);
 
-// ズーム
 const zoom = d3.zoom()
   .scaleExtent([1, 8])
-  .on("zoom", (event) => {
-    mapGroup.attr("transform", event.transform);
-  });
+  .on("zoom", (event) => { mapGroup.attr("transform", event.transform); });
 svg.call(zoom);
 
 const mapGroup = svg.append("g");
 
-// グラティキュール（経緯線）
-const graticule = d3.geoGraticule();
+// 経緯線
 mapGroup.append("path")
-  .datum(graticule())
+  .datum(d3.geoGraticule()())
   .attr("d", path)
   .attr("fill", "none")
   .attr("stroke", "#1a1f29")
   .attr("stroke-width", 0.3);
 
-// 海岸線の球面
+// 球面
 mapGroup.append("path")
   .datum({type: "Sphere"})
   .attr("d", path)
@@ -767,20 +820,14 @@ mapGroup.append("path")
 
 let currentDimension = "overall";
 let currentMode = "all";
+let selectedRouteId = null;
 let countryPaths;
-let routeGroupSea, routeGroupAir, chokepointGroup;
 
-// ISO3→RISK_DATA逆引き用マップ
-const nameToIso3 = {};
-Object.keys(RISK_DATA).forEach(k => { nameToIso3[RISK_DATA[k].name] = k; });
-
-// TopoJSON読み込み
+// ===== TopoJSON読み込み =====
 d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(world => {
   const countries = topojson.feature(world, world.objects.countries);
 
-  // ISO数値→ISO3マッピング（Natural Earth）
-  const numToIso3 = {};
-  // 主要国のISO数値コード
+  // ISO数値→ISO3
   const isoNumMap = {
     4:"AFG",8:"ALB",12:"DZA",24:"AGO",32:"ARG",36:"AUS",40:"AUT",
     31:"AZE",48:"BHR",50:"BGD",56:"BEL",68:"BOL",70:"BIH",72:"BWA",
@@ -808,46 +855,44 @@ d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(w
     784:"ARE",826:"GBR",840:"USA",858:"URY",860:"UZB",862:"VEN",
     887:"YEM",894:"ZMB",716:"ZWE",158:"TWN",275:"PSE",728:"SSD"
   };
+  const numToIso3 = {};
   Object.keys(isoNumMap).forEach(n => { numToIso3[n] = isoNumMap[n]; });
+  window._numToIso3 = numToIso3;
 
-  // 国を描画
+  // 国描画
   countryPaths = mapGroup.selectAll("path.country")
     .data(countries.features)
     .enter().append("path")
     .attr("class", "country")
     .attr("d", path)
-    .attr("stroke", "#30363d")
-    .attr("stroke-width", 0.5)
+    .attr("stroke", "#2d2f3e")
+    .attr("stroke-width", 0.4)
     .attr("fill", d => {
       const iso3 = numToIso3[d.id];
       const score = iso3 ? getCountryScore(iso3, currentDimension) : null;
-      return score !== null ? riskColorScale(score) : "#1a1f29";
+      return countryFillColor(score);
     })
-    .attr("cursor", d => {
-      const iso3 = numToIso3[d.id];
-      return RISK_DATA[iso3] ? "pointer" : "default";
-    })
+    .attr("cursor", d => numToIso3[d.id] && RISK_DATA[numToIso3[d.id]] ? "pointer" : "default")
     .on("mouseover", function(event, d) {
       const iso3 = numToIso3[d.id];
       if (!iso3 || !RISK_DATA[iso3]) return;
       const data = RISK_DATA[iso3];
       const score = getCountryScore(iso3, currentDimension);
-
-      d3.select(this).attr("stroke", "#58a6ff").attr("stroke-width", 1.5).raise();
+      d3.select(this).attr("stroke", "#4a9eff").attr("stroke-width", 1.5).raise();
 
       const dims = ["sanctions","conflict","maritime","disaster","political","trade","economic","cyber_risk"];
       let dimHtml = dims.map(dim => {
         const val = data[dim] || 0;
         return `<div class="tooltip-dim-row">
-          <span>${DIMENSION_LABELS[dim] || dim}</span>
+          <span>${DIMENSION_LABELS[dim]}</span>
           <span style="color:${riskColor(val)}">${val}</span>
         </div>
-        <div class="tooltip-dim-bar"><div class="tooltip-dim-fill" style="width:${val}%;background:${riskColorScale(val)}"></div></div>`;
+        <div class="tooltip-dim-bar"><div class="tooltip-dim-fill" style="width:${val}%;background:${riskColorSmooth(val)}"></div></div>`;
       }).join("");
 
       tooltip.innerHTML = `
-        <div class="tooltip-title">${data.name} (${iso3})</div>
-        <div class="tooltip-score" style="color:${riskColor(score)}">${score} <span style="font-size:12px;color:#8b949e">${riskLevel(score)}</span></div>
+        <div class="tooltip-title">${getFlagEmoji(data.iso2)} ${data.name} (${iso3})</div>
+        <div class="tooltip-score" style="color:${riskColor(score)}">${score} <span style="font-size:12px;color:#8b8fa8">${riskLevel(score)}</span></div>
         <div class="tooltip-dims">${dimHtml}</div>`;
       tooltip.style.display = "block";
     })
@@ -855,18 +900,14 @@ d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(w
       const rect = mapContainer.getBoundingClientRect();
       let x = event.clientX - rect.left + 15;
       let y = event.clientY - rect.top + 15;
-      if (x + 280 > rect.width) x = event.clientX - rect.left - 290;
+      if (x + 300 > rect.width) x = event.clientX - rect.left - 310;
       if (y + 300 > rect.height) y = event.clientY - rect.top - 200;
       tooltip.style.left = x + "px";
       tooltip.style.top = y + "px";
     })
     .on("mouseout", function() {
-      d3.select(this).attr("stroke", "#30363d").attr("stroke-width", 0.5);
+      d3.select(this).attr("stroke", "#2d2f3e").attr("stroke-width", 0.4);
       tooltip.style.display = "none";
-    })
-    .on("click", function(event, d) {
-      const iso3 = numToIso3[d.id];
-      if (iso3 && RISK_DATA[iso3]) showDetail(iso3);
     });
 
   // 境界線
@@ -874,188 +915,343 @@ d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(w
     .datum(topojson.mesh(world, world.objects.countries, (a, b) => a !== b))
     .attr("d", path)
     .attr("fill", "none")
-    .attr("stroke", "#30363d")
+    .attr("stroke", "#2d2f3e")
     .attr("stroke-width", 0.3);
 
-  // ルート描画
   drawRoutes();
   drawChokepoints();
-  updateKPIs();
-  updateChokepointList();
-  updateRiskCountryList();
-
-  // 国パスを更新する関数をグローバルに
-  window._numToIso3 = numToIso3;
+  buildChokepointPanel();
+  buildRouteRankingBar();
 });
 
-// ===== ルート描画 =====
+// ============================================================
+// ルート描画 — 太さ=リスク、色=リスク
+// ============================================================
 function drawRoutes() {
-  // 既存削除
-  mapGroup.selectAll(".route-sea").remove();
-  mapGroup.selectAll(".route-air").remove();
+  mapGroup.selectAll(".route-group").remove();
+  const routeGroup = mapGroup.append("g").attr("class", "route-group");
 
   const lineGen = d3.line()
     .x(d => projection(d)[0])
     .y(d => projection(d)[1])
     .curve(d3.curveCatmullRom.alpha(0.5));
 
-  // 海路
-  if (currentMode === "all" || currentMode === "sea") {
-    routeGroupSea = mapGroup.append("g").attr("class", "route-sea");
-    SEA_ROUTES.forEach(route => {
-      const coords = route.points.map(p => [p[0], p[1]]);
-      routeGroupSea.append("path")
-        .datum(coords)
-        .attr("d", lineGen)
-        .attr("fill", "none")
-        .attr("stroke", riskColorScale(route.risk))
-        .attr("stroke-width", 2)
-        .attr("stroke-opacity", 0.7)
-        .attr("class", "route-animated")
-        .on("mouseover", function(event) {
-          d3.select(this).attr("stroke-width", 4).attr("stroke-opacity", 1);
-          tooltip.innerHTML = `<div class="tooltip-title">${route.name}</div>
-            <div class="tooltip-score" style="color:${riskColor(route.risk)}">${route.risk} <span style="font-size:12px;color:#8b949e">${riskLevel(route.risk)}</span></div>
-            <div style="font-size:11px;color:#8b949e;margin-top:4px">Sea Route</div>`;
-          tooltip.style.display = "block";
-        })
-        .on("mousemove", function(event) {
-          const rect = mapContainer.getBoundingClientRect();
-          tooltip.style.left = (event.clientX - rect.left + 15) + "px";
-          tooltip.style.top = (event.clientY - rect.top + 15) + "px";
-        })
-        .on("mouseout", function() {
-          d3.select(this).attr("stroke-width", 2).attr("stroke-opacity", 0.7);
-          tooltip.style.display = "none";
-        });
-    });
-  }
+  const allRoutes = getAllVisibleRoutes();
 
-  // 航空路
-  if (currentMode === "all" || currentMode === "air") {
-    routeGroupAir = mapGroup.append("g").attr("class", "route-air");
-    AIR_ROUTES.forEach(route => {
-      const coords = route.points.map(p => [p[0], p[1]]);
-      routeGroupAir.append("path")
-        .datum(coords)
-        .attr("d", lineGen)
-        .attr("fill", "none")
-        .attr("stroke", riskColorScale(route.risk))
-        .attr("stroke-width", 1.5)
-        .attr("stroke-opacity", 0.6)
-        .attr("stroke-dasharray", "6,4")
-        .on("mouseover", function(event) {
-          d3.select(this).attr("stroke-width", 3).attr("stroke-opacity", 1);
-          tooltip.innerHTML = `<div class="tooltip-title">${route.name}</div>
-            <div class="tooltip-score" style="color:${riskColor(route.risk)}">${route.risk} <span style="font-size:12px;color:#8b949e">${riskLevel(route.risk)}</span></div>
-            <div style="font-size:11px;color:#8b949e;margin-top:4px">Air Route</div>`;
-          tooltip.style.display = "block";
-        })
-        .on("mousemove", function(event) {
-          const rect = mapContainer.getBoundingClientRect();
-          tooltip.style.left = (event.clientX - rect.left + 15) + "px";
-          tooltip.style.top = (event.clientY - rect.top + 15) + "px";
-        })
-        .on("mouseout", function() {
-          d3.select(this).attr("stroke-width", 1.5).attr("stroke-opacity", 0.6);
-          tooltip.style.display = "none";
-        });
-    });
-  }
+  allRoutes.forEach(route => {
+    const coords = route.points.map(p => [p[0], p[1]]); // [lon, lat]
+    const strokeW = 1 + (route.risk / 100) * 5; // 1px〜6px
+    const color = riskColor(route.risk);
+    const isSea = route.type === "sea";
+
+    // ルート背景（太いヒットエリア）
+    routeGroup.append("path")
+      .datum(coords)
+      .attr("d", lineGen)
+      .attr("fill", "none")
+      .attr("stroke", "transparent")
+      .attr("stroke-width", strokeW + 8)
+      .attr("class", "route-hitarea")
+      .attr("data-route-id", route.id)
+      .attr("cursor", "pointer")
+      .on("mouseover", function(event) { onRouteHover(route, event); })
+      .on("mousemove", function(event) { onRouteMove(event); })
+      .on("mouseout", function() { onRouteOut(); })
+      .on("click", function() { selectRoute(route.id); });
+
+    // ルートパス
+    const p = routeGroup.append("path")
+      .datum(coords)
+      .attr("d", lineGen)
+      .attr("fill", "none")
+      .attr("stroke", color)
+      .attr("stroke-width", strokeW)
+      .attr("stroke-opacity", 0.75)
+      .attr("stroke-linecap", "round")
+      .attr("class", "route-path" + (isSea ? " route-animated" : ""))
+      .attr("data-route-id", route.id);
+
+    if (!isSea) {
+      p.attr("stroke-dasharray", "6,4");
+    }
+  });
 }
 
-// ===== チョークポイント描画 =====
+function getAllVisibleRoutes() {
+  let routes = [];
+  if (currentMode === "all" || currentMode === "sea") routes = routes.concat(SEA_ROUTES);
+  if (currentMode === "all" || currentMode === "air") routes = routes.concat(AIR_ROUTES);
+  return routes;
+}
+
+// ===== ルートホバー =====
+function onRouteHover(route, event) {
+  // 他のルートを暗くする
+  mapGroup.selectAll(".route-path").classed("route-dimmed", true);
+  mapGroup.selectAll(`.route-path[data-route-id="${route.id}"]`)
+    .classed("route-dimmed", false)
+    .classed("route-highlight", true)
+    .attr("stroke-opacity", 1);
+
+  // チョークポイント強調
+  if (route.chokepoints && route.chokepoints.length > 0) {
+    const cpNames = route.chokepoints.map(c => c.name);
+    mapGroup.selectAll(".cp-hex-group").each(function() {
+      const name = d3.select(this).attr("data-cp-name");
+      if (cpNames.includes(name)) {
+        d3.select(this).select(".cp-hex-main").attr("stroke", "#fff").attr("stroke-width", 2);
+      }
+    });
+  }
+
+  // ツールチップ
+  let cpHtml = "";
+  if (route.chokepoints && route.chokepoints.length > 0) {
+    cpHtml = "<div style='margin-top:6px;font-size:11px;color:#8b8fa8;'>Chokepoints:</div>";
+    cpHtml += route.chokepoints.map(c =>
+      `<div style="display:flex;justify-content:space-between;font-size:11px;padding:1px 0;">
+        <span style="color:#e8e6e0">${c.name}</span>
+        <span style="color:${riskColor(c.risk)};font-weight:700">${c.risk}</span>
+      </div>`
+    ).join("");
+  }
+
+  tooltip.innerHTML = `
+    <div class="tooltip-title">${route.type === "sea" ? "🚢" : "✈"} ${route.name}</div>
+    <div class="tooltip-score" style="color:${riskColor(route.risk)}">${route.risk} <span style="font-size:12px;color:#8b8fa8">${riskLevel(route.risk)}</span></div>
+    ${cpHtml}`;
+  tooltip.style.display = "block";
+  onRouteMove(event);
+}
+
+function onRouteMove(event) {
+  const rect = mapContainer.getBoundingClientRect();
+  let x = event.clientX - rect.left + 15;
+  let y = event.clientY - rect.top + 15;
+  if (x + 300 > rect.width) x = event.clientX - rect.left - 310;
+  tooltip.style.left = x + "px";
+  tooltip.style.top = y + "px";
+}
+
+function onRouteOut() {
+  mapGroup.selectAll(".route-path")
+    .classed("route-dimmed", false)
+    .classed("route-highlight", false)
+    .attr("stroke-opacity", 0.75);
+  mapGroup.selectAll(".cp-hex-main").attr("stroke", "#0f1117").attr("stroke-width", 1);
+  tooltip.style.display = "none";
+}
+
+// ============================================================
+// チョークポイント描画 — 六角形シンボル
+// ============================================================
 function drawChokepoints() {
-  mapGroup.selectAll(".chokepoint-group").remove();
-  chokepointGroup = mapGroup.append("g").attr("class", "chokepoint-group");
+  mapGroup.selectAll(".chokepoint-layer").remove();
+  const cpLayer = mapGroup.append("g").attr("class", "chokepoint-layer");
 
   CHOKEPOINTS.forEach(cp => {
     const [x, y] = projection([cp.lon, cp.lat]);
     if (!x || !y) return;
 
-    const g = chokepointGroup.append("g").attr("transform", `translate(${x},${y})`);
+    const size = 8 + (cp.risk / 100) * 20;
+    const g = cpLayer.append("g")
+      .attr("class", "cp-hex-group")
+      .attr("data-cp-name", cp.name)
+      .attr("transform", `translate(${x},${y})`);
 
-    // 脈動サークル
-    g.append("circle")
-      .attr("class", "chokepoint-pulse")
-      .attr("cx", 0).attr("cy", 0)
-      .attr("r", 6)
-      .attr("fill", riskColor(cp.risk));
+    // 脈動エフェクト（リスク70以上）
+    if (cp.risk >= 70) {
+      g.append("path")
+        .attr("d", hexPath(size * 1.5))
+        .attr("fill", cp.color)
+        .attr("opacity", 0.3)
+        .attr("class", "hex-pulse");
+    }
 
-    // 三角マーカー
-    g.append("polygon")
-      .attr("points", "0,-7 -5,3 5,3")
-      .attr("fill", riskColor(cp.risk))
+    // 六角形本体
+    g.append("path")
+      .attr("d", hexPath(size))
+      .attr("fill", cp.color)
+      .attr("fill-opacity", 0.85)
       .attr("stroke", "#0f1117")
-      .attr("stroke-width", 1);
+      .attr("stroke-width", 1)
+      .attr("class", "cp-hex-main");
 
-    // インタラクション
+    // リスク数値
+    g.append("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", "0.35em")
+      .attr("fill", "#fff")
+      .attr("font-size", Math.max(10, size * 0.6) + "px")
+      .attr("font-weight", "700")
+      .text(cp.risk);
+
+    // インタラクション用透明カバー
     g.append("circle")
-      .attr("cx", 0).attr("cy", 0).attr("r", 12)
+      .attr("r", size + 5)
       .attr("fill", "transparent")
       .attr("cursor", "pointer")
       .on("mouseover", function(event) {
         tooltip.innerHTML = `<div class="tooltip-title">${cp.name}</div>
-          <div class="tooltip-score" style="color:${riskColor(cp.risk)}">${cp.risk} <span style="font-size:12px;color:#8b949e">${riskLevel(cp.risk)}</span></div>
-          <div style="font-size:11px;color:#8b949e;margin-top:4px">Strategic Chokepoint</div>`;
+          <div class="tooltip-score" style="color:${cp.color}">${cp.risk} <span style="font-size:12px;color:#8b8fa8">${riskLevel(cp.risk)}</span></div>
+          <div style="font-size:11px;color:#8b8fa8;margin-top:4px">${cp.status}</div>`;
         tooltip.style.display = "block";
+        const rect = mapContainer.getBoundingClientRect();
+        tooltip.style.left = (event.clientX - rect.left + 15) + "px";
+        tooltip.style.top = (event.clientY - rect.top + 15) + "px";
       })
       .on("mousemove", function(event) {
         const rect = mapContainer.getBoundingClientRect();
         tooltip.style.left = (event.clientX - rect.left + 15) + "px";
         tooltip.style.top = (event.clientY - rect.top + 15) + "px";
       })
-      .on("mouseout", function() { tooltip.style.display = "none"; });
+      .on("mouseout", function() { tooltip.style.display = "none"; })
+      .on("click", function() {
+        svg.transition().duration(750).call(
+          zoom.transform,
+          d3.zoomIdentity.translate(width / 2, height / 2).scale(4).translate(-x, -y)
+        );
+      });
   });
 }
 
 // ============================================================
-// UI更新関数
+// 右パネル — チョークポイント状況
 // ============================================================
-function updateKPIs() {
-  const countries = Object.values(RISK_DATA);
-  const critical = countries.filter(c => c.overall >= 80).length;
-  const high = countries.filter(c => c.overall >= 60 && c.overall < 80).length;
-  document.getElementById("kpi-critical").textContent = critical;
-  document.getElementById("kpi-high").textContent = high;
-  document.getElementById("kpi-monitor").textContent = countries.length;
+function buildChokepointPanel() {
+  const el = document.getElementById("cp-list");
+  const sorted = [...CHOKEPOINTS].sort((a, b) => b.risk - a.risk);
+  el.innerHTML = sorted.map(cp => `
+    <div class="cp-item" onclick="zoomToChokepoint(${cp.lat},${cp.lon})">
+      <div class="cp-dot" style="background:${cp.color}"></div>
+      <div class="cp-info">
+        <div class="cp-name">${cp.name}</div>
+        <div class="cp-status-text">${cp.status}</div>
+      </div>
+      <div class="cp-risk-val" style="color:${cp.color}">${cp.risk}</div>
+    </div>
+  `).join("");
 }
 
-function updateChokepointList() {
-  const list = document.getElementById("chokepoint-list");
-  list.innerHTML = CHOKEPOINTS
-    .sort((a, b) => b.risk - a.risk)
-    .map(cp => {
-      const cls = cp.risk >= 60 ? "risk-high" : cp.risk >= 40 ? "risk-medium" : "risk-low";
-      return `<li class="chokepoint-item" onclick="zoomToChokepoint(${cp.lat},${cp.lon})">
-        <div class="chokepoint-marker" style="border-bottom-color:${riskColor(cp.risk)}"></div>
-        <span class="chokepoint-name">${cp.name}</span>
-        <span class="chokepoint-risk ${cls}">${cp.risk}</span>
-      </li>`;
-    }).join("");
-}
+// ============================================================
+// 右パネル — ルート詳細
+// ============================================================
+function showRouteDetail(route) {
+  const emptyEl = document.getElementById("route-detail-empty");
+  const contentEl = document.getElementById("route-detail-content");
+  emptyEl.style.display = "none";
+  contentEl.style.display = "block";
 
-function updateRiskCountryList() {
-  const el = document.getElementById("risk-country-list");
-  const sorted = Object.entries(RISK_DATA)
-    .sort((a, b) => b[1].overall - a[1].overall)
-    .slice(0, 10);
-  el.innerHTML = sorted.map(([iso3, data]) => {
-    return `<div class="chokepoint-item" onclick="showDetail('${iso3}')">
-      <span style="font-size:14px">${iso3ToIso2[iso3] ? getFlagEmoji(iso3ToIso2[iso3]) : ""}</span>
-      <span class="chokepoint-name">${data.name}</span>
-      <span class="chokepoint-risk" style="color:${riskColor(data.overall)}">${data.overall}</span>
+  let cpBars = "";
+  if (route.chokepoints && route.chokepoints.length > 0) {
+    cpBars = `<div class="cp-breakdown">
+      <div class="cp-breakdown-title">Chokepoint Risk</div>
+      ${route.chokepoints.map(c => `
+        <div class="cp-bar-row">
+          <div class="cp-bar-name">${c.name}</div>
+          <div class="cp-bar-track">
+            <div class="cp-bar-fill" style="width:${c.risk}%;background:${riskColor(c.risk)}"></div>
+          </div>
+          <div class="cp-bar-val" style="color:${riskColor(c.risk)}">${c.risk}</div>
+        </div>
+      `).join("")}
     </div>`;
-  }).join("");
+  } else {
+    cpBars = `<div style="font-size:12px;color:#8b8fa8;margin-bottom:14px;">-- No chokepoints on this route --</div>`;
+  }
+
+  let altHtml = "";
+  if (route.alternative) {
+    const a = route.alternative;
+    altHtml = `<div class="alt-route-box">
+      <div class="alt-route-label">Alternative Route</div>
+      <div class="alt-route-name">${a.route}</div>
+      <div class="alt-route-stats">
+        <div class="alt-stat">+<strong>${a.extra_days}</strong> days</div>
+        <div class="alt-stat">+<strong>${formatJPY(a.extra_cost_jpy)}</strong></div>
+      </div>
+    </div>`;
+  }
+
+  contentEl.innerHTML = `
+    <div class="route-detail-header">
+      <div class="route-detail-name">${route.type === "sea" ? "🚢" : "✈"} ${route.name}</div>
+      <div class="route-detail-risk-badge" style="color:${riskColor(route.risk)}">${route.risk}</div>
+    </div>
+    ${cpBars}
+    ${altHtml}
+  `;
 }
 
-function getFlagEmoji(iso2) {
-  if (!iso2 || iso2.length !== 2) return "";
-  const codePoints = [...iso2.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65);
-  return String.fromCodePoint(...codePoints);
+function clearRouteDetail() {
+  document.getElementById("route-detail-empty").style.display = "flex";
+  document.getElementById("route-detail-content").style.display = "none";
 }
 
-// ===== 次元切替 =====
+// ============================================================
+// 下部ルートランキングバー
+// ============================================================
+function buildRouteRankingBar() {
+  const bar = document.getElementById("route-ranking-bar");
+  // ラベル以降をクリア
+  while (bar.children.length > 1) bar.removeChild(bar.lastChild);
+
+  const allRoutes = [...SEA_ROUTES, ...AIR_ROUTES].sort((a, b) => b.risk - a.risk);
+
+  allRoutes.forEach(route => {
+    const chip = document.createElement("div");
+    chip.className = "route-chip";
+    chip.setAttribute("data-route-id", route.id);
+    chip.innerHTML = `
+      <span class="route-chip-icon">${route.type === "sea" ? "🚢" : "✈"}</span>
+      <span class="route-chip-name">${route.name}</span>
+      <span class="route-chip-risk" style="color:${riskColor(route.risk)}">${route.risk}</span>
+    `;
+    chip.onclick = () => selectRoute(route.id);
+    bar.appendChild(chip);
+  });
+}
+
+// ===== ルート選択（クリック） =====
+function selectRoute(routeId) {
+  selectedRouteId = (selectedRouteId === routeId) ? null : routeId;
+
+  // チップのactiveクラス
+  document.querySelectorAll(".route-chip").forEach(c => {
+    c.classList.toggle("active", c.getAttribute("data-route-id") === selectedRouteId);
+  });
+
+  if (selectedRouteId) {
+    const route = [...SEA_ROUTES, ...AIR_ROUTES].find(r => r.id === selectedRouteId);
+    if (route) {
+      showRouteDetail(route);
+      // 地図上でハイライト
+      mapGroup.selectAll(".route-path").attr("stroke-opacity", 0.15);
+      mapGroup.selectAll(`.route-path[data-route-id="${selectedRouteId}"]`).attr("stroke-opacity", 1);
+
+      // 通過チョークポイント強調
+      if (route.chokepoints && route.chokepoints.length > 0) {
+        const cpNames = route.chokepoints.map(c => c.name);
+        mapGroup.selectAll(".cp-hex-group").each(function() {
+          const name = d3.select(this).attr("data-cp-name");
+          if (cpNames.includes(name)) {
+            d3.select(this).select(".cp-hex-main").attr("stroke", "#fff").attr("stroke-width", 2.5);
+          } else {
+            d3.select(this).select(".cp-hex-main").attr("stroke", "#0f1117").attr("stroke-width", 1);
+          }
+        });
+      }
+    }
+  } else {
+    clearRouteDetail();
+    mapGroup.selectAll(".route-path").attr("stroke-opacity", 0.75);
+    mapGroup.selectAll(".cp-hex-main").attr("stroke", "#0f1117").attr("stroke-width", 1);
+  }
+}
+
+// ============================================================
+// 地図更新・コントロール
+// ============================================================
 document.getElementById("dimension-select").addEventListener("change", function() {
   currentDimension = this.value;
   updateMap();
@@ -1067,64 +1263,19 @@ function updateMap() {
     .attr("fill", d => {
       const iso3 = window._numToIso3[d.id];
       const score = iso3 ? getCountryScore(iso3, currentDimension) : null;
-      return score !== null ? riskColorScale(score) : "#1a1f29";
+      return countryFillColor(score);
     });
 }
 
-// ===== 輸送モードトグル =====
 function toggleMode(mode, btn) {
   currentMode = mode;
   document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
+  selectedRouteId = null;
+  clearRouteDetail();
+  document.querySelectorAll(".route-chip").forEach(c => c.classList.remove("active"));
   drawRoutes();
   drawChokepoints();
-}
-
-// ===== 国詳細パネル =====
-function showDetail(iso3) {
-  const data = RISK_DATA[iso3];
-  if (!data) return;
-  const panel = document.getElementById("detail-panel");
-  document.getElementById("detail-country").textContent = `${getFlagEmoji(data.iso2)} ${data.name}`;
-  document.getElementById("detail-score").textContent = data.overall;
-  document.getElementById("detail-score").style.color = riskColor(data.overall);
-  document.getElementById("detail-level").textContent = riskLevel(data.overall);
-
-  const dims = [
-    "sanctions","conflict","disaster","maritime","political","trade","economic",
-    "cyber_risk","climate_risk","geo_risk","health","humanitarian","weather",
-    "compliance","food_security","labor","port_congestion","aviation","energy","currency"
-  ];
-
-  const barsEl = document.getElementById("detail-bars");
-  barsEl.innerHTML = dims.map(dim => {
-    const val = data[dim] || 0;
-    return `<div class="dim-bar-container">
-      <div class="dim-bar-label">
-        <span class="dim-bar-name">${DIMENSION_LABELS[dim] || dim}</span>
-        <span class="dim-bar-value" style="color:${riskColor(val)}">${val}</span>
-      </div>
-      <div class="dim-bar-track">
-        <div class="dim-bar-fill" style="width:${val}%;background:${riskColorScale(val)}"></div>
-      </div>
-    </div>`;
-  }).join("");
-
-  panel.style.display = "block";
-
-  // 地図上でズーム
-  if (data.lat && data.lon) {
-    const [x, y] = projection([data.lon, data.lat]);
-    svg.transition().duration(750).call(
-      zoom.transform,
-      d3.zoomIdentity.translate(width / 2, height / 2).scale(3).translate(-x, -y)
-    );
-  }
-}
-
-function closeDetail() {
-  document.getElementById("detail-panel").style.display = "none";
-  svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
 }
 
 function zoomToChokepoint(lat, lon) {
@@ -1136,7 +1287,7 @@ function zoomToChokepoint(lat, lon) {
 }
 
 // ============================================================
-// API動的データ取得（フォールバック付き）
+// APIデータ取得（フォールバック付き）
 // ============================================================
 async function loadRealData() {
   try {
@@ -1146,8 +1297,6 @@ async function loadRealData() {
       console.log('API data loaded:', data);
       document.getElementById("update-time").textContent =
         `Updated: ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC (Live)`;
-      // 動的データがあればRISK_DATAを上書き可能
-      // TODO: APIレスポンス形式に合わせて各国データを更新
     }
   } catch(e) {
     console.log('API unavailable, using static data');
@@ -1155,15 +1304,13 @@ async function loadRealData() {
       `Updated: 2026-04-02 (Static Data)`;
   }
 }
-
-// ページロード時に呼び出し
 loadRealData();
 
 // ウィンドウリサイズ対応
 window.addEventListener("resize", () => {
-  const w = mapContainer.clientWidth;
-  const h = mapContainer.clientHeight;
-  projection.scale(w / 5.5).translate([w / 2, h / 2]);
+  width = mapContainer.clientWidth;
+  height = mapContainer.clientHeight;
+  projection.scale(width / 5.5).translate([width / 2, height / 2]);
   if (countryPaths) {
     countryPaths.attr("d", path);
     mapGroup.selectAll("path").attr("d", function(d) {

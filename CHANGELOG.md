@@ -1,11 +1,31 @@
 # Changelog
 
-## [1.4.0] - 2026-04-02
+## [1.4.0] - 2026-04-03
+### Added — Advanced Forecasting Pipeline (高度予測パイプライン)
+- **Dual-Scale Model** (`features/tourism/dual_scale_model.py`): 短期(Transformer的注意機構) + 長期(PPML構造重力)の統合、ロジスティック混合比率
+- **Bayesian Updater** (`features/tourism/bayesian_updater.py`): Sequential Monte Carlo粒子フィルタ、実績値による逐次分布更新、系統的リサンプリング
+- **Risk Adjuster** (`features/tourism/risk_adjuster.py`): 6カ国×シナリオ別期待損失、SCRI動的確率調整、楽観/ベース/悲観3シナリオ
+- **Aggregator改訂** (`features/tourism/inbound_aggregator.py`): Dual-Scale→Bayesian→RiskAdjuster統合パイプライン
+- **テスト追加** (`tests/test_tourism_advanced.py`): RiskAdjuster/BayesianUpdater/DualScaleModel/Aggregator統合テスト 20+ケース
+
 ### Added — Dashboards (ダッシュボード刷新)
 - **Logistics Risk Dashboard** (`dashboard/logistics.html`): D3.js + TopoJSON 世界地図、国リスク塗り分け、海路5本/空路5本、チョークポイント7箇所（脈動アニメーション）、40カ国データ、次元切替、詳細パネル
 - **Inbound Tourism Risk Dashboard** (`dashboard/inbound.html`): 世界地図（12市場リスク）+ 日本地図（47都道府県 TopoJSON）、市場ランキング、都道府県別来訪者予測
 - **Landing Page** (`dashboard/index.html`): 3ダッシュボードへのカード型リンク
 - Legacy dashboard preserved as `dashboard/legacy.html`
+
+### Changed — Tourism Demand Model (観光需要モデル根本再設計)
+- **PPML構造重力モデル**: OLS → Poisson GLM (Santos Silva & Tenreyro, 2006)
+  - ゼロ対応（コロナ期データをそのまま扱える）
+  - ソース国固定効果 + 年固定効果で多辺的抵抗を吸収
+  - pseudo R² = 0.9874, 為替弾性値 = -1.12
+- **STL季節分解**: コロナ前2015-2019データから国別季節パターン抽出
+- **ボトムアップ集計**: モンテカルロ1000回で不確実性伝播、都道府県×国別シェア行列
+- **ベイズ的予測**: 係数事後分布からサンプリング → p10/p25/p50/p75/p90の確率分布
+- **ダッシュボード**: シナリオ切替 → 確率分布帯グラフに変更
+- 2 new MCP tools: forecast_japan_inbound, forecast_prefecture_inbound
+- 3 new API endpoints: /tourism/japan-forecast, /prefecture-forecast, /decompose-forecast
+- テスト修正: test_tourism_gravity.py を新PPML APIに適合（13テスト修正）
 
 ### Changed
 - VERSION: 1.3.0 → 1.4.0
