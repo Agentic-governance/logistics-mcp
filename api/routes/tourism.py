@@ -3,6 +3,7 @@
 
 GET  /api/v1/tourism/market-risk/{source_country}
 GET  /api/v1/tourism/market-ranking
+GET  /api/v1/tourism/historical
 POST /api/v1/tourism/forecast
 GET  /api/v1/tourism/competitor-analysis
 POST /api/v1/tourism/regional-distribution
@@ -166,6 +167,70 @@ def get_market_ranking(
     except Exception:
         logger.error("market-ranking エラー", exc_info=True)
         raise HTTPException(status_code=500, detail="市場ランキング取得中に内部エラーが発生しました")
+
+
+@router.get("/historical")
+def get_historical(
+    source: str = Query(default="ALL", description="国コード（ALLで全市場）"),
+    months: int = Query(default=87, ge=1, le=240, description="取得月数"),
+):
+    """japan_inbound テーブルから月次インバウンドデータを返す
+
+    Args:
+        source: ISO3国コード or "ALL"
+        months: 取得月数（デフォルト87=7年分+α）
+
+    Returns:
+        月次データ配列
+    """
+    try:
+        from pipeline.tourism.tourism_db import TourismDB
+        db = TourismDB()
+
+        if source.upper() == "ALL":
+            rows = db.get_japan_inbound()
+        else:
+            rows = db.get_japan_inbound(country=source.upper())
+
+        # month > 0 のみ（年次データ除外）
+        monthly = [r for r in rows if r.get("month", 0) > 0]
+
+        # 最新から指定月数分に制限
+        # ソート: 年降順、月降順
+        monthly.sort(key=lambda x: (x["year"], x["month"]), reverse=True)
+        monthly = monthly[:months]
+        monthly.reverse()  # 古い順に並べ直す
+
+        # 国別に整形
+        by_country = {}
+        for r in monthly:
+            cc = r["source_country"]
+            if cc not in by_country:
+                by_country[cc] = []
+            by_country[cc].append({
+                "year": r["year"],
+                "month": r["month"],
+                "arrivals": r["arrivals"],
+                "purpose_leisure_pct": r.get("purpose_leisure_pct"),
+                "avg_stay_days": r.get("avg_stay_days"),
+                "avg_spend_jpy": r.get("avg_spend_jpy"),
+            })
+
+        return {
+            "status": "ok",
+            "source": source.upper(),
+            "total_records": len(monthly),
+            "countries": len(by_country),
+            "data": by_country,
+        }
+
+    except Exception as e:
+        logger.error("historical エラー: %s", e, exc_info=True)
+        return {
+            "status": "error",
+            "message": f"月次データ取得失敗: {e}",
+            "data": {},
+        }
 
 
 @router.post("/forecast")
@@ -463,22 +528,46 @@ def post_japan_forecast(req: JapanForecastRequest):
         except Exception:
             logger.warning("TASK1-3モジュール予測失敗（フォールバック使用）")
 
-    # フォールバック: 静的データ + モンテカルロサンプリング
+    # フォールバック: tourism_stats.db のデータを優先使用
+    db_monthly_base = None
+    try:
+        from pipeline.tourism.tourism_db import TourismDB
+        db = TourismDB()
+        # 直近年（2024）の月次データからベースライン取得
+        all_rows = db.get_japan_inbound(year=2024)
+        monthly_rows = [r for r in all_rows if r.get("month", 0) > 0]
+        if monthly_rows:
+            db_monthly_base = {}
+            for r in monthly_rows:
+                cc = r["source_country"]
+                if cc not in db_monthly_base:
+                    db_monthly_base[cc] = [0] * 12
+                m_idx = r["month"] - 1
+                if 0 <= m_idx < 12:
+                    db_monthly_base[cc][m_idx] = r["arrivals"] / 1000  # 千人単位
+            logger.info("japan-forecast: DBデータからフォールバック生成 (%d市場)", len(db_monthly_base))
+    except Exception as e:
+        logger.warning("japan-forecast: DB読み込み失敗 (%s) — 静的データ使用", e)
+
+    use_base = db_monthly_base if db_monthly_base else _FALLBACK_MONTHLY_BASE
+    data_source = "db_montecarlo_fallback" if db_monthly_base else "static_montecarlo_fallback"
+
     total_base = []
     for m_str in months:
         m_idx = _month_str_to_index(m_str)
         total = 0
-        for cdata in _FALLBACK_MONTHLY_BASE.values():
+        for cdata in use_base.values():
             total += cdata[m_idx % 12]
-        # 非掲載市場分12%加算
-        total = int(total * 1.12)
+        # DB由来データがない市場分は加算不要（全20市場カバー済み）
+        if not db_monthly_base:
+            total = int(total * 1.12)  # 非掲載市場分12%加算
         total_base.append(total)
 
     dist = _generate_forecast_samples(total_base, n_samples, scenario)
 
-    # 国別内訳（フォールバック）
+    # 国別内訳
     by_country = {}
-    for code, cdata in _FALLBACK_MONTHLY_BASE.items():
+    for code, cdata in use_base.items():
         c_base = [cdata[_month_str_to_index(m) % 12] for m in months]
         c_dist = _generate_forecast_samples(c_base, n_samples, scenario, cv=0.15)
         by_country[code] = {
@@ -489,7 +578,7 @@ def post_japan_forecast(req: JapanForecastRequest):
 
     return {
         "status": "fallback",
-        "message": "TASK1-3モジュール未実装（モンテカルロフォールバック）",
+        "message": "DBデータからの簡易予測" if db_monthly_base else "静的データからのモンテカルロフォールバック",
         "months": months,
         "median": [d["median"] for d in dist],
         "p10": [d["p10"] for d in dist],
@@ -498,7 +587,7 @@ def post_japan_forecast(req: JapanForecastRequest):
         "p90": [d["p90"] for d in dist],
         "by_country": by_country,
         "model_info": {
-            "method": "static_montecarlo_fallback",
+            "method": data_source,
             "n_samples": n_samples,
             "scenario": scenario,
         },
