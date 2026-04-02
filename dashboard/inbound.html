@@ -25,9 +25,8 @@ select.ctrl-select:focus{border-color:#58a6ff}
 .scenario-btn:last-child{border-radius:0 6px 6px 0}
 .scenario-btn.active{color:#f0f6fc;border-color:#58a6ff}
 .scenario-btn[data-s="base"].active{background:rgba(66,133,244,.25)}
-.scenario-btn[data-s="yen_weak"].active{background:rgba(255,152,0,.25)}
-.scenario-btn[data-s="yen_strong"].active{background:rgba(0,230,118,.2)}
-.scenario-btn[data-s="cn_worsen"].active{background:rgba(255,23,68,.2)}
+.scenario-btn[data-s="optimistic"].active{background:rgba(0,230,118,.2)}
+.scenario-btn[data-s="pessimistic"].active{background:rgba(255,23,68,.2)}
 .header .meta{font-size:10px;color:#8b8fa8}
 
 /* ========== Maps Row (upper 38vh) ========== */
@@ -88,7 +87,11 @@ svg.map{width:100%;height:100%}
 .chart-legend-item .swatch{width:20px;height:3px;border-radius:2px}
 .chart-legend-item .swatch-dash{width:20px;height:0;border-top:2px dashed;border-radius:0}
 .chart-legend-item .swatch-band{width:20px;height:8px;border-radius:2px;opacity:.4}
-.chart-container{flex:1;position:relative;min-height:200px}
+.chart-container{position:relative;min-height:200px}
+.chart-main-wrap{flex:6;display:flex;flex-direction:column;min-height:0}
+.chart-breakdown-wrap{flex:4;display:flex;flex-direction:column;min-height:0;margin-top:10px;border-top:1px solid #2d2f3e;padding-top:10px}
+.chart-breakdown-wrap .chart-container{flex:1;min-height:160px}
+.charts-flex{display:flex;flex-direction:column;flex:1;min-height:0}
 
 /* ========== City labels on Japan map ========== */
 .city-label{font-size:8px;fill:#8b8fa8;pointer-events:none;text-anchor:middle}
@@ -139,10 +142,9 @@ svg.map{width:100%;height:100%}
       <option value="長野">長野</option>
     </select>
     <div class="scenario-toggles">
-      <button class="scenario-btn active" data-s="base" onclick="setScenario({})">現状維持</button>
-      <button class="scenario-btn" data-s="yen_weak" onclick="setScenario({exr:0.10})">円安10%</button>
-      <button class="scenario-btn" data-s="yen_strong" onclick="setScenario({exr:-0.10})">円高10%</button>
-      <button class="scenario-btn" data-s="cn_worsen" onclick="setScenario({bilateral_risk:30})">日中悪化</button>
+      <button class="scenario-btn active" data-s="base" onclick="setScenario('base',this)">現状維持</button>
+      <button class="scenario-btn" data-s="optimistic" onclick="setScenario('optimistic',this)">楽観</button>
+      <button class="scenario-btn" data-s="pessimistic" onclick="setScenario('pessimistic',this)">悲観</button>
     </div>
     <div class="meta">2026-04-03 UTC</div>
   </div>
@@ -207,20 +209,33 @@ svg.map{width:100%;height:100%}
 
 <!-- ===== Time-Series Chart ===== -->
 <div class="chart-section">
-  <div class="chart-header">
-    <div class="chart-title">Monthly Inbound Visitors (2019-2025) - コロナ影響 + 回復 + 予測</div>
-    <div class="chart-legend">
-      <div class="chart-legend-item"><div class="swatch" style="background:#9e9e9e"></div>過去実績 (JNTO)</div>
-      <div class="chart-legend-item"><div class="swatch" style="background:#4285f4"></div>中央値 (p50)</div>
-      <div class="chart-legend-item"><div class="swatch-band" style="background:rgba(66,133,244,0.35)"></div>p25-p75 範囲</div>
-      <div class="chart-legend-item"><div class="swatch-band" style="background:rgba(66,133,244,0.15)"></div>p10-p90 範囲</div>
+  <div class="charts-flex">
+    <div class="chart-main-wrap">
+      <div class="chart-header">
+        <div class="chart-title">Monthly Inbound Visitors (2019-2025) - コロナ影響 + 回復 + 予測</div>
+        <div class="chart-legend">
+          <div class="chart-legend-item"><div class="swatch" style="background:#9e9e9e"></div>過去実績 (JNTO)</div>
+          <div class="chart-legend-item"><div class="swatch" style="background:#4285f4"></div>中央値 (p50)</div>
+          <div class="chart-legend-item"><div class="swatch-band" style="background:rgba(66,133,244,0.35)"></div>p25-p75 範囲</div>
+          <div class="chart-legend-item"><div class="swatch-band" style="background:rgba(66,133,244,0.15)"></div>p10-p90 範囲</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:#8b8fa8;margin-bottom:4px;text-align:right">
+        この予測は1000回のシミュレーションから生成された確率分布です。帯の中心から外れるほど発生確率が低くなります。
+      </div>
+      <div class="chart-container" style="flex:1">
+        <canvas id="tsChart"></canvas>
+      </div>
     </div>
-    <div style="font-size:9px;color:#8b8fa8;margin-top:2px;text-align:right">
-      この予測は1000回のシミュレーションから生成された確率分布です。帯の中心から外れるほど発生確率が低くなります。
+    <div class="chart-breakdown-wrap" id="breakdownChartWrap" style="display:none">
+      <div class="chart-header">
+        <div class="chart-title" id="breakdownChartTitle">国別来訪者寄与</div>
+        <div class="chart-legend" id="breakdownChartLegend"></div>
+      </div>
+      <div class="chart-container">
+        <canvas id="countryBreakdownChart"></canvas>
+      </div>
     </div>
-  </div>
-  <div class="chart-container">
-    <canvas id="tsChart"></canvas>
   </div>
 </div>
 
@@ -480,33 +495,89 @@ const PREF_ID_TO_SELECT = {
 // ===================================================================
 const PREF_SHARES = {
   KR: {東京:0.22, 大阪:0.18, 福岡:0.20, 北海道:0.10, 沖縄:0.08, 京都:0.07, 新潟:0.015, 長野:0.01},
-  CN: {東京:0.32, 大阪:0.20, 京都:0.10, 北海道:0.08, 沖縄:0.06, 福岡:0.08, 新潟:0.01, 長野:0.01},
-  TW: {東京:0.28, 大阪:0.18, 北海道:0.12, 沖縄:0.09, 京都:0.09, 福岡:0.10, 新潟:0.015, 長野:0.01},
-  US: {東京:0.40, 大阪:0.18, 京都:0.12, 北海道:0.06, 沖縄:0.05, 福岡:0.05, 新潟:0.01, 長野:0.01},
-  AU: {東京:0.30, 大阪:0.15, 北海道:0.22, 沖縄:0.08, 京都:0.10, 福岡:0.05, 新潟:0.02, 長野:0.02}
+  CN: {東京:0.32, 大阪:0.20, 京都:0.10, 北海道:0.08, 沖縄:0.06, 福岡:0.08, 新潟:0.01, 長野:0.008},
+  TW: {東京:0.28, 大阪:0.18, 北海道:0.12, 沖縄:0.09, 京都:0.09, 福岡:0.10, 新潟:0.015, 長野:0.012},
+  US: {東京:0.40, 大阪:0.18, 京都:0.12, 北海道:0.06, 沖縄:0.05, 福岡:0.05, 新潟:0.01, 長野:0.015},
+  AU: {東京:0.30, 大阪:0.15, 北海道:0.22, 沖縄:0.08, 京都:0.10, 福岡:0.05, 新潟:0.02, 長野:0.025}
+};
+
+// 国別カラー定義
+const COUNTRY_COLORS = {
+  CN: '#ff6b6b',  // 赤
+  KR: '#4a9eff',  // 青
+  TW: '#51cf66',  // 緑
+  US: '#ffd43b',  // 黄
+  AU: '#cc5de8',  // 紫
 };
 
 function getPrefShare(country, pref) {
   if (pref === 'JAPAN') return 1.0;
-  if (country === 'ALL') {
-    // 全市場の加重平均
-    let total = 0;
-    Object.keys(MONTHLY_DATA).forEach(c => {
-      const s = PREF_SHARES[c] && PREF_SHARES[c][pref] ? PREF_SHARES[c][pref] : 0.05;
-      const m = MARKET_DATA[c];
-      if (m) total += s * m.share / 100;
-    });
-    // 非MONTHLY市場も
-    ['TH','HK','SG'].forEach(c => {
-      const m = MARKET_DATA[c];
-      if (m) total += 0.05 * m.share / 100;
-    });
-    return total;
-  }
   if (PREF_SHARES[country] && PREF_SHARES[country][pref] !== undefined) {
     return PREF_SHARES[country][pref];
   }
-  return 0.05;
+  return 0.02;
+}
+
+// 月次データの実績/予測値を取得（千人単位, 1国分）
+function getActualOrForecast(country, monthIndex) {
+  const d = MONTHLY_DATA[country];
+  if (!d) {
+    // TH/HK/SG等 MONTHLY_DATAに無い国はKRベースでスケーリング
+    const proxy = MONTHLY_DATA['KR'];
+    const mkt = MARKET_DATA[country];
+    const ratio = mkt ? mkt.visitors_2024 / MARKET_DATA['KR'].visitors_2024 : 0.1;
+    if (monthIndex < 72) return proxy.actual[monthIndex] * ratio;
+    const fi = monthIndex - 72;
+    return proxy.forecast_base[fi] * ratio;
+  }
+  if (monthIndex < 72) return d.actual[monthIndex];
+  const fi = monthIndex - 72;
+  return d.forecast_base[fi];
+}
+
+// シナリオ別予測値取得
+function getScenarioValue(country, monthIndex, scenario) {
+  const d = MONTHLY_DATA[country];
+  if (monthIndex < 72) return getActualOrForecast(country, monthIndex);
+  const fi = monthIndex - 72;
+  if (!d) {
+    const base = getActualOrForecast(country, monthIndex);
+    if (scenario === 'optimistic') return base * 1.15;
+    if (scenario === 'pessimistic') return base * 0.85;
+    return base;
+  }
+  if (scenario === 'optimistic') return d.forecast_optimistic[fi];
+  if (scenario === 'pessimistic') return d.forecast_pessimistic[fi];
+  return d.forecast_base[fi];
+}
+
+// 都道府県×国の月次値（整合性保証）
+function getMonthlyForPref(country, pref, monthIndex, scenario) {
+  scenario = scenario || 'base';
+  if (pref === 'JAPAN') {
+    if (country === 'ALL') {
+      // 全国全市場 = 各国の全国値を積み上げ
+      return Object.keys(MONTHLY_DATA)
+        .reduce((sum, c) => sum + getScenarioValue(c, monthIndex, scenario), 0)
+        // TH/HK/SG等の非MONTHLY市場も加算
+        + ['TH','HK','SG'].filter(c => !MONTHLY_DATA[c])
+          .reduce((sum, c) => sum + getScenarioValue(c, monthIndex, scenario), 0);
+    }
+    return getScenarioValue(country, monthIndex, scenario);
+  }
+
+  if (country === 'ALL') {
+    // 特定県の全市場 = 各国×その県のシェアを積み上げ
+    const allCountries = [...Object.keys(MONTHLY_DATA), ...['TH','HK','SG'].filter(c => !MONTHLY_DATA[c])];
+    return allCountries.reduce((sum, c) => {
+      const share = getPrefShare(c, pref);
+      return sum + getScenarioValue(c, monthIndex, scenario) * share;
+    }, 0);
+  }
+
+  // 特定国×特定県
+  const share = getPrefShare(country, pref);
+  return getScenarioValue(country, monthIndex, scenario) * share;
 }
 
 // ===================================================================
@@ -515,8 +586,10 @@ function getPrefShare(country, pref) {
 let currentCountry = 'ALL';
 let currentPref = 'JAPAN';
 let currentScenario = {};  // シナリオショックパラメータ
+let currentScenarioName = 'base'; // 'base' | 'optimistic' | 'pessimistic'
 let apiForecastData = null;  // APIから取得した予測データ
 let tsChart = null;
+let breakdownChart = null;
 
 const tooltip = d3.select('#tooltip');
 
@@ -540,7 +613,6 @@ function lossChipClass(loss) {
 // TIME-SERIES DATA (月次千人単位)
 // ===================================================================
 function getTimeSeriesData(country, pref) {
-  const share = getPrefShare(country, pref);
   // ラベル: 2019-01 ~ 2025-12
   const labels = [];
   for (let y = 2019; y <= 2025; y++) {
@@ -548,19 +620,17 @@ function getTimeSeriesData(country, pref) {
       labels.push(`${y}-${String(m).padStart(2,'0')}`);
     }
   }
+  const totalMonths = 84; // 72実績 + 12予測
 
   // APIデータが利用可能な場合
   if (apiForecastData && country === 'ALL' && pref === 'JAPAN') {
-    const actual = new Array(72).fill(0);
-    Object.keys(MONTHLY_DATA).forEach(c => {
-      const d = MONTHLY_DATA[c];
-      d.actual.forEach((v,i) => actual[i] += v);
-    });
-    const otherRatio = 0.12;
-    const actualOut = actual.map(v => Math.round(v * (1 + otherRatio)));
+    const actual = [];
+    for (let i = 0; i < 72; i++) {
+      actual.push(Math.round(getMonthlyForPref('ALL', 'JAPAN', i, 'base')));
+    }
     return {
       labels,
-      actual: actualOut,
+      actual: actual,
       median: apiForecastData.median || [],
       p10: apiForecastData.p10 || [],
       p25: apiForecastData.p25 || [],
@@ -569,84 +639,59 @@ function getTimeSeriesData(country, pref) {
     };
   }
 
-  // 静的フォールバック: forecast_base→median, ci_upper→p90, ci_lower→p10
-  if (country === 'ALL') {
-    const actual = new Array(72).fill(0);
-    const fb = new Array(12).fill(0);
-    const cu = new Array(12).fill(0);
-    const cl = new Array(12).fill(0);
-    Object.keys(MONTHLY_DATA).forEach(c => {
-      const d = MONTHLY_DATA[c];
-      const cs = getPrefShare(c, pref);
-      d.actual.forEach((v,i) => actual[i] += v * cs);
-      d.forecast_base.forEach((v,i) => fb[i] += v * cs);
-      d.ci_upper.forEach((v,i) => cu[i] += v * cs);
-      d.ci_lower.forEach((v,i) => cl[i] += v * cs);
-    });
-    const otherRatio = 0.12;
-    const actualOut = actual.map(v => Math.round(v * (1 + otherRatio)));
-    const medianArr = fb.map(v => Math.round(v * (1 + otherRatio)));
-    const p90Arr = cu.map(v => Math.round(v * (1 + otherRatio)));
-    const p10Arr = cl.map(v => Math.round(v * (1 + otherRatio)));
-    // p25/p75 を median と p10/p90 の間で補間
-    const p25Arr = medianArr.map((m,i) => Math.round(m * 0.65 + p10Arr[i] * 0.35));
-    const p75Arr = medianArr.map((m,i) => Math.round(m * 0.65 + p90Arr[i] * 0.35));
-
-    // シナリオショック適用
-    const shock = _calcShockMultiplier(currentScenario);
-    return {
-      labels,
-      actual: actualOut,
-      median: medianArr.map(v => Math.round(v * shock)),
-      p10: p10Arr.map(v => Math.round(v * shock)),
-      p25: p25Arr.map(v => Math.round(v * shock)),
-      p75: p75Arr.map(v => Math.round(v * shock)),
-      p90: p90Arr.map(v => Math.round(v * shock)),
-    };
+  // getMonthlyForPref ベースで整合的に生成
+  const scenarioName = currentScenarioName || 'base';
+  const actual = [];
+  const medianArr = [];
+  for (let i = 0; i < 72; i++) {
+    actual.push(Math.round(getMonthlyForPref(country, pref, i, 'base')));
+  }
+  for (let i = 72; i < totalMonths; i++) {
+    medianArr.push(Math.round(getMonthlyForPref(country, pref, i, scenarioName)));
   }
 
-  const d = MONTHLY_DATA[country];
-  if (!d) {
-    const proxy = MONTHLY_DATA['KR'];
-    const mkt = MARKET_DATA[country];
-    const ratio = mkt ? mkt.visitors_2024 / MARKET_DATA['KR'].visitors_2024 : 0.1;
-    const shock = _calcShockMultiplier(currentScenario);
-    const med = proxy.forecast_base.map(v => Math.round(v * ratio * share * shock));
-    const u = proxy.ci_upper.map(v => Math.round(v * ratio * share * shock));
-    const lo = proxy.ci_lower.map(v => Math.round(v * ratio * share * shock));
-    return {
-      labels,
-      actual: proxy.actual.map(v => Math.round(v * ratio * share)),
-      median: med,
-      p10: lo,
-      p25: med.map((m,i) => Math.round(m * 0.65 + lo[i] * 0.35)),
-      p75: med.map((m,i) => Math.round(m * 0.65 + u[i] * 0.35)),
-      p90: u,
-    };
+  // CI帯: ci_upper/ci_lower がある国は使用、無ければ ±15%/±8%
+  const p90Arr = [];
+  const p10Arr = [];
+  for (let fi = 0; fi < 12; fi++) {
+    const mi = 72 + fi;
+    if (country !== 'ALL' && MONTHLY_DATA[country]) {
+      const share = getPrefShare(country, pref);
+      p90Arr.push(Math.round(MONTHLY_DATA[country].ci_upper[fi] * share));
+      p10Arr.push(Math.round(MONTHLY_DATA[country].ci_lower[fi] * share));
+    } else {
+      // ALL or 非MONTHLYの場合: 各国のCI帯を積み上げ
+      let u = 0, l = 0;
+      const allC = [...Object.keys(MONTHLY_DATA), ...['TH','HK','SG'].filter(c => !MONTHLY_DATA[c])];
+      allC.forEach(c => {
+        const share = (pref === 'JAPAN') ? 1.0 : getPrefShare(c, pref);
+        const d = MONTHLY_DATA[c];
+        if (d) {
+          u += d.ci_upper[fi] * share;
+          l += d.ci_lower[fi] * share;
+        } else {
+          const base = getActualOrForecast(c, mi);
+          u += base * 1.15 * share;
+          l += base * 0.85 * share;
+        }
+      });
+      p90Arr.push(Math.round(u));
+      p10Arr.push(Math.round(l));
+    }
   }
 
-  const shock = _calcShockMultiplier(currentScenario);
-  const med = d.forecast_base.map(v => Math.round(v * share * shock));
-  const u = d.ci_upper.map(v => Math.round(v * share * shock));
-  const lo = d.ci_lower.map(v => Math.round(v * share * shock));
+  const p25Arr = medianArr.map((m,i) => Math.round(m * 0.65 + p10Arr[i] * 0.35));
+  const p75Arr = medianArr.map((m,i) => Math.round(m * 0.65 + p90Arr[i] * 0.35));
+
   return {
     labels,
-    actual: d.actual.map(v => Math.round(v * share)),
-    median: med,
-    p10: lo,
-    p25: med.map((m,i) => Math.round(m * 0.65 + lo[i] * 0.35)),
-    p75: med.map((m,i) => Math.round(m * 0.65 + u[i] * 0.35)),
-    p90: u,
+    actual,
+    median: medianArr,
+    p10: p10Arr,
+    p25: p25Arr,
+    p75: p75Arr,
+    p90: p90Arr,
   };
-}
-
-// シナリオショック係数計算
-function _calcShockMultiplier(scenario) {
-  if (!scenario || Object.keys(scenario).length === 0) return 1.0;
-  let mult = 1.0;
-  if (scenario.exr) mult *= (1.0 + scenario.exr * 0.8);
-  if (scenario.bilateral_risk > 0) mult *= Math.max(0.5, 1.0 - scenario.bilateral_risk / 100.0);
-  return mult;
 }
 
 // API予測データ取得
@@ -879,6 +924,126 @@ function buildChart() {
       }
     },
     plugins: [verticalLinesPlugin]
+  });
+
+  // 国別分解チャートも更新
+  buildBreakdownChart();
+}
+
+// ===================================================================
+// COUNTRY BREAKDOWN CHART (国別寄与分解, stacked area)
+// ===================================================================
+function buildBreakdownChart() {
+  const wrap = document.getElementById('breakdownChartWrap');
+  const ctx = document.getElementById('countryBreakdownChart').getContext('2d');
+
+  // 全国選択時は非表示
+  if (currentPref === 'JAPAN') {
+    wrap.style.display = 'none';
+    if (breakdownChart) { breakdownChart.destroy(); breakdownChart = null; }
+    return;
+  }
+
+  wrap.style.display = '';
+
+  // タイトル更新
+  document.getElementById('breakdownChartTitle').textContent =
+    `${currentPref}への国別来訪者寄与 — どの国が${currentPref}のインバウンドを支えているか`;
+
+  // ラベル: 2019-01 ~ 2025-12
+  const allLabels = [];
+  for (let y = 2019; y <= 2025; y++) {
+    for (let m = 1; m <= 12; m++) {
+      allLabels.push(`${y}-${String(m).padStart(2,'0')}`);
+    }
+  }
+  const totalMonths = 84;
+  const scenarioName = currentScenarioName || 'base';
+  const countries = ['CN','KR','TW','US','AU'];
+
+  const datasets = countries.map(c => {
+    const data = [];
+    for (let i = 0; i < totalMonths; i++) {
+      data.push(Math.round(getMonthlyForPref(c, currentPref, i, i < 72 ? 'base' : scenarioName)));
+    }
+    return {
+      label: MARKET_DATA[c].name,
+      data: data,
+      borderColor: COUNTRY_COLORS[c],
+      backgroundColor: COUNTRY_COLORS[c] + '33',
+      borderWidth: 1.5,
+      fill: true,
+      tension: 0.3,
+      pointRadius: 0,
+      pointHitRadius: 4,
+    };
+  });
+
+  // 凡例を更新
+  const legendEl = document.getElementById('breakdownChartLegend');
+  legendEl.innerHTML = countries.map(c =>
+    `<div class="chart-legend-item"><div class="swatch" style="background:${COUNTRY_COLORS[c]}"></div>${MARKET_DATA[c].name}</div>`
+  ).join('');
+
+  if (breakdownChart) breakdownChart.destroy();
+
+  breakdownChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: allLabels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        filler: { propagate: true },
+        tooltip: {
+          backgroundColor: 'rgba(22,27,34,0.95)',
+          titleColor: '#f0f6fc',
+          bodyColor: '#e8e6e0',
+          borderColor: '#2d2f3e',
+          borderWidth: 1,
+          callbacks: {
+            label: function(ctx) {
+              if (ctx.raw === null || ctx.raw === undefined) return null;
+              const v = ctx.raw;
+              if (v >= 1000) return ctx.dataset.label + ': ' + (v / 1000).toFixed(1) + 'M人';
+              return ctx.dataset.label + ': ' + v.toFixed(0) + '千人';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#8b8fa8',
+            font: { size: 9 },
+            maxRotation: 45,
+            callback: function(val) {
+              const label = this.getLabelForValue(val);
+              if (label.endsWith('-01') || label.endsWith('-07')) return label;
+              return '';
+            },
+            autoSkip: false,
+            maxTicksLimit: 20
+          },
+          grid: { color: 'rgba(45,47,62,0.4)' }
+        },
+        y: {
+          stacked: true,
+          ticks: {
+            color: '#8b8fa8',
+            font: { size: 10 },
+            callback: function(v) {
+              if (v >= 1000) return (v / 1000).toFixed(1) + 'M';
+              return v + 'K';
+            }
+          },
+          grid: { color: 'rgba(45,47,62,0.4)' },
+          beginAtZero: true
+        }
+      }
+    }
   });
 }
 
@@ -1206,23 +1371,33 @@ function setPref(prefName) {
   document.getElementById('selPref').value = prefName;
   updateBannerAndChips();
   buildChart();
+  buildBreakdownChart();
 }
 
-function setScenario(scenario) {
-  currentScenario = scenario || {};
+function setScenario(scenarioName, clickedBtn) {
+  currentScenarioName = scenarioName || 'base';
   apiForecastData = null;  // シナリオ変更時にAPI予測データをリセット
+
+  // シナリオ→APIパラメータ変換
+  if (scenarioName === 'optimistic') {
+    currentScenario = { exr: 0.10 };  // 楽観: 円安+好調
+  } else if (scenarioName === 'pessimistic') {
+    currentScenario = { exr: -0.10, bilateral_risk: 15 };  // 悲観
+  } else {
+    currentScenario = {};
+  }
 
   // ボタンのアクティブ状態を更新
   document.querySelectorAll('.scenario-btn').forEach(btn => btn.classList.remove('active'));
-  // クリックされたボタンをアクティブに
-  const key = Object.keys(scenario).length === 0 ? 'base'
-    : scenario.exr > 0 ? 'yen_weak'
-    : scenario.exr < 0 ? 'yen_strong'
-    : scenario.bilateral_risk ? 'cn_worsen' : 'base';
-  const activeBtn = document.querySelector(`.scenario-btn[data-s="${key}"]`);
-  if (activeBtn) activeBtn.classList.add('active');
+  if (clickedBtn) {
+    clickedBtn.classList.add('active');
+  } else {
+    const activeBtn = document.querySelector(`.scenario-btn[data-s="${scenarioName}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+  }
 
   buildChart();
+  buildBreakdownChart();
 
   // バックグラウンドでAPI予測を取得
   loadForecast(currentScenario);
@@ -1239,6 +1414,7 @@ document.getElementById('selPref').addEventListener('change', function() {
   currentPref = this.value;
   updateBannerAndChips();
   buildChart();
+  buildBreakdownChart();
 });
 
 // ===================================================================
@@ -1251,6 +1427,7 @@ window.addEventListener('resize', () => {
     drawWorldMap();
     drawJapanMap();
     buildChart();
+    buildBreakdownChart();
   }, 250);
 });
 
@@ -1260,7 +1437,7 @@ window.addEventListener('resize', () => {
 drawWorldMap();
 drawJapanMap();
 updateBannerAndChips();
-requestAnimationFrame(() => buildChart());
+requestAnimationFrame(() => { buildChart(); buildBreakdownChart(); });
 // API予測データをバックグラウンドで取得
 loadForecast({});
 </script>
