@@ -1,5 +1,5 @@
 """Tourism API Routes — SCRI v1.5.0
-インバウンド観光リスク評価・市場ランキング・訪問者数予測・競合分析・地域分布・確率分布予測・GP予測
+インバウンド観光リスク評価・市場ランキング・訪問者数予測・競合分析・地域分布・確率分布予測・GP予測・シナリオ分析
 
 GET  /api/v1/tourism/market-risk/{source_country}
 GET  /api/v1/tourism/market-ranking
@@ -11,6 +11,8 @@ POST /api/v1/tourism/decompose
 POST /api/v1/tourism/japan-forecast
 POST /api/v1/tourism/prefecture-forecast
 POST /api/v1/tourism/decompose-forecast
+GET  /api/v1/tourism/scenarios
+POST /api/v1/tourism/scenario-analysis
 """
 import logging
 import math
@@ -113,6 +115,21 @@ try:
 except (ImportError, Exception) as _e:
     logger.warning("calendar_events 初期化失敗: %s", _e)
 
+# v1.5.0: シナリオエンジン + 二国間為替クライアント
+_scenario_engine = None
+try:
+    from features.tourism.scenario_engine import ScenarioEngine
+    _scenario_engine = ScenarioEngine()
+except (ImportError, Exception) as _e:
+    logger.warning("ScenarioEngine 初期化失敗: %s", _e)
+
+_bilateral_fx_client = None
+try:
+    from pipeline.tourism.bilateral_fx_client import BilateralFXClient
+    _bilateral_fx_client = BilateralFXClient()
+except (ImportError, Exception) as _e:
+    logger.warning("BilateralFXClient 初期化失敗: %s", _e)
+
 
 # ── リクエスト/レスポンスモデル ──
 
@@ -149,6 +166,11 @@ class PrefectureForecastRequest(BaseModel):
 class DecomposeForecastRequest(BaseModel):
     source_country: str = Field(..., description="送客国ISO2コード（例: CN）")
     year_month: str = Field(..., description="対象年月（例: 2025/06）")
+
+
+class ScenarioAnalysisRequest(BaseModel):
+    scenario_name: str = Field(..., description="シナリオ名（例: jpy_weak_10, china_stimulus）")
+    include_fx_details: bool = Field(default=False, description="為替レート詳細を含めるか")
 
 
 # ── エンドポイント ──
@@ -968,3 +990,78 @@ def post_decompose_forecast(req: DecomposeForecastRequest):
         "baseline_visitors_thousands": baseline_val,
         "factors": factors.get(source_country, default_factors),
     }
+
+
+# ── v1.5.0 シナリオ分析エンドポイント ──
+
+@router.get("/scenarios")
+def get_scenarios():
+    """利用可能なシナリオ一覧を返す"""
+    if _scenario_engine is not None:
+        try:
+            scenarios = _scenario_engine.list_scenarios()
+            return {
+                "status": "ok",
+                "count": len(scenarios),
+                "scenarios": scenarios,
+            }
+        except Exception as e:
+            logger.warning("ScenarioEngine.list_scenarios失敗: %s", e)
+
+    # フォールバック: ハードコード
+    fallback_scenarios = [
+        {"name": "base", "label": "ベースケース", "description": "現状維持"},
+        {"name": "jpy_weak_10", "label": "円安10%", "description": "円が10%下落"},
+        {"name": "jpy_strong_10", "label": "円高10%", "description": "円が10%上昇"},
+        {"name": "china_stimulus", "label": "中国景気刺激策", "description": "中国財政出動"},
+        {"name": "flight_expansion", "label": "航空便拡大", "description": "LCC路線増便"},
+        {"name": "japan_china_tension", "label": "日中関係悪化", "description": "日中緊張"},
+        {"name": "us_recession", "label": "米国景気後退", "description": "米国リセッション"},
+        {"name": "taiwan_strait_risk", "label": "台湾海峡リスク", "description": "台湾海峡緊張"},
+        {"name": "stagflation_mixed", "label": "スタグフレーション", "description": "世界的滞留"},
+    ]
+    return {
+        "status": "fallback",
+        "message": "ScenarioEngine未初期化（フォールバック一覧）",
+        "count": len(fallback_scenarios),
+        "scenarios": fallback_scenarios,
+    }
+
+
+@router.post("/scenario-analysis")
+def post_scenario_analysis(req: ScenarioAnalysisRequest):
+    """シナリオの国別影響分析。為替ショック・地政学リスクの需要変化を定量評価"""
+    scenario_name = req.scenario_name
+
+    if _scenario_engine is not None:
+        try:
+            result = _scenario_engine.calculate_japan_total_impact(scenario_name)
+
+            # 為替詳細を追加（オプション）
+            if req.include_fx_details and _bilateral_fx_client is not None:
+                try:
+                    fx_rates = _bilateral_fx_client.get_current_rates()
+                    result["fx_rates"] = {
+                        cc: {
+                            "currency": r.currency,
+                            "rate_per_jpy": round(r.rate_per_jpy, 4),
+                            "source": r.source,
+                            "date": r.date,
+                        }
+                        for cc, r in fx_rates.items()
+                    }
+                except Exception as e:
+                    logger.warning("為替レート取得失敗: %s", e)
+
+            return {"status": "ok", **result}
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
+        except Exception:
+            logger.error("scenario-analysis エラー: %s", scenario_name, exc_info=True)
+            raise HTTPException(status_code=500, detail="シナリオ分析中に内部エラーが発生しました")
+
+    # フォールバック
+    raise HTTPException(
+        status_code=503,
+        detail="ScenarioEngine未初期化。依存モジュールを確認してください。",
+    )

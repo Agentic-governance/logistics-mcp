@@ -87,6 +87,13 @@ except (ImportError, ModuleNotFoundError):
     BASE_MONTHLY = None
     GPYTORCH_AVAILABLE = None
 
+try:
+    from .scenario_engine import ScenarioEngine, SCENARIOS, CountryScenarioImpact
+except (ImportError, ModuleNotFoundError):
+    ScenarioEngine = None
+    SCENARIOS = None
+    CountryScenarioImpact = None
+
 __all__ = [
     "TourismGravityModel",
     "SeasonalExtractor",
@@ -111,4 +118,7 @@ __all__ = [
     "MultiMarketGPAggregator",
     "BASE_MONTHLY",
     "GPYTORCH_AVAILABLE",
+    "ScenarioEngine",
+    "SCENARIOS",
+    "CountryScenarioImpact",
 ]

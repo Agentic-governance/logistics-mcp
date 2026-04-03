@@ -998,3 +998,120 @@ class TestMultiMarketAggregator:
         pes = agg.predict_japan_total_gp([6], scenario="pessimistic", n_samples=500)
         assert pes["total"]["mean"][0] < base["total"]["mean"][0] * 0.98, \
             "pessimisticはbaseより低いはず"
+
+
+# =====================================================================
+# TestBilateralFXClient — 二国間為替レートクライアント
+# =====================================================================
+class TestBilateralFXClient:
+    """pipeline/tourism/bilateral_fx_client.py のテスト"""
+
+    def _get_client(self):
+        from pipeline.tourism.bilateral_fx_client import BilateralFXClient
+        return BilateralFXClient()
+
+    def test_fallback_rates_all_positive(self):
+        """フォールバックレートが全て正"""
+        from pipeline.tourism.bilateral_fx_client import FALLBACK_RATES
+        for cc, rate in FALLBACK_RATES.items():
+            assert rate > 0, f"{cc}のフォールバックレートが正でない: {rate}"
+
+    def test_currency_map_coverage(self):
+        """通貨マップが全12市場をカバー"""
+        from pipeline.tourism.bilateral_fx_client import CURRENCY_MAP
+        expected = {"KR", "CN", "TW", "US", "AU", "TH", "HK", "SG", "DE", "FR", "GB", "IN"}
+        assert expected == set(CURRENCY_MAP.keys())
+
+    def test_fx_shock_positive_jpy_weak(self):
+        """円安10%で全国の需要変化が正"""
+        client = self._get_client()
+        result = client.calculate_fx_shock("KR", 10.0, current_rate=0.107)
+        assert result.demand_change_pct > 0, "円安でKR需要は増加すべき"
+        assert abs(result.demand_change_pct - 10.0 * 0.45) < 0.01
+
+    def test_fx_shock_negative_jpy_strong(self):
+        """円高10%で需要変化が負"""
+        client = self._get_client()
+        result = client.calculate_fx_shock("CN", -10.0, current_rate=20.8)
+        assert result.demand_change_pct < 0, "円高でCN需要は減少すべき"
+
+    def test_fx_shock_unknown_country(self):
+        """未対応国コードでValueError"""
+        client = self._get_client()
+        with pytest.raises(ValueError):
+            client.calculate_fx_shock("ZZ", 5.0)
+
+
+# =====================================================================
+# TestScenarioEngine — 国別シナリオエンジン
+# =====================================================================
+class TestScenarioEngine:
+    """features/tourism/scenario_engine.py のテスト"""
+
+    def _get_engine(self):
+        from features.tourism.scenario_engine import ScenarioEngine
+        return ScenarioEngine()
+
+    def test_base_no_change(self):
+        """ベースシナリオは全国0%変化"""
+        engine = self._get_engine()
+        impacts = engine.calculate_country_impacts("base")
+        for cc, impact in impacts.items():
+            assert abs(impact.total_demand_change_pct) < 0.01, \
+                f"ベースで{cc}の変化率が0でない: {impact.total_demand_change_pct}"
+
+    def test_china_tension_cn_down(self):
+        """日中悪化シナリオでCNが大幅マイナス"""
+        engine = self._get_engine()
+        impacts = engine.calculate_country_impacts("japan_china_tension")
+        cn_impact = impacts["CN"]
+        assert cn_impact.total_demand_change_pct < -30.0, \
+            f"日中悪化でCN変化率が-30%未満であるべき: {cn_impact.total_demand_change_pct}"
+
+    def test_stagflation_mixed_directions(self):
+        """スタグフレーションでUSとCNが逆方向"""
+        engine = self._get_engine()
+        impacts = engine.calculate_country_impacts("stagflation_mixed")
+        us_change = impacts["US"].total_demand_change_pct
+        cn_change = impacts["CN"].total_demand_change_pct
+        # USは大幅マイナス（インフレ＋景気後退）、CNは円安効果でプラス寄り
+        assert us_change < 0, f"USはマイナスであるべき: {us_change}"
+        assert cn_change > us_change, f"CNはUSより良いはず: CN={cn_change}, US={us_change}"
+
+    def test_all_scenarios_defined(self):
+        """7シナリオ以上が定義されている"""
+        from features.tourism.scenario_engine import SCENARIOS
+        assert len(SCENARIOS) >= 7, f"シナリオ数不足: {len(SCENARIOS)}"
+
+    def test_japan_total_impact(self):
+        """日本全体影響サマリーが正しい構造"""
+        engine = self._get_engine()
+        result = engine.calculate_japan_total_impact("jpy_weak_10")
+        assert "total_base_visitors_k" in result
+        assert "total_scenario_visitors_k" in result
+        assert "total_change_pct" in result
+        assert "country_impacts" in result
+        assert result["total_change_pct"] > 0, "円安シナリオで全体は増加すべき"
+
+    def test_list_scenarios(self):
+        """シナリオ一覧が返る"""
+        engine = self._get_engine()
+        scenarios = engine.list_scenarios()
+        assert len(scenarios) >= 7
+        for s in scenarios:
+            assert "name" in s
+            assert "label" in s
+
+    def test_unknown_scenario_raises(self):
+        """未定義シナリオでValueError"""
+        engine = self._get_engine()
+        with pytest.raises(ValueError):
+            engine.calculate_country_impacts("nonexistent_scenario")
+
+    def test_taiwan_strait_tw_severe(self):
+        """台湾海峡リスクでTWが大幅減"""
+        engine = self._get_engine()
+        impacts = engine.calculate_country_impacts("taiwan_strait_risk")
+        tw_impact = impacts["TW"]
+        assert tw_impact.total_demand_change_pct < -40.0, \
+            f"台湾海峡リスクでTWは-40%以下であるべき: {tw_impact.total_demand_change_pct}"
