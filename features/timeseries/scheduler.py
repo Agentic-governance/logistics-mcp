@@ -536,56 +536,78 @@ class RiskScoreScheduler:
             # 日次 05:00 JST (20:00 UTC): 予測精度モニタリング (STREAM 3-B)
             scheduler.add_job(self.run_forecast_monitor, 'cron', hour=20, minute=0, id='forecast_monitor')
 
-            # --------------------------------------------------------
-            # [将来実装] 観光統計 月次更新ジョブ (v1.3.0 ROLE-C)
-            # --------------------------------------------------------
+            # 日次 06:00 JST (21:00 UTC): 為替レート更新
+            scheduler.add_job(self._run_fx_update, 'cron', hour=21, minute=0, id='fx_update')
+
             # 月次 3日 06:00 JST (21:00 UTC 2日): JNTO訪日統計の更新
-            # ※ JNTOは毎月中旬に前々月の速報値を発表。余裕を持って翌月3日に実行。
-            # scheduler.add_job(
-            #     self.run_tourism_jnto_update,
-            #     'cron',
-            #     day=3, hour=21, minute=0,
-            #     id='tourism_jnto_update',
-            # )
-            #
-            # 月次 5日 06:00 JST (21:00 UTC 4日): アウトバウンド統計更新
-            # ※ World Bank WDI は年次更新だが、各国統計局の月次速報を取り込む。
-            # scheduler.add_job(
-            #     self.run_tourism_outbound_update,
-            #     'cron',
-            #     day=5, hour=21, minute=0,
-            #     id='tourism_outbound_update',
-            # )
-            #
-            # 月次 5日 07:00 JST (22:00 UTC 4日): 競合デスティネーション統計更新
-            # scheduler.add_job(
-            #     self.run_tourism_competitor_update,
-            #     'cron',
-            #     day=5, hour=22, minute=0,
-            #     id='tourism_competitor_update',
-            # )
-            #
-            # 月次 5日 08:00 JST (23:00 UTC 4日): 重力モデル変数更新
-            # ※ 為替レート・GDP推定値・フライト供給指数を最新化。
-            # scheduler.add_job(
-            #     self.run_tourism_gravity_update,
-            #     'cron',
-            #     day=5, hour=23, minute=0,
-            #     id='tourism_gravity_update',
-            # )
-            #
-            # 実装時のインポート:
-            #   from pipeline.tourism.tourism_db import TourismDB
-            #   db = TourismDB()
-            # 各 run_tourism_*_update() メソッドは
-            #   1. 対応クライアント（jnto_client等）からデータ取得
-            #   2. db.upsert_*() でDB更新
-            #   3. 結果サマリーを返す
-            # --------------------------------------------------------
+            scheduler.add_job(self._run_jnto_update, 'cron', day=3, hour=21, minute=0, id='jnto_update')
+
+            # 週次 日曜 03:00 JST (18:00 UTC 土曜): GPモデル再訓練
+            scheduler.add_job(self._run_retrain, 'cron', day_of_week='sat', hour=18, minute=0, id='retrain_gp')
 
             scheduler.start()
-            logger.info("Risk score scheduler started (8 jobs)")
+            self.scheduler = scheduler
+            logger.info("Risk score scheduler started (%d jobs)", len(scheduler.get_jobs()))
             return scheduler
         except ImportError:
             logger.warning("APScheduler not installed. Scheduler not started.")
             return None
+
+    def start_scheduler(self):
+        """start() のエイリアス — self.scheduler を設定"""
+        return self.start()
+
+    # ── 追加ジョブ実装 ──
+
+    def _run_fx_update(self):
+        """為替レート更新ジョブ"""
+        logger.info("為替レート更新開始")
+        try:
+            from pipeline.tourism.tourism_db import TourismDB
+            db = TourismDB()
+            db.update_exchange_rates()
+            logger.info("為替レート更新完了")
+        except Exception as e:
+            logger.error(f"為替レート更新エラー: {e}")
+
+    def _run_jnto_update(self):
+        """JNTO訪日統計更新ジョブ"""
+        logger.info("JNTO統計更新開始")
+        try:
+            from pipeline.tourism.jnto_client import JNTOClient
+            client = JNTOClient()
+            client.update_all()
+            logger.info("JNTO統計更新完了")
+        except Exception as e:
+            logger.error(f"JNTO統計更新エラー: {e}")
+
+    def _run_retrain(self):
+        """GPモデル再訓練ジョブ"""
+        logger.info("GPモデル再訓練開始")
+        try:
+            import sqlite3, torch, os
+            from features.tourism.gaussian_process_model import GaussianProcessInboundModel
+            db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__)))), "data", "tourism_stats.db")
+            conn = sqlite3.connect(db_path)
+            COUNTRIES = {'KR':'KOR','CN':'CHN','TW':'TWN','US':'USA',
+                         'AU':'AUS','TH':'THA','HK':'HKG','SG':'SGP'}
+            gp = GaussianProcessInboundModel()
+            for iso2, iso3 in COUNTRIES.items():
+                rows = conn.execute(
+                    'SELECT arrivals FROM japan_inbound WHERE source_country=? AND arrivals>0 AND month>0 ORDER BY year, month',
+                    (iso3,)).fetchall()
+                if rows:
+                    gp.fit(iso2, [float(r[0]) for r in rows], n_iterations=300)
+                    model = gp._models.get(iso2)
+                    if model and hasattr(model, 'state_dict'):
+                        out = os.path.join(os.path.dirname(db_path), '..', 'models', 'tourism', f'gp_{iso2}.pt')
+                        torch.save({'model_state': model.state_dict()}, out)
+            conn.close()
+            logger.info("GPモデル再訓練完了")
+        except Exception as e:
+            logger.error(f"GPモデル再訓練エラー: {e}")
+
+
+# エイリアス
+RiskScheduler = RiskScoreScheduler

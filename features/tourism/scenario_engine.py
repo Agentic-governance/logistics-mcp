@@ -312,6 +312,15 @@ class ScenarioEngine:
 
         diversification = self._explain_diversification(impacts)
 
+        # by_country 辞書（country_impacts のインデックス版）
+        by_country = {
+            d["country"]: d for d in country_details
+        }
+
+        # up / down マーケット分類
+        up_markets = [d["country"] for d in country_details if d["change_pct"] > 0]
+        down_markets = [d["country"] for d in country_details if d["change_pct"] < 0]
+
         return {
             "scenario": scenario_name,
             "label": scenario["label"],
@@ -320,6 +329,9 @@ class ScenarioEngine:
             "total_scenario_visitors_k": round(total_scenario, 1),
             "total_change_pct": round(total_change_pct, 2),
             "country_impacts": country_details,
+            "by_country": by_country,
+            "up_markets": up_markets,
+            "down_markets": down_markets,
             "diversification_note": diversification,
         }
 
