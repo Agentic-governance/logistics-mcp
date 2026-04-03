@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SCRI Inbound Risk Dashboard v1.4.0</title>
+<title>SCRI Inbound Risk Dashboard v1.5.0</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -166,7 +166,7 @@ svg.map{width:100%;height:100%}
 <!-- ===== Section 2: 予測フォーカス (25vh) ===== -->
 <div class="chart-section" style="flex-shrink:0;border-bottom:1px solid #2d2f3e">
   <div class="section-title">2026-2027年 訪日インバウンド予測</div>
-  <div class="section-desc">PPML重力モデル(R&sup2;=0.99) + STL季節分解 + ベイズ更新による確率的予測。3シナリオの比較。</div>
+  <div class="section-desc" id="forecastDesc">PPML重力モデル(R&sup2;=0.99) + STL季節分解 + ベイズ更新による確率的予測��3シナリオの比較。</div>
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
     <div class="scenario-toggles" id="scenarioToggles">
       <button class="scenario-btn" data-s="base" onclick="selectScenario('base')">現状維持</button>
@@ -178,6 +178,7 @@ svg.map{width:100%;height:100%}
       <div class="chart-legend-item"><div class="swatch-dash" style="border-color:#00e676"></div>楽観</div>
       <div class="chart-legend-item"><div class="swatch-dash" style="border-color:#ff1744"></div>悲観</div>
       <div class="chart-legend-item"><div class="swatch-band" style="background:rgba(66,133,244,0.35)"></div>信頼区間</div>
+      <div class="chart-legend-item" id="gpLegendItem" style="display:none"><div class="swatch" style="background:#ff4d4d;width:8px;height:8px;border-radius:50%"></div>高不確実性月</div>
     </div>
   </div>
   <div style="position:relative;height:25vh;min-height:180px">
@@ -199,6 +200,14 @@ svg.map{width:100%;height:100%}
       <strong>悲観</strong> <span style="color:#ff1744">-18%</span>: 円高10%・日中関係悪化・景気減速<br>
       <span style="color:#8b8fa8;font-size:10px">根拠: 期待損失 — 円高(-12%) + 関係悪化(-6%) + 景気(-5%) = -23%<br>前提: 円/ドル=135円、中国GDP成長率4%割れ。中国市場は-35%超の可能性</span>
     </div>
+  </div>
+  <!-- GP不確実性凡例 -->
+  <div id="gpUncertaintyLegend" style="display:none;margin-top:10px;padding:8px 14px;background:#161b22;border:1px solid #2d2f3e;border-radius:6px;font-size:11px;color:#8b8fa8;line-height:1.7">
+    <span style="font-weight:600;color:#f0f6fc">不確実性マーカー:</span>
+    <span style="color:#ff4d4d;font-weight:700;margin-left:8px">&#9679;</span> 赤点 = 不確実性が特に高い月（台風・春節など）
+    <span style="color:#ffd43b;font-weight:700;margin-left:12px">&#9679;</span> 黄点 = 不確実性がやや高い月
+    <span style="color:#8b8fa8;margin-left:12px">|</span>
+    <span style="margin-left:8px" id="gpModelBadge" style="display:none"></span>
   </div>
 </div>
 
@@ -571,6 +580,10 @@ let currentScenario = {};
 let currentScenarioName = 'base';
 let activeScenario = null; // null=未選択, 'base'/'optimistic'/'pessimistic'
 let apiForecastData = null;
+let gpForecastData = null;       // GP予測APIレスポンス
+let gpUncertaintyData = [];      // 月別��確実性指数
+let gpCalendarEffects = [];      // カレン��ー効果倍率
+let gpModelType = 'fallback';    // 'GP' or 'fallback'
 let contextChart = null;
 let forecastChart = null;
 let breakdownChart = null;
@@ -797,19 +810,36 @@ function buildForecastChart() {
 
   if (forecastChart) forecastChart.destroy();
 
+  // 不確実性データから月別のポイントサイズ・色を決定
+  const uncertaintyData = gpUncertaintyData.length === labels.length
+    ? gpUncertaintyData.map(u => u.uncertainty_index || 1.0)
+    : labels.map(() => 1.0);
+
   forecastChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: labels,
       datasets: [
-        // 現状維持 (実線)
+        // 現状維持 (実線 + 不確実性マーカー)
         {
           label: '現状維持',
           data: baseLine,
           borderColor: applyOpacity('#4285f4', lineOpacity('base')),
           backgroundColor: 'transparent',
           borderWidth: lineWidth('base'),
-          pointRadius: 0,
+          tension: 0.4,
+          pointRadius: function(ctx) {
+            const unc = uncertaintyData[ctx.dataIndex] || 1.0;
+            return unc > 2.0 ? 6 : unc > 1.5 ? 4 : 0;
+          },
+          pointBackgroundColor: function(ctx) {
+            const unc = uncertaintyData[ctx.dataIndex] || 1.0;
+            return unc > 2.0 ? '#ff4d4d' : unc > 1.5 ? '#ffd43b' : '#4a9eff';
+          },
+          pointBorderColor: function(ctx) {
+            const unc = uncertaintyData[ctx.dataIndex] || 1.0;
+            return unc > 2.0 ? '#ff4d4d' : unc > 1.5 ? '#ffd43b' : 'transparent';
+          },
           pointHitRadius: 4,
           borderDash: [],
           order: 3
@@ -821,6 +851,7 @@ function buildForecastChart() {
           borderColor: applyOpacity('#00e676', lineOpacity('optimistic')),
           backgroundColor: 'transparent',
           borderWidth: lineWidth('optimistic'),
+          tension: 0.4,
           pointRadius: 0,
           pointHitRadius: 4,
           borderDash: [8, 4],
@@ -833,6 +864,7 @@ function buildForecastChart() {
           borderColor: applyOpacity('#ff1744', lineOpacity('pessimistic')),
           backgroundColor: 'transparent',
           borderWidth: lineWidth('pessimistic'),
+          tension: 0.4,
           pointRadius: 0,
           pointHitRadius: 4,
           borderDash: [4, 4],
@@ -845,6 +877,7 @@ function buildForecastChart() {
           borderColor: 'transparent',
           backgroundColor: 'transparent',
           pointRadius: 0,
+          tension: 0.4,
           fill: false,
           order: 1
         },
@@ -855,6 +888,7 @@ function buildForecastChart() {
           borderColor: 'transparent',
           backgroundColor: 'rgba(66,133,244,0.15)',
           pointRadius: 0,
+          tension: 0.4,
           fill: '-1',
           order: 1
         }
@@ -914,8 +948,56 @@ function buildForecastChart() {
           beginAtZero: false
         }
       }
-    }
+    },
+    plugins: [
+      // カレンダー効果注釈プラグイン
+      {
+        id: 'calendarAnnotations',
+        afterDraw(chart) {
+          if (!gpCalendarEffects || gpCalendarEffects.length === 0) return;
+          const drawCtx = chart.ctx;
+          const meta = chart.getDatasetMeta(0); // 現状維持ライン
+          if (!meta || !meta.data) return;
+
+          drawCtx.save();
+          drawCtx.font = '9px sans-serif';
+          drawCtx.textAlign = 'center';
+
+          for (let i = 0; i < gpCalendarEffects.length && i < meta.data.length; i++) {
+            const ce = gpCalendarEffects[i];
+            if (!ce) continue;
+            const dm = ce.demand_multiplier || 1.0;
+            const events = ce.events || [];
+            // カレンダー効果が大きい月 (>1.3 or <0.7) に注釈表示
+            if ((dm > 1.3 || dm < 0.7) && events.length > 0) {
+              const point = meta.data[i];
+              if (!point) continue;
+              const x = point.x;
+              const yTop = chart.chartArea.top;
+              const label = events[0] + (dm > 1.3 ? ' +' : ' ') + ((dm - 1) * 100).toFixed(0) + '%';
+              drawCtx.fillStyle = dm > 1.3 ? 'rgba(0,230,118,0.7)' : 'rgba(255,77,77,0.7)';
+              drawCtx.fillText(label, x, yTop + 10);
+            }
+          }
+          drawCtx.restore();
+        }
+      }
+    ]
   });
+
+  // GP不確実性凡例の表示制御
+  const legendEl = document.getElementById('gpUncertaintyLegend');
+  const badgeEl = document.getElementById('gpModelBadge');
+  const gpLegendItem = document.getElementById('gpLegendItem');
+  if (gpUncertaintyData.length > 0) {
+    legendEl.style.display = 'block';
+    gpLegendItem.style.display = 'flex';
+    badgeEl.textContent = 'Model: ' + gpModelType.toUpperCase();
+    badgeEl.style.color = gpModelType === 'GP' ? '#51cf66' : '#ffa94d';
+  } else {
+    legendEl.style.display = 'none';
+    gpLegendItem.style.display = 'none';
+  }
 }
 
 // ===================================================================
@@ -1411,13 +1493,66 @@ async function loadMarketData() {
 }
 
 // ===================================================================
+// GP予測API呼び出し (use_gp: true)
+// ===================================================================
+async function loadGPForecast() {
+  // 予測対象月リスト生成 (2026/04 - 2027/12)
+  const months = [];
+  for (let y = 2026; y <= 2027; y++) {
+    const startM = (y === 2026) ? 4 : 1;
+    for (let m = startM; m <= 12; m++) {
+      months.push(y + '/' + String(m).padStart(2, '0'));
+    }
+  }
+
+  try {
+    const resp = await fetch('/api/v1/tourism/japan-forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        months: months,
+        n_samples: 1000,
+        use_gp: true
+      })
+    });
+    if (!resp.ok) throw new Error('GP API error ' + resp.status);
+    const json = await resp.json();
+
+    gpForecastData = json;
+    gpModelType = json.model || 'fallback';
+    gpUncertaintyData = json.uncertainty_by_month || [];
+    gpCalendarEffects = json.calendar_effects || [];
+
+    // セクション2の説明文を更新
+    const descEl = document.getElementById('forecastDesc');
+    if (gpModelType === 'GP') {
+      descEl.textContent = 'ガウス過程(GP)モデルによる確率的予測。カレンダー効果・不確実性マーカー付き。';
+    } else {
+      descEl.textContent = 'PPML重力モデル + STL季節分解 + ベイズ更新による確率的予測。3シナリオの比較。';
+    }
+
+    console.log('GP Forecast API: model=' + gpModelType);
+    rebuildAllCharts();
+  } catch(e) {
+    console.warn('GP Forecast API fallback:', e.message);
+    gpForecastData = null;
+    gpUncertaintyData = [];
+    gpCalendarEffects = [];
+    gpModelType = 'fallback';
+    // 既存のフォールバックチャートをそのまま使用
+  }
+}
+
+// ===================================================================
 // INIT
 // ===================================================================
 drawWorldMap();
 drawJapanMap();
 requestAnimationFrame(() => { rebuildAllCharts(); });
 loadMarketData();
+loadGPForecast();
 setInterval(() => { loadMarketData(); }, 30 * 60 * 1000);
+setInterval(() => { loadGPForecast(); }, 30 * 60 * 1000);
 </script>
 </body>
 </html>

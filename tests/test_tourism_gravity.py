@@ -1,4 +1,4 @@
-"""観光重力モデル・インバウンドリスク評価テストスイート — SCRI v1.4.0
+"""観光重力モデル・インバウンドリスク評価テストスイート — SCRI v1.5.0
 
 外部APIを呼ばないユニットテスト。
 ハードコードデータ・フォールバック値のみで検証。
@@ -849,3 +849,152 @@ class TestCIC:
         for i in range(len(ranking) - 1):
             assert ranking[i].total_cic >= ranking[i+1].total_cic, \
                 f"ランキング順序エラー: {ranking[i].country}({ranking[i].total_cic}) < {ranking[i+1].country}({ranking[i+1].total_cic})"
+
+
+# =====================================================================
+# TestCalendarEvents — カレンダーイベント
+# =====================================================================
+class TestCalendarEvents:
+    """features/tourism/calendar_events.py のテスト"""
+
+    def _get_funcs(self):
+        from features.tourism.calendar_events import (
+            get_events_for_country_month,
+            get_demand_multiplier,
+            get_uncertainty_multiplier,
+        )
+        return get_events_for_country_month, get_demand_multiplier, get_uncertainty_multiplier
+
+    def test_spring_festival_cn_low(self):
+        """中国2月(春節)の需要倍率が1.0未満"""
+        _, get_dm, _ = self._get_funcs()
+        dm = get_dm("CN", 2)
+        assert dm < 1.0, f"春節(CN, 2月)の需要倍率は1.0未満であるべき: {dm}"
+
+    def test_golden_week_cn_high(self):
+        """中国10月(国慶節)の需要倍率が1.5以上"""
+        _, get_dm, _ = self._get_funcs()
+        dm = get_dm("CN", 10)
+        assert dm >= 1.5, f"国慶節(CN, 10月)の需要倍率は1.5以上であるべき: {dm}"
+
+    def test_typhoon_high_uncertainty(self):
+        """台風シーズン(9月)の不確実性が通常月より高い"""
+        _, _, get_um = self._get_funcs()
+        typhoon_um = get_um("TW", 9)
+        normal_um = get_um("TW", 5)  # 5月は台風なし
+        assert typhoon_um > normal_um, \
+            f"台風シーズン不確実性({typhoon_um}) > 通常月({normal_um})であるべき"
+
+    def test_chuseok_kr_low(self):
+        """韓国9月(秋夕)の需要倍率が1.0未満"""
+        _, get_dm, _ = self._get_funcs()
+        dm = get_dm("KR", 9)
+        assert dm < 1.0, f"秋夕(KR, 9月)の需要倍率は1.0未満であるべき: {dm}"
+
+    def test_no_events_returns_neutral(self):
+        """イベントなしの国・月は倍率1.0"""
+        _, get_dm, get_um = self._get_funcs()
+        assert get_dm("XX", 6) == 1.0
+        assert get_um("XX", 6) == 1.0
+
+    def test_cherry_blossom_all_markets(self):
+        """桜シーズン(3-4月)は多数市場で需要増"""
+        _, get_dm, _ = self._get_funcs()
+        for country in ["KR", "CN", "TW", "US", "AU"]:
+            dm = get_dm(country, 4)
+            assert dm > 1.0, f"桜シーズン({country}, 4月)の需要倍率 > 1.0: {dm}"
+
+
+# =====================================================================
+# TestGPModel — ガウス過程モデル
+# =====================================================================
+class TestGPModel:
+    """features/tourism/gaussian_process_model.py のテスト"""
+
+    def _get_model(self):
+        from features.tourism.gaussian_process_model import (
+            GaussianProcessInboundModel,
+        )
+        return GaussianProcessInboundModel()
+
+    def test_predict_returns_distribution(self):
+        """predict()がmedian/p10/p90を返す"""
+        model = self._get_model()
+        result = model.predict("KR", list(range(1, 13)), n_samples=500)
+        assert "median" in result, "median が結果に含まれるべき"
+        assert "p10" in result, "p10 が結果に含まれるべき"
+        assert "p90" in result, "p90 が結果に含まれるべき"
+        assert len(result["median"]) == 12, "12ヶ月分のmedianが必要"
+
+    def test_uncertainty_varies_by_month(self):
+        """月別不確実性が変動する"""
+        model = self._get_model()
+        result = model.predict("CN", list(range(1, 13)), n_samples=500)
+        uncertainties = list(result["uncertainty_by_month"].values())
+        assert len(set(round(u, 6) for u in uncertainties)) > 1, \
+            f"月別不確実性が全て同一: {uncertainties}"
+
+    def test_calendar_effects_applied(self):
+        """カレンダー効果が適用される"""
+        model = self._get_model()
+        result = model.predict("CN", list(range(1, 13)), n_samples=500)
+        cal = result["calendar_effects"]
+        # 10月(国慶節)にイベントが存在すること
+        assert len(cal[10]["events"]) > 0, \
+            f"10月のカレンダーイベントが空: {cal[10]}"
+        assert cal[10]["demand_multiplier"] > 1.0, \
+            f"国慶節の需要倍率 > 1.0: {cal[10]['demand_multiplier']}"
+
+    def test_risk_adjustments_applied(self):
+        """リスク調整が反映される"""
+        model = self._get_model()
+        base = model.predict("KR", [6], n_samples=2000)
+        adjusted = model.predict("KR", [6], n_samples=2000,
+                                 risk_adjustments={6: 0.5})
+        # 0.5倍調整なのでmedianが明確に下がるはず
+        assert adjusted["median"][0] < base["median"][0] * 0.8, \
+            "リスク調整0.5でmedianが十分下がるべき"
+
+    def test_model_type_is_fallback_without_gpytorch(self):
+        """gpytorch未インストール時はnumpy_fallbackモデル"""
+        model = self._get_model()
+        result = model.predict("US", [1, 2, 3])
+        # gpytorchがあればgpytorch、なければnumpy_fallback
+        assert result["model_type"] in ("gpytorch", "numpy_fallback")
+
+
+# =====================================================================
+# TestMultiMarketAggregator — 複数市場集計
+# =====================================================================
+class TestMultiMarketAggregator:
+    """MultiMarketGPAggregator のテスト"""
+
+    def _get_aggregator(self):
+        from features.tourism.gaussian_process_model import (
+            MultiMarketGPAggregator,
+        )
+        return MultiMarketGPAggregator()
+
+    def test_base_scenario_returns_total(self):
+        """baseシナリオで合計予測が返る"""
+        agg = self._get_aggregator()
+        result = agg.predict_japan_total_gp([1, 2, 3], scenario="base",
+                                            n_samples=300)
+        assert "total" in result
+        assert len(result["total"]["median"]) == 3
+
+    def test_optimistic_higher_than_base(self):
+        """optimisticシナリオはbaseより高い"""
+        agg = self._get_aggregator()
+        base = agg.predict_japan_total_gp([6], scenario="base", n_samples=500)
+        opt = agg.predict_japan_total_gp([6], scenario="optimistic", n_samples=500)
+        assert opt["total"]["mean"][0] > base["total"]["mean"][0] * 1.05, \
+            "optimisticはbaseより5%以上高いはず"
+
+    def test_pessimistic_lower_than_base(self):
+        """pessimisticシナリオはbaseより低い"""
+        agg = self._get_aggregator()
+        base = agg.predict_japan_total_gp([6], scenario="base", n_samples=500)
+        pes = agg.predict_japan_total_gp([6], scenario="pessimistic", n_samples=500)
+        assert pes["total"]["mean"][0] < base["total"]["mean"][0] * 0.98, \
+            "pessimisticはbaseより低いはず"

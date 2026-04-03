@@ -1,5 +1,5 @@
-"""Tourism API Routes — SCRI v1.4.0
-インバウンド観光リスク評価・市場ランキング・訪問者数予測・競合分析・地域分布・確率分布予測
+"""Tourism API Routes — SCRI v1.5.0
+インバウンド観光リスク評価・市場ランキング・訪問者数予測・競合分析・地域分布・確率分布予測・GP予測
 
 GET  /api/v1/tourism/market-risk/{source_country}
 GET  /api/v1/tourism/market-ranking
@@ -99,6 +99,20 @@ try:
 except (ImportError, Exception) as _e:
     logger.warning("InboundAggregator 初期化失敗: %s", _e)
 
+# TASK4: GPモデル（ガウス過程による訪日予測）
+_gp_aggregator = None
+try:
+    from features.tourism.gaussian_process_model import MultiMarketGPAggregator
+    _gp_aggregator = MultiMarketGPAggregator()
+except (ImportError, Exception) as _e:
+    logger.warning("MultiMarketGPAggregator 初期化失敗: %s", _e)
+
+_calendar_events_module = None
+try:
+    from features.tourism import calendar_events as _calendar_events_module
+except (ImportError, Exception) as _e:
+    logger.warning("calendar_events 初期化失敗: %s", _e)
+
 
 # ── リクエスト/レスポンスモデル ──
 
@@ -123,6 +137,7 @@ class JapanForecastRequest(BaseModel):
     months: List[str] = Field(..., description="予測対象月リスト（例: ['2025/01','2025/02',...]）")
     n_samples: int = Field(default=1000, ge=100, le=10000, description="モンテカルロサンプル数")
     scenario: Optional[dict] = Field(default=None, description="シナリオショック（例: {exr:0.10}）")
+    use_gp: bool = Field(default=True, description="GPモデルを使用するか（Falseで既存フォールバック）")
 
 
 class PrefectureForecastRequest(BaseModel):
@@ -526,16 +541,181 @@ def _month_str_to_index(month_str: str) -> int:
     return 0
 
 
+def _compute_calendar_effects(months: List[str]) -> List[dict]:
+    """月別のカレンダー効果倍率を計算（全市場の加重平均）
+
+    Returns:
+        [{"month": "2026/04", "demand_multiplier": 1.35, "events": ["桜"]}, ...]
+    """
+    # 主要市場のシェア（加重平均用）
+    market_shares = {
+        "CN": 0.248, "KR": 0.193, "TW": 0.172, "US": 0.085,
+        "AU": 0.048, "TH": 0.032, "HK": 0.062, "SG": 0.028,
+    }
+
+    results = []
+    for m_str in months:
+        m_idx = _month_str_to_index(m_str)
+        month_1based = m_idx + 1  # 1-12
+
+        weighted_demand = 0.0
+        all_events = set()
+
+        if _calendar_events_module:
+            for country, share in market_shares.items():
+                dm = _calendar_events_module.get_demand_multiplier(country, month_1based)
+                weighted_demand += dm * share
+                events = _calendar_events_module.get_events_for_country_month(country, month_1based)
+                for ev in events:
+                    all_events.add(ev.name)
+
+            # 残りの市場分（シェア合計が1未満の場合）
+            remaining = 1.0 - sum(market_shares.values())
+            weighted_demand += 1.0 * remaining  # 残りは倍率1.0
+        else:
+            weighted_demand = 1.0
+
+        results.append({
+            "month": m_str,
+            "demand_multiplier": round(weighted_demand, 3),
+            "events": sorted(all_events),
+        })
+
+    return results
+
+
+def _compute_uncertainty_by_month(
+    months: List[str], gp_result: dict
+) -> List[dict]:
+    """GP予測結果から月別不確実性指数を計算
+
+    不確実性 = (p90 - p10) / median × カレンダー不確実性倍率
+    """
+    market_shares = {
+        "CN": 0.248, "KR": 0.193, "TW": 0.172, "US": 0.085,
+        "AU": 0.048, "TH": 0.032, "HK": 0.062, "SG": 0.028,
+    }
+
+    medians = gp_result.get("median", [])
+    p10s = gp_result.get("p10", [])
+    p90s = gp_result.get("p90", [])
+
+    results = []
+    for i, m_str in enumerate(months):
+        m_idx = _month_str_to_index(m_str)
+        month_1based = m_idx + 1
+
+        # GP由来の不確実性（分布の幅）
+        if i < len(medians) and i < len(p10s) and i < len(p90s):
+            med = medians[i] if medians[i] > 0 else 1
+            spread_ratio = (p90s[i] - p10s[i]) / med
+        else:
+            spread_ratio = 0.3  # デフォルト
+
+        # カレンダー不確実性倍率
+        cal_unc = 1.0
+        if _calendar_events_module:
+            for country, share in market_shares.items():
+                um = _calendar_events_module.get_uncertainty_multiplier(country, month_1based)
+                cal_unc = max(cal_unc, um)  # 最大値を採用
+
+        # 統合不確実性指数（1.0=標準、>1.5=高不確実性）
+        uncertainty_index = round(spread_ratio * cal_unc / 0.3, 2)  # 0.3を基準に正規化
+
+        results.append({
+            "month": m_str,
+            "uncertainty_index": uncertainty_index,
+            "spread_ratio": round(spread_ratio, 3),
+            "calendar_uncertainty": round(cal_unc, 2),
+        })
+
+    return results
+
+
+def _compute_uncertainty_by_month_fallback(
+    months: List[str], dist: list
+) -> List[dict]:
+    """フォールバック予測結果から月別不確実性指数を計算"""
+    market_shares = {
+        "CN": 0.248, "KR": 0.193, "TW": 0.172, "US": 0.085,
+        "AU": 0.048, "TH": 0.032, "HK": 0.062, "SG": 0.028,
+    }
+
+    results = []
+    for i, m_str in enumerate(months):
+        m_idx = _month_str_to_index(m_str)
+        month_1based = m_idx + 1
+
+        # フォールバック由来の不確実性
+        if i < len(dist):
+            med = dist[i]["median"] if dist[i]["median"] > 0 else 1
+            spread_ratio = (dist[i]["p90"] - dist[i]["p10"]) / med
+        else:
+            spread_ratio = 0.3
+
+        # カレンダー不確実性倍率
+        cal_unc = 1.0
+        if _calendar_events_module:
+            for country, share in market_shares.items():
+                um = _calendar_events_module.get_uncertainty_multiplier(country, month_1based)
+                cal_unc = max(cal_unc, um)
+
+        uncertainty_index = round(spread_ratio * cal_unc / 0.3, 2)
+
+        results.append({
+            "month": m_str,
+            "uncertainty_index": uncertainty_index,
+            "spread_ratio": round(spread_ratio, 3),
+            "calendar_uncertainty": round(cal_unc, 2),
+        })
+
+    return results
+
+
 @router.post("/japan-forecast")
 def post_japan_forecast(req: JapanForecastRequest):
-    """日本全国インバウンド訪問者数の確率分布予測（PPML+STL+ベイズ）
+    """日本全国インバウンド訪問者数の確率分布予測（GP/PPML+STL+ベイズ）
 
-    1000回のモンテカルロシミュレーションから確率分布を生成。
-    シナリオショック（円安/円高/二国間関係悪化等）で分布全体をシフト可能。
+    use_gp=True: ガウス過程モデルによる予測（不確実性付き）
+    use_gp=False: モンテカルロシミュレーションによる確率分布生成
+    GPが失敗した場合は自動的にフォールバックへ切替。
     """
     months = req.months
     n_samples = req.n_samples
     scenario = req.scenario
+
+    # ── GP予測（use_gp=True かつ GPモジュール利用可能時） ──
+    if req.use_gp and _gp_aggregator:
+        try:
+            gp_result = _gp_aggregator.predict_japan_total_gp(
+                months=months,
+                scenario=scenario,
+            )
+            # カレンダー効果倍率を計算
+            calendar_effects = _compute_calendar_effects(months)
+            # 月別不確実性指数を計算
+            uncertainty_by_month = _compute_uncertainty_by_month(months, gp_result)
+
+            return {
+                "status": "ok",
+                "model": "GP",
+                "months": months,
+                "median": gp_result.get("median", []),
+                "p10": gp_result.get("p10", []),
+                "p25": gp_result.get("p25", []),
+                "p75": gp_result.get("p75", []),
+                "p90": gp_result.get("p90", []),
+                "by_country": gp_result.get("by_country", {}),
+                "uncertainty_by_month": uncertainty_by_month,
+                "calendar_effects": calendar_effects,
+                "model_info": {
+                    "method": "GaussianProcess",
+                    "scenario": scenario,
+                    "gp_details": gp_result.get("gp_details", {}),
+                },
+            }
+        except Exception as e:
+            logger.warning("GP予測失敗（フォールバック使用）: %s", e)
 
     # TASK1-3モジュールが利用可能な場合
     if _gravity_model and _seasonal_extractor and _inbound_aggregator:
@@ -559,15 +739,25 @@ def post_japan_forecast(req: JapanForecastRequest):
                     continue
 
             aggregated = _inbound_aggregator.aggregate(country_forecasts, months)
-            return {
-                "status": "ok",
-                "months": months,
+            calendar_effects = _compute_calendar_effects(months)
+            agg_result = {
                 "median": [m["median"] for m in aggregated],
                 "p10": [m["p10"] for m in aggregated],
+                "p90": [m["p90"] for m in aggregated],
+            }
+            uncertainty_by_month = _compute_uncertainty_by_month(months, agg_result)
+            return {
+                "status": "ok",
+                "model": "PPML+STL+Bayesian",
+                "months": months,
+                "median": agg_result["median"],
+                "p10": agg_result["p10"],
                 "p25": [m["p25"] for m in aggregated],
                 "p75": [m["p75"] for m in aggregated],
-                "p90": [m["p90"] for m in aggregated],
+                "p90": agg_result["p90"],
                 "by_country": country_forecasts,
+                "uncertainty_by_month": uncertainty_by_month,
+                "calendar_effects": calendar_effects,
                 "model_info": {
                     "method": "PPML+STL+Bayesian",
                     "n_samples": n_samples,
@@ -625,8 +815,13 @@ def post_japan_forecast(req: JapanForecastRequest):
             "p90": [d["p90"] for d in c_dist],
         }
 
+    # フォールバック時もカレンダー効果・不確実性を付与
+    calendar_effects = _compute_calendar_effects(months)
+    uncertainty_by_month = _compute_uncertainty_by_month_fallback(months, dist)
+
     return {
         "status": "fallback",
+        "model": "fallback",
         "message": "DBデータからの簡易予測" if db_monthly_base else "静的データからのモンテカルロフォールバック",
         "months": months,
         "median": [d["median"] for d in dist],
@@ -635,6 +830,8 @@ def post_japan_forecast(req: JapanForecastRequest):
         "p75": [d["p75"] for d in dist],
         "p90": [d["p90"] for d in dist],
         "by_country": by_country,
+        "uncertainty_by_month": uncertainty_by_month,
+        "calendar_effects": calendar_effects,
         "model_info": {
             "method": data_source,
             "n_samples": n_samples,

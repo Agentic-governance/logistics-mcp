@@ -1,4 +1,4 @@
-# features/tourism — 観光需要モデル + インバウンドリスク評価 (SCRI v1.4.0)
+# features/tourism — 観光需要モデル + インバウンドリスク評価 (SCRI v1.5.0)
 
 try:
     from .gravity_model import TourismGravityModel
@@ -63,6 +63,30 @@ try:
 except (ImportError, ModuleNotFoundError):
     CulturalInertiaCoefficient = None
 
+try:
+    from .calendar_events import (
+        CalendarEvent, CALENDAR_EVENTS,
+        get_events_for_country_month, get_demand_multiplier,
+        get_uncertainty_multiplier,
+    )
+except (ImportError, ModuleNotFoundError):
+    CalendarEvent = None
+    CALENDAR_EVENTS = None
+    get_events_for_country_month = None
+    get_demand_multiplier = None
+    get_uncertainty_multiplier = None
+
+try:
+    from .gaussian_process_model import (
+        GaussianProcessInboundModel, MultiMarketGPAggregator,
+        BASE_MONTHLY, GPYTORCH_AVAILABLE,
+    )
+except (ImportError, ModuleNotFoundError):
+    GaussianProcessInboundModel = None
+    MultiMarketGPAggregator = None
+    BASE_MONTHLY = None
+    GPYTORCH_AVAILABLE = None
+
 __all__ = [
     "TourismGravityModel",
     "SeasonalExtractor",
@@ -78,4 +102,13 @@ __all__ = [
     "TravelFrictionIndex",
     "TFIEnrichedGravityModel",
     "CulturalInertiaCoefficient",
+    "CalendarEvent",
+    "CALENDAR_EVENTS",
+    "get_events_for_country_month",
+    "get_demand_multiplier",
+    "get_uncertainty_multiplier",
+    "GaussianProcessInboundModel",
+    "MultiMarketGPAggregator",
+    "BASE_MONTHLY",
+    "GPYTORCH_AVAILABLE",
 ]
