@@ -247,7 +247,7 @@ class GaussianProcessInboundModel:
         uncertainty_by_month = {}
 
         for i, m in enumerate(months):
-            month_1based = ((m - 1) % 12) + 1  # 1-12に正規化
+            month_1based = int(m.split('/')[1]) if isinstance(m, str) else ((m - 1) % 12) + 1
             seasonal = seasonal_pattern[month_1based - 1]
 
             cal_demand = get_demand_multiplier(country, month_1based)
