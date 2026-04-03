@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"><title>SCRI Dashboards</title>
+  <style>
+    body{background:#0f1117;color:#e8e6e0;font-family:system-ui;
+         display:flex;align-items:center;justify-content:center;height:100vh}
+    .cards{display:flex;gap:24px}
+    .card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:12px;
+          padding:32px;width:280px;text-decoration:none;color:inherit;
+          transition:border-color .2s}
+    .card:hover{border-color:#4a9eff}
+    .card-icon{font-size:40px;margin-bottom:16px}
+    .card-title{font-size:18px;font-weight:600;margin-bottom:8px}
+    .card-desc{font-size:13px;color:#8b8fa8;line-height:1.6}
+  </style>
+</head>
+<body>
+  <div>
+    <div style="text-align:center;margin-bottom:40px">
+      <div style="font-size:24px;font-weight:700">SCRI Platform</div>
+      <div style="font-size:14px;color:#8b8fa8;margin-top:4px">Supply Chain & Tourism Risk Intelligence</div>
+    </div>
+    <div class="cards">
+      <a href="logistics.html" class="card">
+        <div class="card-icon">🌐</div>
+        <div class="card-title">Logistics Risk</div>
+        <div class="card-desc">世界のサプライチェーンリスクを地図上で可視化。海路・空路・チョークポイントのリスクを表示。</div>
+      </a>
+      <a href="inbound.html" class="card">
+        <div class="card-icon">✈️</div>
+        <div class="card-title">Inbound Tourism Risk</div>
+        <div class="card-desc">インバウンド観光リスクを世界地図と日本地図で表示。市場別リスクと都道府県別予測。</div>
+      </a>
+      <a href="legacy.html" class="card">
+        <div class="card-icon">📊</div>
+        <div class="card-title">Legacy Dashboard</div>
+        <div class="card-desc">旧ダッシュボード（10タブ）。詳細データテーブル、グラフ可視化、シナリオシミュレーター。</div>
+      </a>
+    </div>
+  </div>
+</body>
+</html>
