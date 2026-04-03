@@ -64,7 +64,7 @@ body {
 /* ===== メインレイアウト ===== */
 .main-area {
   display: flex;
-  height: calc(100vh - 48px - 72px); /* header + bottom bar */
+  height: calc(100vh - 48px - 72px); /* header + bottom bar (banner is flex-hidden by default) */
 }
 
 /* ===== 地図コンテナ（左60%） ===== */
@@ -356,6 +356,39 @@ svg.world-map { width: 100%; height: 100%; }
 }
 .route-risk-summary-label { color: #8b8fa8; }
 .route-risk-summary-val { font-weight: 700; }
+
+/* ===== シナリオバナー ===== */
+.scenario-banner {
+  display: none;
+  background: linear-gradient(90deg, rgba(255,75,75,0.15), rgba(255,212,59,0.10));
+  border-bottom: 1px solid rgba(255,75,75,0.3);
+  padding: 6px 24px;
+  font-size: 12px;
+  color: #ffd43b;
+  align-items: center;
+  gap: 12px;
+}
+.scenario-banner.active { display: flex; }
+.scenario-banner .scenario-label { font-weight: 700; }
+.scenario-banner .scenario-impact {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.scenario-banner .scenario-impact.negative { background: rgba(255,75,75,0.2); color: #ff4d4d; }
+.scenario-banner .scenario-impact.positive { background: rgba(81,207,102,0.2); color: #51cf66; }
+
+/* シナリオ影響国のハイライト */
+@keyframes scenarioGlow {
+  0%, 100% { stroke-opacity: 0.6; }
+  50% { stroke-opacity: 1; }
+}
+.country-scenario-highlight {
+  stroke: #ff4d4d !important;
+  stroke-width: 2px !important;
+  animation: scenarioGlow 1.5s ease-in-out infinite;
+}
 </style>
 </head>
 <body>
@@ -382,6 +415,12 @@ svg.world-map { width: 100%; height: 100%; }
         <button class="mode-btn" data-mode="sea" onclick="toggleMode('sea',this)">Sea</button>
         <button class="mode-btn" data-mode="air" onclick="toggleMode('air',this)">Air</button>
       </div>
+      <select class="header-select" id="riskScenario" onchange="onRiskScenarioChange(this.value)" style="border-color:#ffd43b;color:#ffd43b;min-width:140px;">
+        <option value="">シナリオなし</option>
+        <option value="japan_china_tension">日中関係悪化</option>
+        <option value="taiwan_strait_risk">台湾海峡緊張</option>
+        <option value="stagflation_mixed">スタグフレーション</option>
+      </select>
     </div>
   </div>
   <div class="meta">
@@ -389,6 +428,14 @@ svg.world-map { width: 100%; height: 100%; }
     <span id="update-time">Updated: --</span>
     <span id="dataSource" style="margin-left:6px;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;background:rgba(139,143,168,0.2);color:#8b8fa8">--</span>
   </div>
+</div>
+
+<!-- シナリオバナー -->
+<div class="scenario-banner" id="scenario-banner">
+  <span class="scenario-label" id="scenario-label">--</span>
+  <span>日本全体への影響:</span>
+  <span class="scenario-impact" id="scenario-impact">--</span>
+  <span id="scenario-affected" style="color:#8b8fa8;font-size:11px">--</span>
 </div>
 
 <!-- メインエリア: 地図 + 右パネル -->
@@ -1304,9 +1351,21 @@ function showRouteDetail(route) {
     ${altHtml}
     <div style="margin-top:12px;background:#0d2a1a;border:1px solid #27ae60;border-radius:8px;padding:10px">
       <div style="font-size:11px;color:#51cf66;font-weight:600;margin-bottom:4px">💡 推奨アクション</div>
-      <div style="font-size:11px;color:#e8e6e0">${getRouteRecommendation(route, expectedCost)}</div>
+      <div style="font-size:11px;color:#e8e6e0">${getRouteRecommendation(route, expectedCost).text}</div>
     </div>
   `;
+  // 推奨アクションボックスのスタイルをレベルに応じて変更
+  const rec = getRouteRecommendation(route, expectedCost);
+  const recBox = contentEl.querySelector('div[style*="0d2a1a"]');
+  if (recBox && rec.level === 'critical') {
+    recBox.style.background = '#2a0d0d';
+    recBox.style.borderColor = '#e74c3c';
+    recBox.querySelector('div').style.color = '#ff6b6b';
+  } else if (recBox && rec.level === 'warn') {
+    recBox.style.background = '#2a1a0d';
+    recBox.style.borderColor = '#e67e22';
+    recBox.querySelector('div').style.color = '#ffa94d';
+  }
 }
 
 function clearRouteDetail() {
@@ -1492,6 +1551,147 @@ async function loadChokepoints() {
 // 初回ロード + 30分間隔の自動更新
 loadRealData().then(() => loadChokepoints());
 setInterval(() => { loadRealData().then(() => loadChokepoints()); }, 30 * 60 * 1000);
+
+// ============================================================
+// シナリオ分析連携
+// ============================================================
+let activeScenarioData = null;
+
+async function onRiskScenarioChange(scenarioName) {
+  const banner = document.getElementById('scenario-banner');
+  const mainArea = document.querySelector('.main-area');
+
+  // シナリオ解除
+  if (!scenarioName) {
+    activeScenarioData = null;
+    banner.classList.remove('active');
+    mainArea.style.height = 'calc(100vh - 48px - 72px)';
+    clearScenarioHighlights();
+    return;
+  }
+
+  // APIコール
+  try {
+    const resp = await fetch('/api/v1/tourism/scenario-analysis', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({scenario_name: scenarioName})
+    });
+    if (!resp.ok) throw new Error('Scenario API error ' + resp.status);
+    const json = await resp.json();
+
+    activeScenarioData = json;
+    const totalChange = json.total_change_pct || 0;
+    const label = json.label || scenarioName;
+    const countryImpacts = json.country_impacts || [];
+
+    // バナー表示
+    document.getElementById('scenario-label').textContent = label;
+    const impactEl = document.getElementById('scenario-impact');
+    impactEl.textContent = (totalChange >= 0 ? '+' : '') + totalChange.toFixed(1) + '%';
+    impactEl.className = 'scenario-impact ' + (totalChange < 0 ? 'negative' : 'positive');
+
+    const affectedCountries = countryImpacts.filter(c => Math.abs(c.change_pct) > 10);
+    document.getElementById('scenario-affected').textContent =
+      '影響大: ' + affectedCountries.length + 'カ国';
+
+    banner.classList.add('active');
+    mainArea.style.height = 'calc(100vh - 48px - 72px - 32px)';
+
+    // 地図上でハイライト
+    highlightScenarioCountries(affectedCountries);
+
+    // チョークポイントリスク連動調整
+    adjustChokepointsForScenario(scenarioName, countryImpacts);
+
+  } catch(e) {
+    console.warn('Scenario API error:', e.message);
+    // フォールバック: ローカル推定
+    applyScenarioFallback(scenarioName);
+  }
+}
+
+function highlightScenarioCountries(affectedCountries) {
+  clearScenarioHighlights();
+  if (!countryPaths || !window._numToIso3) return;
+
+  // country_impactsのcountryフィールドは国コード（ISO2 or ISO3）
+  const affectedSet = new Set();
+  affectedCountries.forEach(c => {
+    // countryフィールドがISO2の場合、ISO3に変換
+    const cc = c.country;
+    if (cc && cc.length === 2) {
+      // ISO2→ISO3逆引き
+      for (const [iso3, iso2] of Object.entries(iso3ToIso2)) {
+        if (iso2 === cc) { affectedSet.add(iso3); break; }
+      }
+    } else if (cc && cc.length === 3) {
+      affectedSet.add(cc);
+    }
+  });
+
+  countryPaths.each(function(d) {
+    const iso3 = window._numToIso3[d.id];
+    if (iso3 && affectedSet.has(iso3)) {
+      d3.select(this).classed('country-scenario-highlight', true).raise();
+    }
+  });
+}
+
+function clearScenarioHighlights() {
+  if (!countryPaths) return;
+  countryPaths.classed('country-scenario-highlight', false);
+}
+
+function adjustChokepointsForScenario(scenarioName, countryImpacts) {
+  // シナリオに応じてチョークポイントリスクを上乗せ
+  const scenarioAdjustments = {
+    'japan_china_tension': { 'taiwan': 20, 'malacca': 10 },
+    'taiwan_strait_risk':  { 'taiwan': 35, 'malacca': 15, 'bab': 5 },
+    'stagflation_mixed':   { 'suez': 8, 'panama': 10, 'hormuz': 5 },
+  };
+  const adj = scenarioAdjustments[scenarioName] || {};
+
+  CHOKEPOINTS.forEach(cp => {
+    const base = CHOKEPOINTS_FALLBACK.find(f => f.id === cp.id);
+    if (base && adj[cp.id]) {
+      cp.risk = Math.min(100, base.risk + adj[cp.id]);
+      cp.color = riskColor(cp.risk);
+    }
+  });
+
+  drawChokepoints();
+  buildChokepointPanel();
+}
+
+function applyScenarioFallback(scenarioName) {
+  // API接続不可時のフォールバック表示
+  const fallbackData = {
+    'japan_china_tension': { label: '日中関係悪化', totalChange: -8.5, affected: ['CHN','TWN','KOR','HKG'] },
+    'taiwan_strait_risk':  { label: '台湾海峡緊張', totalChange: -12.3, affected: ['TWN','CHN','KOR','PHL','VNM'] },
+    'stagflation_mixed':   { label: 'スタグフレーション', totalChange: -5.2, affected: ['USA','GBR','DEU','FRA','AUS'] },
+  };
+  const fb = fallbackData[scenarioName];
+  if (!fb) return;
+
+  const banner = document.getElementById('scenario-banner');
+  const mainArea = document.querySelector('.main-area');
+
+  document.getElementById('scenario-label').textContent = fb.label + ' (推定)';
+  const impactEl = document.getElementById('scenario-impact');
+  impactEl.textContent = (fb.totalChange >= 0 ? '+' : '') + fb.totalChange.toFixed(1) + '%';
+  impactEl.className = 'scenario-impact ' + (fb.totalChange < 0 ? 'negative' : 'positive');
+  document.getElementById('scenario-affected').textContent =
+    '影響大: ' + fb.affected.length + 'カ国 (推定)';
+
+  banner.classList.add('active');
+  mainArea.style.height = 'calc(100vh - 48px - 72px - 32px)';
+
+  // ハイライト
+  const impacts = fb.affected.map(cc => ({country: cc, change_pct: -15}));
+  highlightScenarioCountries(impacts);
+  adjustChokepointsForScenario(scenarioName, impacts);
+}
 
 // ウィンドウリサイズ対応
 window.addEventListener("resize", () => {

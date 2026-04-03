@@ -102,7 +102,7 @@ svg.map{width:100%;height:100%}
 <div class="header">
   <div>
     <h1><span>SCRI</span> Inbound Risk Dashboard</h1>
-    <div style="font-size:10px;color:#8b8fa8;margin-top:1px">v1.4.0 | PPML Gravity Model | 8 Source Markets | 47 Prefectures</div>
+    <div style="font-size:10px;color:#8b8fa8;margin-top:1px">v1.5.0 | PPML Gravity Model | 9 Scenarios | 8 Source Markets | 47 Prefectures</div>
   </div>
   <div class="header-controls">
     <select class="ctrl-select" id="selCountry">
@@ -167,12 +167,24 @@ svg.map{width:100%;height:100%}
 <div class="chart-section" style="flex-shrink:0;border-bottom:1px solid #2d2f3e">
   <div class="section-title">2026-2027年 訪日インバウンド予測</div>
   <div class="section-desc" id="forecastDesc">PPML重力モデル(R&sup2;=0.99) + STL季節分解 + ベイズ更新による確率的予測��3シナリオの比較。</div>
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-    <div class="scenario-toggles" id="scenarioToggles">
-      <button class="scenario-btn" data-s="base" onclick="selectScenario('base')">現状維持</button>
-      <button class="scenario-btn" data-s="optimistic" onclick="selectScenario('optimistic')">楽観</button>
-      <button class="scenario-btn" data-s="pessimistic" onclick="selectScenario('pessimistic')">悲観</button>
-    </div>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+    <select id="scenarioSelect" onchange="onScenarioSelect(this.value)" style="background:#22263a;color:#e8e6e0;border:1px solid #2d2f3e;border-radius:6px;padding:6px 12px;font-size:12px">
+      <option value="base">現状維持</option>
+      <optgroup label="楽観シナリオ">
+        <option value="jpy_weak_10">円安10%（全通貨対比）</option>
+        <option value="china_stimulus">中国景気刺激策</option>
+        <option value="flight_expansion">アジア路線増便</option>
+      </optgroup>
+      <optgroup label="悲観シナリオ">
+        <option value="jpy_strong_10">円高10%（全通貨対比）</option>
+        <option value="japan_china_tension">日中関係悪化</option>
+        <option value="us_recession">米国景気後退</option>
+        <option value="taiwan_strait_risk">台湾海峡緊張</option>
+      </optgroup>
+      <optgroup label="複合シナリオ">
+        <option value="stagflation_mixed">スタグフレーション混合</option>
+      </optgroup>
+    </select>
     <div class="chart-legend">
       <div class="chart-legend-item"><div class="swatch" style="background:#4285f4"></div>現状維持</div>
       <div class="chart-legend-item"><div class="swatch-dash" style="border-color:#00e676"></div>楽観</div>
@@ -184,21 +196,22 @@ svg.map{width:100%;height:100%}
   <div style="position:relative;height:25vh;min-height:180px">
     <canvas id="forecastChart"></canvas>
   </div>
-  <div class="scenario-explanations">
-    <div class="scenario-card base">
-      <span class="dot" style="background:#4285f4"></span>
-      <strong>現状維持</strong>: 現在の為替水準・フライト供給量・二国間関係が2027年末まで継続<br>
-      <span style="color:#8b8fa8;font-size:10px">根拠: 重力モデルTFI変数を現在値で固定<br>前提: 円/ドル≈149円、フライト供給=2019年比95%</span>
+  <div style="margin-top:8px">
+    <div class="scenario-card" style="background:#161b22;border:1px solid #2d2f3e;border-radius:6px;padding:8px 12px;font-size:12px;color:#e8e6e0">
+      <span id="scenarioDescription" style="color:#8b8fa8">現在の為替・経済・地政学状況が継続</span>
     </div>
-    <div class="scenario-card optimistic">
-      <span class="dot" style="background:#00e676"></span>
-      <strong>楽観</strong> <span style="color:#00e676">+18%</span>: 円安10%・増便+15%・ビザ緩和<br>
-      <span style="color:#8b8fa8;font-size:10px">根拠: PPML弾性値 — 円安10%→訪日+11.2%、フライト+15%→+9.8%<br>前提: 円/ドル=165円、中国ビザ要件緩和</span>
-    </div>
-    <div class="scenario-card pessimistic">
-      <span class="dot" style="background:#ff1744"></span>
-      <strong>悲観</strong> <span style="color:#ff1744">-18%</span>: 円高10%・日中関係悪化・景気減速<br>
-      <span style="color:#8b8fa8;font-size:10px">根拠: 期待損失 — 円高(-12%) + 関係悪化(-6%) + 景気(-5%) = -23%<br>前提: 円/ドル=135円、中国GDP成長率4%割れ。中国市場は-35%超の可能性</span>
+    <div id="portfolioPanel" style="display:none">
+      <div style="background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:12px;margin-top:10px">
+        <div style="font-size:11px;color:#ffd43b;margin-bottom:6px">ポートフォリオ効果</div>
+        <div id="portfolioNote" style="font-size:11px;color:#e8e6e0"></div>
+        <div style="margin-top:8px;display:flex;gap:16px">
+          <div><span style="color:#51cf66">&#9650; 増加: </span><span id="upMarkets"></span></div>
+          <div><span style="color:#ff4d4d">&#9660; 減少: </span><span id="downMarkets"></span></div>
+        </div>
+        <div style="margin-top:6px;font-size:13px;font-weight:600">
+          日本全体: <span id="totalChangePct"></span>
+        </div>
+      </div>
     </div>
   </div>
   <!-- GP不確実性凡例 -->
@@ -218,9 +231,12 @@ svg.map{width:100%;height:100%}
     シナリオを選択すると国別の寄与内訳が表示されます
   </div>
   <div id="breakdownContent" style="display:none">
-    <div class="chart-legend" id="breakdownChartLegend" style="margin-bottom:8px"></div>
-    <div style="position:relative;height:20vh;min-height:160px">
-      <canvas id="countryBreakdownChart"></canvas>
+    <div id="impactTableContainer"></div>
+    <div id="breakdownChartContainer">
+      <div class="chart-legend" id="breakdownChartLegend" style="margin-bottom:8px"></div>
+      <div style="position:relative;height:20vh;min-height:160px">
+        <canvas id="countryBreakdownChart"></canvas>
+      </div>
     </div>
   </div>
 </div>
@@ -578,7 +594,8 @@ let currentCountry = 'ALL';
 let currentPref = 'JAPAN';
 let currentScenario = {};
 let currentScenarioName = 'base';
-let activeScenario = null; // null=未選択, 'base'/'optimistic'/'pessimistic'
+let activeScenario = null; // null=未選択, シナリオ名
+let currentScenarioData = null; // 現在選択中のシナリオAPI/フォールバックデータ
 let apiForecastData = null;
 let gpForecastData = null;       // GP予測APIレスポンス
 let gpUncertaintyData = [];      // 月別��確実性指数
@@ -1015,11 +1032,31 @@ function buildBreakdownChart() {
     return;
   }
 
+  // シナリオ影響テーブルが既にレンダリングされている場合はそちらを優先
+  if (currentScenarioData && currentScenarioData.by_country) {
+    const isBase = (currentScenarioData.total_change_pct === 0 &&
+      (currentScenarioData.up_markets||[]).length === 0 &&
+      (currentScenarioData.down_markets||[]).length === 0);
+    if (!isBase) {
+      const scenarioLabel = currentScenarioData.label || activeScenario;
+      titleEl.textContent = '[' + scenarioLabel + 'シナリオ] 国別影響分析';
+      placeholder.style.display = 'none';
+      content.style.display = '';
+      document.getElementById('impactTableContainer').style.display = '';
+      document.getElementById('breakdownChartContainer').style.display = 'none';
+      renderCountryImpactTable(currentScenarioData.by_country);
+      if (breakdownChart) { breakdownChart.destroy(); breakdownChart = null; }
+      return;
+    }
+  }
+
   placeholder.style.display = 'none';
   content.style.display = '';
+  document.getElementById('impactTableContainer').style.display = 'none';
+  document.getElementById('breakdownChartContainer').style.display = '';
 
-  const scenarioLabels = { base: '現状維持', optimistic: '楽観', pessimistic: '悲観' };
-  titleEl.textContent = `[${scenarioLabels[activeScenario]}シナリオ] 国別寄与内訳 (2026-2027)`;
+  const scenarioLabel = currentScenarioData ? (currentScenarioData.label || activeScenario) : activeScenario;
+  titleEl.textContent = '[' + scenarioLabel + 'シナリオ] 国別寄与内訳 (2026-2027)';
 
   const ctx = document.getElementById('countryBreakdownChart').getContext('2d');
 
@@ -1155,31 +1192,211 @@ function buildBreakdownChart() {
 }
 
 // ===================================================================
-// SCENARIO SELECTION
+// SCENARIO FALLBACK DATA (9シナリオ)
 // ===================================================================
-function selectScenario(scenario) {
-  if (activeScenario === scenario) {
-    // 同じボタンを再クリック→解除
-    activeScenario = null;
-    currentScenarioName = 'base';
-  } else {
-    activeScenario = scenario;
-    currentScenarioName = scenario;
+const SCENARIO_FALLBACK = {
+  "base": {label:"現状維持", description:"現在の為替・経済・地政学状況が継続", by_country:{
+    KR:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    CN:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    TW:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    US:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    AU:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+  }, total_change_pct:0, up_markets:[], down_markets:[]},
+  "jpy_weak_10": {label:"円安10%", description:"JPYが全通貨に対して10%下落", by_country:{
+    KR:{change_pct:10.5,direction:"UP",breakdown:{fx:10.5,gdp:0,political:0,flight:0}},
+    CN:{change_pct:9.5,direction:"UP",breakdown:{fx:9.5,gdp:0,political:0,flight:0}},
+    TW:{change_pct:10.8,direction:"UP",breakdown:{fx:10.8,gdp:0,political:0,flight:0}},
+    US:{change_pct:11.8,direction:"UP",breakdown:{fx:11.8,gdp:0,political:0,flight:0}},
+    AU:{change_pct:12.2,direction:"UP",breakdown:{fx:12.2,gdp:0,political:0,flight:0}},
+  }, total_change_pct:10.5, up_markets:["KR","CN","TW","US","AU"], down_markets:[]},
+  "japan_china_tension": {label:"日中関係悪化", description:"外交事件で日中関係が急悪化", by_country:{
+    KR:{change_pct:2.0,direction:"UP",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    CN:{change_pct:-38.5,direction:"DOWN",breakdown:{fx:0,gdp:0,political:-28,flight:-12}},
+    TW:{change_pct:-3.0,direction:"DOWN",breakdown:{fx:0,gdp:0,political:-3,flight:0}},
+    US:{change_pct:0.5,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    AU:{change_pct:0.3,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+  }, total_change_pct:-11.2, up_markets:["KR"], down_markets:["CN","TW"]},
+  "us_recession": {label:"米国景気後退", description:"米国GDP -1%、USD若干安", by_country:{
+    KR:{change_pct:1.5,direction:"FLAT",breakdown:{fx:1.5,gdp:0,political:0,flight:0}},
+    CN:{change_pct:0.5,direction:"FLAT",breakdown:{fx:0.5,gdp:0,political:0,flight:0}},
+    TW:{change_pct:1.0,direction:"FLAT",breakdown:{fx:1.0,gdp:0,political:0,flight:0}},
+    US:{change_pct:-16.8,direction:"DOWN",breakdown:{fx:-5.9,gdp:-1.2,political:0,flight:0}},
+    AU:{change_pct:-2.5,direction:"DOWN",breakdown:{fx:-2.5,gdp:0,political:0,flight:0}},
+  }, total_change_pct:-3.2, up_markets:[], down_markets:["US","AU"]},
+  "stagflation_mixed": {label:"スタグフレーション混合", description:"USD高/CNY安/AUD安。中国低迷、米国堅調。", by_country:{
+    KR:{change_pct:-3.2,direction:"DOWN",breakdown:{fx:-3.2,gdp:0,political:0,flight:0}},
+    CN:{change_pct:-14.8,direction:"DOWN",breakdown:{fx:-7.6,gdp:-2.5,political:0,flight:0}},
+    TW:{change_pct:-1.5,direction:"FLAT",breakdown:{fx:-1.5,gdp:0,political:0,flight:0}},
+    US:{change_pct:7.2,direction:"UP",breakdown:{fx:5.9,gdp:1.2,political:0,flight:0}},
+    AU:{change_pct:-7.3,direction:"DOWN",breakdown:{fx:-7.3,gdp:0,political:0,flight:0}},
+  }, total_change_pct:-4.8, up_markets:["US"], down_markets:["KR","CN","AU"]},
+  "taiwan_strait_risk": {label:"台湾海峡緊張", description:"軍事的緊張でTW/HK旅行者控え", by_country:{
+    KR:{change_pct:1.5,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    CN:{change_pct:-8.0,direction:"DOWN",breakdown:{fx:0,gdp:0,political:-8,flight:0}},
+    TW:{change_pct:-28.5,direction:"DOWN",breakdown:{fx:-5.4,gdp:0,political:-15,flight:-9}},
+    US:{change_pct:0.5,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    AU:{change_pct:0.3,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+  }, total_change_pct:-8.5, up_markets:[], down_markets:["CN","TW"]},
+  "china_stimulus": {label:"中国景気刺激策", description:"中国政府が大型消費刺激策発動", by_country:{
+    KR:{change_pct:0.5,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    CN:{change_pct:18.5,direction:"UP",breakdown:{fx:3.0,gdp:2.5,political:0,flight:6.0}},
+    TW:{change_pct:1.0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    US:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    AU:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+  }, total_change_pct:4.2, up_markets:["CN"], down_markets:[]},
+  "flight_expansion": {label:"アジア路線増便", description:"LCC参入でKR/TW/TH座席15%増", by_country:{
+    KR:{change_pct:9.0,direction:"UP",breakdown:{fx:0,gdp:0,political:0,flight:9.0}},
+    CN:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    TW:{change_pct:9.0,direction:"UP",breakdown:{fx:0,gdp:0,political:0,flight:9.0}},
+    US:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+    AU:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
+  }, total_change_pct:4.8, up_markets:["KR","TW"], down_markets:[]},
+  "jpy_strong_10": {label:"円高10%", description:"リスクオフでJPYが10%上昇", by_country:{
+    KR:{change_pct:-10.5,direction:"DOWN",breakdown:{fx:-10.5,gdp:0,political:0,flight:0}},
+    CN:{change_pct:-9.5,direction:"DOWN",breakdown:{fx:-9.5,gdp:0,political:0,flight:0}},
+    TW:{change_pct:-10.8,direction:"DOWN",breakdown:{fx:-10.8,gdp:0,political:0,flight:0}},
+    US:{change_pct:-11.8,direction:"DOWN",breakdown:{fx:-11.8,gdp:0,political:0,flight:0}},
+    AU:{change_pct:-12.2,direction:"DOWN",breakdown:{fx:-12.2,gdp:0,political:0,flight:0}},
+  }, total_change_pct:-10.5, up_markets:[], down_markets:["KR","CN","TW","US","AU"]},
+};
+
+// ===================================================================
+// SCENARIO SELECTION (9シナリオ ドロップダウン)
+// ===================================================================
+async function onScenarioSelect(scenarioName) {
+  // API呼び出し
+  try {
+    const resp = await fetch('/api/v1/tourism/scenario-analysis', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({scenario: scenarioName}),
+    });
+    if (resp.ok) {
+      const json = await resp.json();
+      currentScenarioData = json.data || json;
+    } else {
+      currentScenarioData = SCENARIO_FALLBACK[scenarioName] || SCENARIO_FALLBACK.base;
+    }
+  } catch(e) {
+    currentScenarioData = SCENARIO_FALLBACK[scenarioName] || SCENARIO_FALLBACK.base;
   }
-  updateScenarioButtons();
+
+  // シナリオ名をマッピング（予測チャート用）
+  // 楽観系 → optimistic, 悲観系 → pessimistic, その他 → base
+  const optimisticScenarios = ['jpy_weak_10', 'china_stimulus', 'flight_expansion'];
+  const pessimisticScenarios = ['jpy_strong_10', 'japan_china_tension', 'us_recession', 'taiwan_strait_risk', 'stagflation_mixed'];
+  if (optimisticScenarios.includes(scenarioName)) {
+    activeScenario = 'optimistic';
+    currentScenarioName = 'optimistic';
+  } else if (pessimisticScenarios.includes(scenarioName)) {
+    activeScenario = 'pessimistic';
+    currentScenarioName = 'pessimistic';
+  } else {
+    activeScenario = 'base';
+    currentScenarioName = 'base';
+  }
+
+  updateScenarioDisplay(currentScenarioData);
   buildForecastChart();
   buildBreakdownChart();
 }
 
-function updateScenarioButtons() {
-  document.querySelectorAll('#scenarioToggles .scenario-btn').forEach(btn => {
-    const s = btn.getAttribute('data-s');
-    if (activeScenario === s) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
+function updateScenarioDisplay(data) {
+  // 1. シナリオ解説を更新
+  document.getElementById('scenarioDescription').textContent = data.description || '';
+
+  // 2. base以外ではポートフォリオパネルを表示
+  const panel = document.getElementById('portfolioPanel');
+  const isBase = (data.total_change_pct === 0 && (data.up_markets||[]).length === 0 && (data.down_markets||[]).length === 0);
+  panel.style.display = isBase ? 'none' : 'block';
+
+  if (!isBase) {
+    document.getElementById('upMarkets').textContent = (data.up_markets || []).join(', ') || 'なし';
+    document.getElementById('downMarkets').textContent = (data.down_markets || []).join(', ') || 'なし';
+    const totalPct = data.total_change_pct || 0;
+    const totalEl = document.getElementById('totalChangePct');
+    totalEl.textContent = (totalPct >= 0 ? '+' : '') + totalPct.toFixed(1) + '%';
+    totalEl.style.color = totalPct >= 0 ? '#51cf66' : '#ff4d4d';
+
+    const note = data.diversification_note ||
+      ((data.up_markets||[]).length > 0 && (data.down_markets||[]).length > 0
+        ? '市場間で方向が異なるため、日本全体への影響は個別市場の変化より小さくなっています（分散効果）。'
+        : '全市場が同方向に動いています。');
+    document.getElementById('portfolioNote').textContent = note;
+  }
+
+  // 3. バブル色を更新
+  if (data.by_country) {
+    updateBubbleColors(data.by_country);
+  }
+
+  // 4. 国別テーブルを表示（セクション3）
+  if (data.by_country && !isBase) {
+    renderCountryImpactTable(data.by_country);
+    document.getElementById('breakdownPlaceholder').style.display = 'none';
+    document.getElementById('breakdownContent').style.display = '';
+  }
+
+  // 5. 予測チャートをシナリオに合わせて更新
+  updateForecastForScenario(data);
+}
+
+function updateBubbleColors(byCountry) {
+  d3.selectAll('#worldMap circle').each(function() {
+    const el = d3.select(this);
+    // バブルデータを持つ要素のみ処理
+    const d = el.datum();
+    if (!d || !d.code) return;
+    const impact = byCountry[d.code];
+    if (!impact) return;
+
+    const color = impact.direction === 'UP' ? '#00e676' :
+                  impact.direction === 'DOWN' ? '#ff1744' : '#8b8fa8';
+    if (el.attr('fill-opacity') && parseFloat(el.attr('fill-opacity')) >= 0.5) {
+      el.attr('fill', color).attr('fill-opacity', 0.7);
     }
   });
+}
+
+function renderCountryImpactTable(byCountry) {
+  const container = document.getElementById('impactTableContainer');
+  const rows = Object.entries(byCountry)
+    .sort((a,b) => b[1].change_pct - a[1].change_pct);
+
+  container.innerHTML =
+    '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
+    '<thead><tr style="border-bottom:1px solid #2d2f3e;color:#8b8fa8">' +
+    '<th style="text-align:left;padding:6px">市場</th>' +
+    '<th style="text-align:right;padding:6px">変化率</th>' +
+    '<th style="text-align:left;padding:6px">内訳</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(function(entry) {
+      var iso2 = entry[0], imp = entry[1];
+      var arrow = imp.direction === 'UP' ? '\u25B2' : imp.direction === 'DOWN' ? '\u25BC' : '\u2192';
+      var color = imp.direction === 'UP' ? '#51cf66' : imp.direction === 'DOWN' ? '#ff4d4d' : '#8b8fa8';
+      var bd = imp.breakdown || {};
+      var details = Object.entries(bd)
+        .filter(function(e) { return Math.abs(e[1]) > 0.5; })
+        .map(function(e) { return e[0] + (e[1]>=0?'+':'') + e[1].toFixed(1) + '%'; })
+        .join(' ');
+      var mkt = MARKET_DATA_FALLBACK[iso2] || {};
+      var name = mkt.name || iso2;
+      var flag = mkt.flag || '';
+      return '<tr style="border-bottom:1px solid #1e2030">' +
+        '<td style="padding:6px">' + flag + ' ' + name + '</td>' +
+        '<td style="padding:6px;text-align:right;color:' + color + ';font-weight:600">' + arrow + ' ' + (imp.change_pct>=0?'+':'') + imp.change_pct.toFixed(1) + '%</td>' +
+        '<td style="padding:6px;font-size:10px;color:#8b8fa8">' + (details || '変化なし') + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+function updateForecastForScenario(scenarioData) {
+  // シナリオの国別変化率を使って予測チャートのラベルにメモを追加
+  // buildForecastChart内で既にactiveScenarioに基づいて線が更新されているため
+  // ここでは追加的なアノテーション（チャート上のシナリオ名表示）を行う
+  if (!forecastChart) return;
+  // チャートタイトルの更新は buildForecastChart が担当
 }
 
 // ===================================================================
