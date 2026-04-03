@@ -250,9 +250,13 @@ svg.world-map { width: 100%; height: 100%; }
   box-shadow: 0 4px 20px rgba(0,0,0,0.6);
   display: none;
 }
+.tooltip { background: #1e2535; }
 .tooltip-title { font-size: 14px; font-weight: 700; color: #f0f6fc; margin-bottom: 4px; }
 .tooltip-score { font-size: 20px; font-weight: 700; }
+.tooltip-prob { margin-top: 8px; padding: 6px 8px; background: rgba(255,107,53,0.12); border-radius: 6px; font-size: 12px; color: #ffa94d; }
+.tooltip-prob-val { font-weight: 700; font-size: 14px; }
 .tooltip-dims { margin-top: 6px; font-size: 11px; color: #8b8fa8; }
+.tooltip-dims-header { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #8b8fa8; margin-bottom: 4px; }
 .tooltip-dim-row { display: flex; justify-content: space-between; padding: 2px 0; }
 .tooltip-dim-bar { height: 3px; background: #0f1117; border-radius: 2px; margin-top: 2px; }
 .tooltip-dim-fill { height: 100%; border-radius: 2px; }
@@ -309,6 +313,49 @@ svg.world-map { width: 100%; height: 100%; }
 .route-dimmed { opacity: 0.12 !important; }
 .route-highlight { opacity: 1 !important; }
 .country-dimmed { opacity: 0.4 !important; }
+
+/* ===== CP reroute info ===== */
+.cp-reroute { font-size: 10px; color: #ffa94d; margin-top: 2px; }
+.cp-closure-prob { font-size: 10px; color: #ff6b35; font-weight: 600; }
+
+/* ===== 推奨アクションボックス ===== */
+.recommendation-box {
+  margin-top: 14px;
+  padding: 12px;
+  background: #0d2a1a;
+  border: 1px solid #27ae60;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #51cf66;
+  line-height: 1.6;
+}
+.recommendation-box.warn { background: #2a1a0d; border-color: #e67e22; color: #ffa94d; }
+.recommendation-box.critical { background: #2a0d0d; border-color: #e74c3c; color: #ff6b6b; }
+.recommendation-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+/* ===== ルート詳細: リスクサマリー ===== */
+.route-risk-summary {
+  background: #0f1117;
+  border: 1px solid #2d2f3e;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.route-risk-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.route-risk-summary-label { color: #8b8fa8; }
+.route-risk-summary-val { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -774,6 +821,41 @@ function formatJPY(val) {
   return val.toLocaleString() + "円";
 }
 
+// ===== リスク確率計算 =====
+function calcDisruptionProbability(score, days) {
+  const annual_prob = 0.05 + (score / 100) * 0.75;
+  return Math.round((1 - Math.pow(1 - annual_prob, days / 365)) * 100);
+}
+
+function calcClosureProbability(risk, days) {
+  const annual_prob = 0.02 + (risk / 100) * 0.60;
+  return Math.round((1 - Math.pow(1 - annual_prob, days / 365)) * 100);
+}
+
+function getCriticalDimensions(r) {
+  return Object.entries(r)
+    .filter(([k, v]) => k !== 'name' && k !== 'overall' && k !== 'iso2' && k !== 'lat' && k !== 'lon' && typeof v === 'number' && v > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 4)
+    .map(([k, v]) => ({ name: k, score: v }));
+}
+
+const REROUTE_COSTS = {
+  'bab':     { days: 12, cost_jpy: 18000000, alt: '喜望峰経由' },
+  'suez':    { days: 14, cost_jpy: 22000000, alt: '喜望峰経由' },
+  'hormuz':  { days: 8,  cost_jpy: 35000000, alt: '代替港利用' },
+  'malacca': { days: 3,  cost_jpy: 8000000,  alt: 'ロンボク海峡' },
+  'panama':  { days: 20, cost_jpy: 45000000, alt: 'スエズ経由' },
+  'taiwan':  { days: 5,  cost_jpy: 12000000, alt: '南回り' },
+  'cape':    { days: 0,  cost_jpy: 0,        alt: '（迂回先）' },
+};
+
+function getRouteRecommendation(route, expected_cost) {
+  if (route.risk >= 75) return { level: 'critical', text: '緊急: 代替ルートへの切替を検討。期待追加コスト' + (expected_cost / 1000000).toFixed(0) + '百万円/航。' };
+  if (route.risk >= 55) return { level: 'warn', text: '要注意: 週次モニタリング推奨。リスク80超時は即座に代替手配。' };
+  return { level: 'ok', text: '現状維持可。チョークポイント状況悪化時は再評価。' };
+}
+
 // 六角形パスジェネレータ
 function hexPath(size) {
   const a = Math.PI / 3;
@@ -894,9 +976,17 @@ d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(w
         <div class="tooltip-dim-bar"><div class="tooltip-dim-fill" style="width:${val}%;background:${riskColorSmooth(val)}"></div></div>`;
       }).join("");
 
+      const disruptProb = calcDisruptionProbability(score, 90);
       tooltip.innerHTML = `
         <div class="tooltip-title">${getFlagEmoji(data.iso2)} ${data.name} (${iso3})</div>
         <div class="tooltip-score" style="color:${riskColor(score)}">${score} <span style="font-size:12px;color:#8b8fa8">${riskLevel(score)}</span></div>
+        <div style="background:#1e2535;border-radius:6px;padding:8px;margin:8px 0">
+          <div style="font-size:11px;color:#ffd43b;margin-bottom:4px">⚠ リスクの実態</div>
+          <div style="font-size:12px">90日以内に調達障害が発生する確率:
+            <span style="font-weight:700;color:${disruptProb > 30 ? '#ff4d4d' : disruptProb > 15 ? '#ffd43b' : '#51cf66'}">${disruptProb}%</span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#8b8fa8;margin-bottom:4px">主要リスク要因:</div>
         <div class="tooltip-dims">${dimHtml}</div>`;
       tooltip.style.display = "block";
     })
@@ -1125,16 +1215,23 @@ function drawChokepoints() {
 function buildChokepointPanel() {
   const el = document.getElementById("cp-list");
   const sorted = [...CHOKEPOINTS].sort((a, b) => b.risk - a.risk);
-  el.innerHTML = sorted.map(cp => `
+  el.innerHTML = sorted.map(cp => {
+    const closureProb = calcClosureProbability(cp.risk, 30);
+    const reroute = REROUTE_COSTS[cp.id] || {};
+    return `
     <div class="cp-item" onclick="zoomToChokepoint(${cp.lat},${cp.lon})">
       <div class="cp-dot" style="background:${cp.color}"></div>
       <div class="cp-info">
         <div class="cp-name">${cp.name}</div>
         <div class="cp-status-text">${cp.status}</div>
+        <div style="font-size:10px;color:#8b8fa8;margin-top:2px">
+          30日通航制限: <span style="color:${closureProb > 15 ? '#ff4d4d' : '#ffd43b'};font-weight:600">${closureProb}%</span>
+          ${reroute.days ? ` · 迂回+${reroute.days}日 / +${(reroute.cost_jpy/1000000).toFixed(0)}百万円` : ''}
+        </div>
       </div>
       <div class="cp-risk-val" style="color:${cp.color}">${cp.risk}</div>
-    </div>
-  `).join("");
+    </div>`;
+  }).join("");
 }
 
 // ============================================================
@@ -1177,13 +1274,38 @@ function showRouteDetail(route) {
     </div>`;
   }
 
+  // 期待追加コスト計算
+  const expectedCost = (route.chokepoints || []).reduce((sum, cp) => {
+    const prob = calcClosureProbability(cp.risk, 90) / 100;
+    const cost = (REROUTE_COSTS[cp.id || ''] || {}).cost_jpy || 0;
+    return sum + prob * cost;
+  }, 0);
+  const disruptProb90 = Math.max(...(route.chokepoints || []).map(c => calcClosureProbability(c.risk, 90)), 0);
+
   contentEl.innerHTML = `
     <div class="route-detail-header">
       <div class="route-detail-name">${route.type === "sea" ? "🚢" : "✈"} ${route.name}</div>
       <div class="route-detail-risk-badge" style="color:${riskColor(route.risk)}">${route.risk}</div>
     </div>
+    <div style="background:#1a2535;border:1px solid #2d3a4a;border-radius:8px;padding:10px;margin-bottom:12px">
+      <div style="font-size:11px;color:#ffd43b;margin-bottom:8px">📊 このルートのリスク実態</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:10px;color:#8b8fa8">90日以内の障害確率</div>
+          <div style="font-size:18px;font-weight:700;color:${disruptProb90 > 30 ? '#ff4d4d' : '#ffd43b'}">${disruptProb90}%</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:#8b8fa8">期待追加コスト/航</div>
+          <div style="font-size:14px;font-weight:700;color:#ff9f43">${expectedCost > 0 ? '+' + (expectedCost/1000000).toFixed(0) + '百万円' : '—'}</div>
+        </div>
+      </div>
+    </div>
     ${cpBars}
     ${altHtml}
+    <div style="margin-top:12px;background:#0d2a1a;border:1px solid #27ae60;border-radius:8px;padding:10px">
+      <div style="font-size:11px;color:#51cf66;font-weight:600;margin-bottom:4px">💡 推奨アクション</div>
+      <div style="font-size:11px;color:#e8e6e0">${getRouteRecommendation(route, expectedCost)}</div>
+    </div>
   `;
 }
 

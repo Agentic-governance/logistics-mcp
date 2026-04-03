@@ -186,15 +186,18 @@ svg.map{width:100%;height:100%}
   <div class="scenario-explanations">
     <div class="scenario-card base">
       <span class="dot" style="background:#4285f4"></span>
-      <strong>現状維持</strong>: 現在の為替水準・フライト供給量・二国間関係が2027年末まで継続する前提
+      <strong>現状維持</strong>: 現在の為替水準・フライト供給量・二国間関係が2027年末まで継続<br>
+      <span style="color:#8b8fa8;font-size:10px">根拠: 重力モデルTFI変数を現在値で固定<br>前提: 円/ドル≈149円、フライト供給=2019年比95%</span>
     </div>
     <div class="scenario-card optimistic">
       <span class="dot" style="background:#00e676"></span>
-      <strong>楽観</strong>: 円安10%進行・主要路線の増便(+15%)・中国ビザ要件緩和。訪日需要が+18%拡大
+      <strong>楽観</strong> <span style="color:#00e676">+18%</span>: 円安10%・増便+15%・ビザ緩和<br>
+      <span style="color:#8b8fa8;font-size:10px">根拠: PPML弾性値 — 円安10%→訪日+11.2%、フライト+15%→+9.8%<br>前提: 円/ドル=165円、中国ビザ要件緩和</span>
     </div>
     <div class="scenario-card pessimistic">
       <span class="dot" style="background:#ff1744"></span>
-      <strong>悲観</strong>: 円高10%進行・日中関係悪化・中国景気減速。訪日需要が-18%縮小
+      <strong>悲観</strong> <span style="color:#ff1744">-18%</span>: 円高10%・日中関係悪化・景気減速<br>
+      <span style="color:#8b8fa8;font-size:10px">根拠: 期待損失 — 円高(-12%) + 関係悪化(-6%) + 景気(-5%) = -23%<br>前提: 円/ドル=135円、中国GDP成長率4%割れ。中国市場は-35%超の可能性</span>
     </div>
   </div>
 </div>
@@ -1179,14 +1182,30 @@ function drawWorldMap() {
         d.scenarios.forEach(s => {
           scenarioHtml += `<div class="tt-row" style="font-size:11px"><span>${s.name}</span><span class="tt-val">${s.loss.toFixed(1)}%</span></div>`;
         });
+        // 3シナリオ計算
+        const baseV = d.visitors_2024;
+        const bestDelta = Math.round(baseV * 0.18);
+        const worstPct = -(d.expected_loss * 1.8);
+        const worstDelta = Math.round(baseV * worstPct / 100);
+        const anyRiskProb = Math.round((1 - d.scenarios.reduce((p,s) => p * (1 - (s.prob || 0.15)), 1)) * 100);
+        const worstLossJpy = Math.abs(worstDelta) * 230000;
+
         tooltip.html(`
-          <div class="tt-title">${d.flag} ${d.name} (${d.code})</div>
-          <div class="tt-row"><span>訪日シェア</span><span class="tt-val">${d.share}%</span></div>
-          <div class="tt-row"><span>期待損失率</span><span class="tt-val ${lClass}">${d.expected_loss}%</span></div>
-          <div class="tt-row"><span>前年比</span><span class="tt-val">${sign}${d.change}%</span></div>
-          <div class="tt-row"><span>2025実績</span><span class="tt-val">${(d.visitors_2024/10000).toFixed(0)}万人</span></div>
-          <hr style="border-color:#2d2f3e;margin:4px 0">
+          <div class="tt-title">${d.flag} ${d.name}</div>
+          <div style="background:#1a1d27;border-radius:6px;padding:8px;margin:6px 0">
+            <div style="font-size:10px;color:#8b8fa8;margin-bottom:4px">来訪者数シナリオ（2026年予測）</div>
+            <div class="tt-row" style="font-size:12px"><span style="color:#51cf66">◆ 楽観</span><span class="tt-val">${((baseV+bestDelta)/10000).toFixed(0)}万人 <span style="color:#51cf66">(+18%)</span></span></div>
+            <div class="tt-row" style="font-size:12px"><span style="color:#4a9eff">● 基本</span><span class="tt-val">${((baseV+Math.round(baseV*d.change/100))/10000).toFixed(0)}万人 <span style="color:${d.change>=0?'#51cf66':'#ff4d4d'}">(${sign}${d.change}%)</span></span></div>
+            <div class="tt-row" style="font-size:12px"><span style="color:#ff4d4d">▼ 悲観</span><span class="tt-val">${(Math.max(0,baseV+worstDelta)/10000).toFixed(0)}万人 <span style="color:#ff4d4d">(${worstPct.toFixed(0)}%)</span></span></div>
+          </div>
+          <div style="background:#2a1515;border:1px solid #4a1515;border-radius:6px;padding:8px;margin:6px 0">
+            <div style="font-size:10px;color:#ff6b6b;margin-bottom:4px">⚠ リスクの実態</div>
+            <div style="font-size:12px">今年中にリスク顕在化: <span style="font-weight:700;color:${anyRiskProb>40?'#ff4d4d':'#ffd43b'}">${anyRiskProb}%</span></div>
+            <div style="font-size:11px;color:#8b8fa8;margin-top:2px">最悪ケース: <span style="color:#ff6b6b">-${(worstLossJpy/100000000).toFixed(0)}億円</span></div>
+          </div>
+          <div style="font-size:10px;color:#8b8fa8;margin-bottom:3px">リスク要因内訳:</div>
           ${scenarioHtml}
+          <div style="border-top:1px solid #2d2f3e;margin-top:4px;padding-top:4px" class="tt-row"><span style="font-weight:600">期待損失合計</span><span class="tt-val ${lClass}">${d.expected_loss}%</span></div>
         `).style('display', 'block');
       })
       .on('mousemove', function(event) {
