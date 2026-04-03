@@ -51,21 +51,15 @@ svg.map{width:100%;height:100%}
 .section-title{font-size:13px;font-weight:600;color:#f0f6fc;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2d2f3e}
 .section-desc{font-size:11px;color:#8b8fa8;margin-bottom:10px;line-height:1.5}
 
-/* ========== Scenario Controls ========== */
-.scenario-toggles{display:flex;gap:2px}
-.scenario-btn{background:#1a1d27;border:1px solid #2d2f3e;color:#8b8fa8;padding:5px 12px;font-size:11px;cursor:pointer;transition:all .2s}
-.scenario-btn:first-child{border-radius:6px 0 0 6px}
-.scenario-btn:last-child{border-radius:0 6px 6px 0}
-.scenario-btn.active{color:#f0f6fc;border-color:#58a6ff}
-.scenario-btn[data-s="base"].active{background:rgba(66,133,244,.25)}
-.scenario-btn[data-s="optimistic"].active{background:rgba(0,230,118,.2)}
-.scenario-btn[data-s="pessimistic"].active{background:rgba(255,23,68,.2)}
-
-/* ========== Scenario Explanations ========== */
-.scenario-explanations{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.scenario-card{flex:1;min-width:200px;background:#161b22;border:1px solid #2d2f3e;border-radius:6px;padding:8px 12px;font-size:11px;color:#8b8fa8;line-height:1.5}
-.scenario-card strong{color:#f0f6fc}
-.scenario-card .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+/* ========== Scenario Cards (3枚常時表示) ========== */
+.scenario-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.scenario-card{background:#161b22;border:2px solid #2d2f3e;border-radius:8px;padding:10px 14px;cursor:pointer;transition:all .2s;position:relative}
+.scenario-card:hover{border-color:#58a6ff}
+.scenario-card.active{border-width:2px}
+.scenario-card .sc-label{font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.scenario-card .sc-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.scenario-card .sc-change{font-size:20px;font-weight:700;margin:4px 0}
+.scenario-card .sc-desc{font-size:10px;color:#8b8fa8;line-height:1.4}
 
 /* ========== Breakdown Placeholder ========== */
 .breakdown-placeholder{text-align:center;padding:40px;color:#8b8fa8;font-size:13px;border:1px dashed #2d2f3e;border-radius:8px}
@@ -80,6 +74,14 @@ svg.map{width:100%;height:100%}
 .chart-legend-item .swatch-dash{width:20px;height:0;border-top:2px dashed;border-radius:0}
 .chart-legend-item .swatch-band{width:20px;height:8px;border-radius:2px;opacity:.4}
 
+/* ========== Country Impact 3-Column Table ========== */
+.impact-3col{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
+.impact-col{background:#161b22;border:1px solid #2d2f3e;border-radius:6px;padding:10px}
+.impact-col-title{font-size:12px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.impact-col table{width:100%;font-size:11px;border-collapse:collapse}
+.impact-col th{text-align:left;padding:4px 6px;color:#8b8fa8;border-bottom:1px solid #2d2f3e}
+.impact-col td{padding:4px 6px;border-bottom:1px solid #1e2030}
+
 /* ========== Bubble labels ========== */
 .bubble-label{pointer-events:none;text-anchor:middle;font-size:8px;fill:#8b8fa8;font-weight:600}
 .bubble-flag{pointer-events:none;text-anchor:middle;font-size:12px;dominant-baseline:central}
@@ -92,7 +94,8 @@ svg.map{width:100%;height:100%}
 @media(max-width:900px){
   .maps-row{grid-template-columns:1fr;height:auto}
   .map-panel{height:30vh}
-  .scenario-explanations{flex-direction:column}
+  .scenario-cards{grid-template-columns:1fr}
+  .impact-3col{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -102,7 +105,7 @@ svg.map{width:100%;height:100%}
 <div class="header">
   <div>
     <h1><span>SCRI</span> Inbound Risk Dashboard</h1>
-    <div style="font-size:10px;color:#8b8fa8;margin-top:1px">v1.5.0 | PPML Gravity Model | 9 Scenarios | 8 Source Markets | 47 Prefectures</div>
+    <div style="font-size:10px;color:#8b8fa8;margin-top:1px">v1.5.0 | 3 Scenarios | 8 Source Markets | 47 Prefectures</div>
   </div>
   <div class="header-controls">
     <select class="ctrl-select" id="selCountry">
@@ -127,7 +130,7 @@ svg.map{width:100%;height:100%}
       <option value="新潟">新潟</option>
       <option value="長野">長野</option>
     </select>
-    <div class="meta"><span id="update-time">2026-04-03 UTC</span> <span id="dataSource" style="margin-left:4px;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:rgba(139,143,168,0.2);color:#8b8fa8">--</span></div>
+    <div class="meta"><span id="update-time">2026-04-04 UTC</span> <span id="dataSource" style="margin-left:4px;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:rgba(139,143,168,0.2);color:#8b8fa8">--</span></div>
   </div>
 </div>
 
@@ -166,78 +169,45 @@ svg.map{width:100%;height:100%}
 <!-- ===== Section 2: 予測フォーカス (25vh) ===== -->
 <div class="chart-section" style="flex-shrink:0;border-bottom:1px solid #2d2f3e">
   <div class="section-title">2026-2027年 訪日インバウンド予測</div>
-  <div class="section-desc" id="forecastDesc">PPML重力モデル(R&sup2;=0.99) + STL季節分解 + ベイズ更新による確率的予測��3シナリオの比較。</div>
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
-    <select id="scenarioSelect" onchange="onScenarioSelect(this.value)" style="background:#22263a;color:#e8e6e0;border:1px solid #2d2f3e;border-radius:6px;padding:6px 12px;font-size:12px">
-      <option value="base">現状維持</option>
-      <optgroup label="楽観シナリオ">
-        <option value="jpy_weak_10">円安10%（全通貨対比）</option>
-        <option value="china_stimulus">中国景気刺激策</option>
-        <option value="flight_expansion">アジア路線増便</option>
-      </optgroup>
-      <optgroup label="悲観シナリオ">
-        <option value="jpy_strong_10">円高10%（全通貨対比）</option>
-        <option value="japan_china_tension">日中関係悪化</option>
-        <option value="us_recession">米国景気後退</option>
-        <option value="taiwan_strait_risk">台湾海峡緊張</option>
-      </optgroup>
-      <optgroup label="複合シナリオ">
-        <option value="stagflation_mixed">スタグフレーション混合</option>
-      </optgroup>
-    </select>
-    <div class="chart-legend">
-      <div class="chart-legend-item"><div class="swatch" style="background:#4285f4"></div>現状維持</div>
-      <div class="chart-legend-item"><div class="swatch-dash" style="border-color:#00e676"></div>楽観</div>
-      <div class="chart-legend-item"><div class="swatch-dash" style="border-color:#ff1744"></div>悲観</div>
-      <div class="chart-legend-item"><div class="swatch-band" style="background:rgba(66,133,244,0.35)"></div>信頼区間</div>
-      <div class="chart-legend-item" id="gpLegendItem" style="display:none"><div class="swatch" style="background:#ff4d4d;width:8px;height:8px;border-radius:50%"></div>高不確実性月</div>
+  <div class="section-desc" id="forecastDesc">3シナリオ同時比較。カードクリックでフォーカス切替。</div>
+
+  <!-- 3シナリオカード -->
+  <div class="scenario-cards" id="scenarioCards">
+    <div class="scenario-card active" data-scenario="base" onclick="onCardClick('base')" style="border-color:#4a9eff">
+      <div class="sc-label"><div class="sc-dot" style="background:#4a9eff"></div>ベース</div>
+      <div class="sc-change" style="color:#4a9eff" id="cardChangeBase">+0.0%</div>
+      <div class="sc-desc">現状維持</div>
+    </div>
+    <div class="scenario-card" data-scenario="optimistic" onclick="onCardClick('optimistic')" style="border-color:#2d2f3e">
+      <div class="sc-label"><div class="sc-dot" style="background:#51cf66"></div>楽観</div>
+      <div class="sc-change" style="color:#51cf66" id="cardChangeOpt">--</div>
+      <div class="sc-desc">円安+中国GDP+フライト増便+日中改善</div>
+    </div>
+    <div class="scenario-card" data-scenario="pessimistic" onclick="onCardClick('pessimistic')" style="border-color:#2d2f3e">
+      <div class="sc-label"><div class="sc-dot" style="background:#ff4d4d"></div>悲観</div>
+      <div class="sc-change" style="color:#ff4d4d" id="cardChangePess">--</div>
+      <div class="sc-desc">円高+景気後退+日中悪化+台湾緊張</div>
     </div>
   </div>
+
+  <!-- チャート凡例 -->
+  <div class="chart-legend" style="margin-bottom:8px">
+    <div class="chart-legend-item"><div class="swatch" style="background:#4a9eff"></div>ベース (実線)</div>
+    <div class="chart-legend-item"><div class="swatch-dash" style="border-color:#51cf66"></div>楽観 (破線)</div>
+    <div class="chart-legend-item"><div class="swatch-dash" style="border-color:#ff4d4d"></div>悲観 (破線)</div>
+    <div class="chart-legend-item"><div class="swatch-band" style="background:rgba(74,158,255,0.35)"></div>信頼区間</div>
+  </div>
+
   <div style="position:relative;height:25vh;min-height:180px">
     <canvas id="forecastChart"></canvas>
   </div>
-  <div style="margin-top:8px">
-    <div class="scenario-card" style="background:#161b22;border:1px solid #2d2f3e;border-radius:6px;padding:8px 12px;font-size:12px;color:#e8e6e0">
-      <span id="scenarioDescription" style="color:#8b8fa8">現在の為替・経済・地政学状況が継続</span>
-    </div>
-    <div id="portfolioPanel" style="display:none">
-      <div style="background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:12px;margin-top:10px">
-        <div style="font-size:11px;color:#ffd43b;margin-bottom:6px">ポートフォリオ効果</div>
-        <div id="portfolioNote" style="font-size:11px;color:#e8e6e0"></div>
-        <div style="margin-top:8px;display:flex;gap:16px">
-          <div><span style="color:#51cf66">&#9650; 増加: </span><span id="upMarkets"></span></div>
-          <div><span style="color:#ff4d4d">&#9660; 減少: </span><span id="downMarkets"></span></div>
-        </div>
-        <div style="margin-top:6px;font-size:13px;font-weight:600">
-          日本全体: <span id="totalChangePct"></span>
-        </div>
-      </div>
-    </div>
-  </div>
-  <!-- GP不確実性凡例 -->
-  <div id="gpUncertaintyLegend" style="display:none;margin-top:10px;padding:8px 14px;background:#161b22;border:1px solid #2d2f3e;border-radius:6px;font-size:11px;color:#8b8fa8;line-height:1.7">
-    <span style="font-weight:600;color:#f0f6fc">不確実性マーカー:</span>
-    <span style="color:#ff4d4d;font-weight:700;margin-left:8px">&#9679;</span> 赤点 = 不確実性が特に高い月（台風・春節など）
-    <span style="color:#ffd43b;font-weight:700;margin-left:12px">&#9679;</span> 黄点 = 不確実性がやや高い月
-    <span style="color:#8b8fa8;margin-left:12px">|</span>
-    <span style="margin-left:8px" id="gpModelBadge" style="display:none"></span>
-  </div>
 </div>
 
-<!-- ===== Section 3: 国別内訳 (シナリオ選択時のみ) ===== -->
+<!-- ===== Section 3: 国別影響テーブル (3列横並び) ===== -->
 <div class="chart-section" id="breakdownSection" style="flex-shrink:0">
-  <div class="section-title" id="breakdownTitle">国別寄与内訳</div>
-  <div id="breakdownPlaceholder" class="breakdown-placeholder">
-    シナリオを選択すると国別の寄与内訳が表示されます
-  </div>
-  <div id="breakdownContent" style="display:none">
-    <div id="impactTableContainer"></div>
-    <div id="breakdownChartContainer">
-      <div class="chart-legend" id="breakdownChartLegend" style="margin-bottom:8px"></div>
-      <div style="position:relative;height:20vh;min-height:160px">
-        <canvas id="countryBreakdownChart"></canvas>
-      </div>
-    </div>
+  <div class="section-title" id="breakdownTitle">国別影響比較 (悲観 / ベース / 楽観)</div>
+  <div id="countryImpactContainer">
+    <div class="breakdown-placeholder" id="breakdownPlaceholder">API呼び出し中...</div>
   </div>
 </div>
 
@@ -329,38 +299,8 @@ let ALL_EXPECTED_LOSS = Object.values(MARKET_DATA).reduce((s,m) => s + m.share *
 let ALL_CHANGE = Math.round(Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.change, 0) / 100);
 
 // ===================================================================
-// RISK_SCENARIOS (シナリオ別確率定義)
-// ===================================================================
-const RISK_SCENARIOS = {
-  'CN': [
-    {name:'日中関係急悪化', base_probability:0.15, optimistic_probability:0.05, pessimistic_probability:0.30, impact:40},
-    {name:'中国景気後退', base_probability:0.25, optimistic_probability:0.10, pessimistic_probability:0.40, impact:20},
-    {name:'円高10%進行', base_probability:0.35, optimistic_probability:0.15, pessimistic_probability:0.55, impact:12},
-    {name:'感染症流行', base_probability:0.10, optimistic_probability:0.05, pessimistic_probability:0.20, impact:60},
-  ],
-  'KR': [
-    {name:'韓国景気停滞', base_probability:0.20, optimistic_probability:0.08, pessimistic_probability:0.35, impact:10},
-    {name:'円高5%以上', base_probability:0.40, optimistic_probability:0.20, pessimistic_probability:0.60, impact:8},
-    {name:'日韓関係悪化', base_probability:0.08, optimistic_probability:0.03, pessimistic_probability:0.18, impact:30},
-  ],
-  'TW': [
-    {name:'台湾海峡緊張', base_probability:0.12, optimistic_probability:0.05, pessimistic_probability:0.25, impact:35},
-    {name:'台湾景気悪化', base_probability:0.18, optimistic_probability:0.08, pessimistic_probability:0.30, impact:15},
-    {name:'円高進行', base_probability:0.35, optimistic_probability:0.15, pessimistic_probability:0.55, impact:8},
-  ],
-  'US': [
-    {name:'米国景気後退', base_probability:0.20, optimistic_probability:0.08, pessimistic_probability:0.35, impact:15},
-    {name:'フライト供給減', base_probability:0.08, optimistic_probability:0.03, pessimistic_probability:0.15, impact:15},
-  ],
-  'AU': [
-    {name:'豪ドル安', base_probability:0.30, optimistic_probability:0.15, pessimistic_probability:0.45, impact:12},
-    {name:'直行便減', base_probability:0.15, optimistic_probability:0.05, pessimistic_probability:0.25, impact:12},
-  ],
-};
-
-// ===================================================================
-// MONTHLY_DATA (5カ国 x 87ヶ月実績 + 21ヶ月予測, 千人単位)
-// 実績: 2019-01 〜 2026-03 (87ヶ月), 予測: 2026-04 〜 2027-12 (21ヶ月)
+// MONTHLY_DATA (5カ国 x 87ヶ月実績, 千人単位)
+// 実績: 2019-01 ~ 2026-03 (87ヶ月)
 // ===================================================================
 const MONTHLY_DATA = {
   KR: {
@@ -373,12 +313,7 @@ const MONTHLY_DATA = {
       610,540,680,650,600,530,680,620,580,720,610,680,
       640,570,710,690,630,560,720,660,610,760,650,720,
       672,598,746
-    ],
-    forecast_base: [724,662,588,756,693,640,798,682,756,699,622,776,753,688,612,786,721,666,830,709,786],
-    forecast_optimistic: [854,781,694,892,818,755,942,805,892,825,734,916,889,812,722,927,851,786,979,837,927],
-    forecast_pessimistic: [594,543,482,620,568,525,654,559,620,573,510,636,617,564,502,645,591,546,681,581,645],
-    ci_upper: [811,741,659,847,776,717,894,764,847,783,697,869,843,771,685,880,808,746,930,794,880],
-    ci_lower: [637,583,517,665,610,563,702,600,665,615,547,683,663,605,539,692,634,586,730,624,692]
+    ]
   },
   CN: {
     actual: [
@@ -390,12 +325,7 @@ const MONTHLY_DATA = {
       305,260,410,450,420,360,520,480,380,590,440,485,
       350,300,470,510,480,410,600,550,440,680,500,560,
       322,276,432
-    ],
-    forecast_base: [469,442,377,552,506,405,626,460,515,301,258,404,439,414,353,517,474,379,586,431,482],
-    forecast_optimistic: [553,522,445,651,597,478,739,543,608,355,304,477,518,489,417,610,559,447,691,509,569],
-    forecast_pessimistic: [385,362,309,453,415,332,513,377,422,247,212,331,360,339,289,424,389,311,481,353,395],
-    ci_upper: [525,495,422,618,567,454,701,515,577,337,289,452,492,464,395,579,531,424,656,483,540],
-    ci_lower: [413,389,332,486,445,356,551,405,453,265,227,356,386,364,311,455,417,334,516,379,424]
+    ]
   },
   TW: {
     actual: [
@@ -407,12 +337,7 @@ const MONTHLY_DATA = {
       380,420,375,410,365,340,430,410,355,450,400,410,
       400,440,395,430,385,360,450,430,375,475,420,435,
       412,453,407
-    ],
-    forecast_base: [443,397,371,464,443,386,489,433,448,422,464,417,454,407,380,475,454,395,501,443,459],
-    forecast_optimistic: [523,468,438,548,523,455,577,511,529,498,548,492,536,480,448,560,536,466,591,523,542],
-    forecast_pessimistic: [363,326,304,380,363,317,401,355,367,346,380,342,372,334,312,390,372,324,411,363,376],
-    ci_upper: [496,445,416,520,496,432,548,485,502,473,520,467,508,456,426,532,508,442,561,496,514],
-    ci_lower: [390,349,326,408,390,340,430,381,394,371,408,367,400,358,334,418,400,348,441,390,404]
+    ]
   },
   US: {
     actual: [
@@ -424,12 +349,7 @@ const MONTHLY_DATA = {
       145,135,195,230,215,240,280,250,210,260,200,170,
       165,155,220,260,245,270,315,280,240,295,225,195,
       185,174,246
-    ],
-    forecast_base: [291,274,302,353,314,269,330,252,218,203,191,270,319,300,331,387,344,295,362,276,239],
-    forecast_optimistic: [343,323,356,417,371,317,389,297,257,240,225,319,376,354,391,457,406,348,427,326,282],
-    forecast_pessimistic: [239,225,248,289,257,221,271,207,179,166,157,221,262,246,271,317,282,242,297,226,196],
-    ci_upper: [326,307,338,395,352,301,370,282,244,227,214,302,357,336,371,433,385,330,405,309,268],
-    ci_lower: [256,241,266,311,276,237,290,222,192,179,168,238,281,264,291,341,303,260,319,243,210]
+    ]
   },
   AU: {
     actual: [
@@ -441,12 +361,7 @@ const MONTHLY_DATA = {
       62,56,46,38,30,32,42,46,55,58,62,72,
       68,62,50,42,33,35,46,50,60,64,68,78,
       74,68,55
-    ],
-    forecast_base: [46,36,38,50,55,65,70,74,85,79,73,59,49,39,41,54,59,70,75,79,91],
-    forecast_optimistic: [54,42,45,59,65,77,83,87,100,93,86,70,58,46,48,64,70,83,88,93,107],
-    forecast_pessimistic: [38,30,31,41,45,53,57,61,70,65,60,48,40,32,34,44,48,57,61,65,75],
-    ci_upper: [52,40,43,56,62,73,78,83,95,88,82,66,55,44,46,60,66,78,84,88,102],
-    ci_lower: [40,32,33,44,48,57,62,65,75,70,64,52,43,34,36,48,52,62,66,70,80]
+    ]
   }
 };
 
@@ -502,108 +417,78 @@ const PREF_ID_TO_SELECT = {
   13:'東京',27:'大阪',26:'京都',1:'北海道',40:'福岡',47:'沖縄',15:'新潟',20:'長野'
 };
 
-// ===================================================================
-// PREF_SHARES / COUNTRY_COLORS
-// ===================================================================
-const PREF_SHARES = {
-  KR: {東京:0.22, 大阪:0.18, 福岡:0.20, 北海道:0.10, 沖縄:0.08, 京都:0.07, 新潟:0.015, 長野:0.01},
-  CN: {東京:0.32, 大阪:0.20, 京都:0.10, 北海道:0.08, 沖縄:0.06, 福岡:0.08, 新潟:0.01, 長野:0.008},
-  TW: {東京:0.28, 大阪:0.18, 北海道:0.12, 沖縄:0.09, 京都:0.09, 福岡:0.10, 新潟:0.015, 長野:0.012},
-  US: {東京:0.40, 大阪:0.18, 京都:0.12, 北海道:0.06, 沖縄:0.05, 福岡:0.05, 新潟:0.01, 長野:0.015},
-  AU: {東京:0.30, 大阪:0.15, 北海道:0.22, 沖縄:0.08, 京都:0.10, 福岡:0.05, 新潟:0.02, 長野:0.025}
-};
-
 const COUNTRY_COLORS = {
-  CN: '#ff6b6b',
-  KR: '#4a9eff',
-  TW: '#51cf66',
-  US: '#ffd43b',
-  AU: '#cc5de8',
+  CN: '#ff6b6b', KR: '#4a9eff', TW: '#51cf66', US: '#ffd43b', AU: '#cc5de8',
 };
 
-function getPrefShare(country, pref) {
-  if (pref === 'JAPAN') return 1.0;
-  if (PREF_SHARES[country] && PREF_SHARES[country][pref] !== undefined) {
-    return PREF_SHARES[country][pref];
-  }
-  return 0.02;
-}
-
-// ===================================================================
-// DATA HELPERS
-// ===================================================================
 const ACTUAL_MONTHS = 87;
-const FORECAST_MONTHS = 21;
 
-function getActualOrForecast(country, monthIndex) {
-  const d = MONTHLY_DATA[country];
-  if (!d) {
-    const proxy = MONTHLY_DATA['KR'];
-    const mkt = MARKET_DATA[country];
-    const ratio = mkt ? mkt.visitors_2024 / MARKET_DATA['KR'].visitors_2024 : 0.1;
-    if (monthIndex < ACTUAL_MONTHS) return proxy.actual[monthIndex] * ratio;
-    const fi = monthIndex - ACTUAL_MONTHS;
-    return proxy.forecast_base[fi] * ratio;
-  }
-  if (monthIndex < ACTUAL_MONTHS) return d.actual[monthIndex];
-  const fi = monthIndex - ACTUAL_MONTHS;
-  return d.forecast_base[fi];
-}
+// ===================================================================
+// SCENARIO FALLBACK DATA (API失敗時)
+// ===================================================================
+const SCENARIO_FALLBACK = {
+  months: [],
+  scenarios: {
+    base: {label:"ベース",color:"#4a9eff",median:[],p10:[],p90:[],total_change_pct:0},
+    optimistic: {label:"楽観",color:"#51cf66",median:[],p10:[],p90:[],total_change_pct:18},
+    pessimistic: {label:"悲観",color:"#ff4d4d",median:[],p10:[],p90:[],total_change_pct:-18},
+  },
+  country_impacts: {}
+};
 
-function getScenarioValue(country, monthIndex, scenario) {
-  const d = MONTHLY_DATA[country];
-  if (monthIndex < ACTUAL_MONTHS) return getActualOrForecast(country, monthIndex);
-  const fi = monthIndex - ACTUAL_MONTHS;
-  if (!d) {
-    const base = getActualOrForecast(country, monthIndex);
-    if (scenario === 'optimistic') return base * 1.15;
-    if (scenario === 'pessimistic') return base * 0.85;
-    return base;
+// フォールバック月別データ生成
+(function buildFallbackData() {
+  const months = [];
+  for (let y = 2026; y <= 2027; y++) {
+    const sm = y === 2026 ? 4 : 1;
+    for (let m = sm; m <= 12; m++) months.push(y + '/' + String(m).padStart(2,'0'));
   }
-  if (scenario === 'optimistic') return d.forecast_optimistic[fi];
-  if (scenario === 'pessimistic') return d.forecast_pessimistic[fi];
-  return d.forecast_base[fi];
-}
+  SCENARIO_FALLBACK.months = months;
 
-function getMonthlyForPref(country, pref, monthIndex, scenario) {
-  scenario = scenario || 'base';
-  if (pref === 'JAPAN') {
-    if (country === 'ALL') {
-      return Object.keys(MONTHLY_DATA)
-        .reduce((sum, c) => sum + getScenarioValue(c, monthIndex, scenario), 0)
-        + ['TH','HK','SG'].filter(c => !MONTHLY_DATA[c])
-          .reduce((sum, c) => sum + getScenarioValue(c, monthIndex, scenario), 0);
-    }
-    return getScenarioValue(country, monthIndex, scenario);
+  // 国別ベースラインから全国合計 (千人)
+  const BASE_MONTHLY = {
+    KR:[672,598,746,724,662,588,756,693,640,798,682,756,699,622,776,753,688,612,786,721,666],
+    CN:[322,276,432,469,442,377,552,506,405,626,460,515,301,258,404,439,414,353,517,474,379],
+    TW:[412,453,407,443,397,371,464,443,386,489,433,448,422,464,417,454,407,380,475,454,395],
+    US:[185,174,246,291,274,302,353,314,269,330,252,218,203,191,270,319,300,331,387,344,295],
+    AU:[74,68,55,46,36,38,50,55,65,70,74,85,79,73,59,49,39,41,54,59,70],
+  };
+
+  for (let i = 0; i < months.length; i++) {
+    let total = 0;
+    Object.values(BASE_MONTHLY).forEach(arr => { if (i < arr.length) total += arr[i]; });
+    total = Math.round(total * 1.25); // 非掲載市場分
+    SCENARIO_FALLBACK.scenarios.base.median.push(total);
+    SCENARIO_FALLBACK.scenarios.base.p10.push(Math.round(total * 0.88));
+    SCENARIO_FALLBACK.scenarios.base.p90.push(Math.round(total * 1.12));
+    SCENARIO_FALLBACK.scenarios.optimistic.median.push(Math.round(total * 1.18));
+    SCENARIO_FALLBACK.scenarios.optimistic.p10.push(Math.round(total * 0.88 * 1.18));
+    SCENARIO_FALLBACK.scenarios.optimistic.p90.push(Math.round(total * 1.12 * 1.18));
+    SCENARIO_FALLBACK.scenarios.pessimistic.median.push(Math.round(total * 0.82));
+    SCENARIO_FALLBACK.scenarios.pessimistic.p10.push(Math.round(total * 0.88 * 0.82));
+    SCENARIO_FALLBACK.scenarios.pessimistic.p90.push(Math.round(total * 1.12 * 0.82));
   }
-  if (country === 'ALL') {
-    const allCountries = [...Object.keys(MONTHLY_DATA), ...['TH','HK','SG'].filter(c => !MONTHLY_DATA[c])];
-    return allCountries.reduce((sum, c) => {
-      const share = getPrefShare(c, pref);
-      return sum + getScenarioValue(c, monthIndex, scenario) * share;
-    }, 0);
-  }
-  const share = getPrefShare(country, pref);
-  return getScenarioValue(country, monthIndex, scenario) * share;
-}
+
+  // 国別影響フォールバック
+  const countries = ['KR','CN','TW','US','AU','HK','TH','SG'];
+  countries.forEach(cc => {
+    SCENARIO_FALLBACK.country_impacts[cc] = {
+      base: {change_pct:0, direction:"FLAT", breakdown:{}},
+      optimistic: {change_pct:cc==='CN'?12:cc==='KR'?8:cc==='TW'?9:5, direction:"UP", breakdown:{fx:6}},
+      pessimistic: {change_pct:cc==='CN'?-28:cc==='TW'?-15:cc==='US'?-5:-8, direction:"DOWN", breakdown:{fx:-4,political:cc==='CN'?-24:0}},
+    };
+  });
+})();
 
 // ===================================================================
 // STATE
 // ===================================================================
 let currentCountry = 'ALL';
 let currentPref = 'JAPAN';
-let currentScenario = {};
-let currentScenarioName = 'base';
-let activeScenario = null; // null=未選択, シナリオ名
-let currentScenarioData = null; // 現在選択中のシナリオAPI/フォールバックデータ
-let apiForecastData = null;
-let gpForecastData = null;       // GP予測APIレスポンス
-let gpUncertaintyData = [];      // 月別��確実性指数
-let gpCalendarEffects = [];      // カレン��ー効果倍率
-let gpModelType = 'fallback';    // 'GP' or 'fallback'
+let activeScenario = 'base'; // 選択中のシナリオ（太くする線）
+let threeScenarioData = null; // API/フォールバックデータ
 let contextChart = null;
 let forecastChart = null;
-let breakdownChart = null;
 
 const tooltip = d3.select('#tooltip');
 
@@ -618,26 +503,32 @@ function lossColor(loss) {
 }
 
 // ===================================================================
-// SECTION 1: 全期間の推移チャート (コンテキスト)
+// SECTION 1: 全期間の推移チャート
 // ===================================================================
 function buildContextChart() {
   const ctx = document.getElementById('contextChart').getContext('2d');
-
-  // ラベル: 2019-01 〜 2026-03
   const labels = [];
   for (let y = 2019; y <= 2026; y++) {
     const endM = (y === 2026) ? 3 : 12;
     for (let m = 1; m <= endM; m++) {
-      labels.push(`${y}-${String(m).padStart(2,'0')}`);
+      labels.push(y + '-' + String(m).padStart(2,'0'));
     }
   }
 
   const actual = [];
   for (let i = 0; i < ACTUAL_MONTHS; i++) {
-    actual.push(Math.round(getMonthlyForPref(currentCountry, currentPref, i, 'base')));
+    let val = 0;
+    if (currentCountry === 'ALL') {
+      Object.keys(MONTHLY_DATA).forEach(c => {
+        if (MONTHLY_DATA[c].actual[i] !== undefined) val += MONTHLY_DATA[c].actual[i];
+      });
+      val = Math.round(val * 1.25);
+    } else if (MONTHLY_DATA[currentCountry]) {
+      val = MONTHLY_DATA[currentCountry].actual[i] || 0;
+    }
+    actual.push(val);
   }
 
-  // 「現在→」を示すアノテーションプラグイン
   const nowPlugin = {
     id: 'nowAnnotation',
     afterDraw(chart) {
@@ -648,7 +539,6 @@ function buildContextChart() {
       const x = lastPoint.x;
       const yTop = chart.chartArea.top;
       const yBot = chart.chartArea.bottom;
-
       drawCtx.save();
       drawCtx.setLineDash([4, 3]);
       drawCtx.strokeStyle = '#ffd600';
@@ -708,22 +598,19 @@ function buildContextChart() {
       scales: {
         x: {
           ticks: {
-            color: '#8b8fa8',
-            font: { size: 9 },
+            color: '#8b8fa8', font: { size: 9 },
             callback: function(val, idx) {
               const label = this.getLabelForValue(val);
               if (label.endsWith('-01')) return label.substring(0, 4);
               return '';
             },
-            autoSkip: false,
-            maxTicksLimit: 10
+            autoSkip: false, maxTicksLimit: 10
           },
           grid: { color: 'rgba(45,47,62,0.3)' }
         },
         y: {
           ticks: {
-            color: '#8b8fa8',
-            font: { size: 9 },
+            color: '#8b8fa8', font: { size: 9 },
             callback: function(v) {
               if (v >= 1000) return (v / 1000).toFixed(1) + 'M';
               return v + 'K';
@@ -741,156 +628,69 @@ function buildContextChart() {
 // ===================================================================
 // SECTION 2: 予測フォーカスチャート (3シナリオ常時表示)
 // ===================================================================
-function buildForecastChart() {
+function renderThreeScenarioChart() {
+  const data = threeScenarioData;
+  if (!data || !data.months || !data.scenarios) return;
+
   const ctx = document.getElementById('forecastChart').getContext('2d');
+  const labels = data.months;
+  const base = data.scenarios.base;
+  const opt = data.scenarios.optimistic;
+  const pess = data.scenarios.pessimistic;
 
-  // 未来21ヶ月のラベル
-  const labels = [];
-  for (let y = 2026; y <= 2027; y++) {
-    const startM = (y === 2026) ? 4 : 1;
-    for (let m = startM; m <= 12; m++) {
-      labels.push(`${y}/${String(m).padStart(2,'0')}`);
-    }
-  }
-
-  // 3シナリオのデータ生成
-  function getScenarioLine(scenarioName) {
-    const arr = [];
-    for (let fi = 0; fi < FORECAST_MONTHS; fi++) {
-      const mi = ACTUAL_MONTHS + fi;
-      arr.push(Math.round(getMonthlyForPref(currentCountry, currentPref, mi, scenarioName)));
-    }
-    return arr;
-  }
-
-  const baseLine = getScenarioLine('base');
-  const optLine = getScenarioLine('optimistic');
-  const pessLine = getScenarioLine('pessimistic');
-
-  // 信頼区間 (現状維持ベース)
-  const ciUpper = [];
-  const ciLower = [];
-  for (let fi = 0; fi < FORECAST_MONTHS; fi++) {
-    const mi = ACTUAL_MONTHS + fi;
-    const med = baseLine[fi];
-    if (currentCountry !== 'ALL' && MONTHLY_DATA[currentCountry]) {
-      const share = getPrefShare(currentCountry, currentPref);
-      const baseMedian = Math.round(MONTHLY_DATA[currentCountry].forecast_base[fi] * share);
-      const upperSpread = Math.round(MONTHLY_DATA[currentCountry].ci_upper[fi] * share) - baseMedian;
-      const lowerSpread = baseMedian - Math.round(MONTHLY_DATA[currentCountry].ci_lower[fi] * share);
-      ciUpper.push(med + upperSpread);
-      ciLower.push(med - lowerSpread);
-    } else {
-      let baseU = 0, baseL = 0, baseMed = 0;
-      const allC = [...Object.keys(MONTHLY_DATA), ...['TH','HK','SG'].filter(c => !MONTHLY_DATA[c])];
-      allC.forEach(c => {
-        const share = (currentPref === 'JAPAN') ? 1.0 : getPrefShare(c, currentPref);
-        const d = MONTHLY_DATA[c];
-        if (d) {
-          baseU += d.ci_upper[fi] * share;
-          baseL += d.ci_lower[fi] * share;
-          baseMed += d.forecast_base[fi] * share;
-        } else {
-          const base = getActualOrForecast(c, mi);
-          baseU += base * 1.15 * share;
-          baseL += base * 0.85 * share;
-          baseMed += base * share;
-        }
-      });
-      const upperSpread = Math.round(baseU) - Math.round(baseMed);
-      const lowerSpread = Math.round(baseMed) - Math.round(baseL);
-      ciUpper.push(med + upperSpread);
-      ciLower.push(med - lowerSpread);
-    }
-  }
-
-  // アクティブシナリオの太さ制御
-  const isActive = (s) => activeScenario === s;
-  const isAnyActive = activeScenario !== null;
-
-  function lineWidth(s) {
-    if (!isAnyActive) return 2;
-    return isActive(s) ? 3 : 1;
-  }
-  function lineOpacity(s) {
-    if (!isAnyActive) return 1.0;
-    return isActive(s) ? 1.0 : 0.4;
-  }
-
-  function applyOpacity(hex, opacity) {
-    // hex→rgba変換
-    const r = parseInt(hex.slice(1,3), 16);
-    const g = parseInt(hex.slice(3,5), 16);
-    const b = parseInt(hex.slice(5,7), 16);
-    return `rgba(${r},${g},${b},${opacity})`;
-  }
+  // 太さ制御: activeScenarioが太い
+  function lw(s) { return activeScenario === s ? 2.5 : 1.5; }
 
   if (forecastChart) forecastChart.destroy();
-
-  // 不確実性データから月別のポイントサイズ・色を決定
-  const uncertaintyData = gpUncertaintyData.length === labels.length
-    ? gpUncertaintyData.map(u => u.uncertainty_index || 1.0)
-    : labels.map(() => 1.0);
 
   forecastChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: labels,
       datasets: [
-        // 現状維持 (実線 + 不確実性マーカー)
+        // ベース (青実線)
         {
-          label: '現状維持',
-          data: baseLine,
-          borderColor: applyOpacity('#4285f4', lineOpacity('base')),
+          label: 'ベース',
+          data: base.median,
+          borderColor: '#4a9eff',
           backgroundColor: 'transparent',
-          borderWidth: lineWidth('base'),
+          borderWidth: lw('base'),
           tension: 0.4,
-          pointRadius: function(ctx) {
-            const unc = uncertaintyData[ctx.dataIndex] || 1.0;
-            return unc > 2.0 ? 6 : unc > 1.5 ? 4 : 0;
-          },
-          pointBackgroundColor: function(ctx) {
-            const unc = uncertaintyData[ctx.dataIndex] || 1.0;
-            return unc > 2.0 ? '#ff4d4d' : unc > 1.5 ? '#ffd43b' : '#4a9eff';
-          },
-          pointBorderColor: function(ctx) {
-            const unc = uncertaintyData[ctx.dataIndex] || 1.0;
-            return unc > 2.0 ? '#ff4d4d' : unc > 1.5 ? '#ffd43b' : 'transparent';
-          },
+          pointRadius: 0,
           pointHitRadius: 4,
           borderDash: [],
           order: 3
         },
-        // 楽観 (破線)
+        // 楽観 (緑破線)
         {
           label: '楽観',
-          data: optLine,
-          borderColor: applyOpacity('#00e676', lineOpacity('optimistic')),
+          data: opt.median,
+          borderColor: '#51cf66',
           backgroundColor: 'transparent',
-          borderWidth: lineWidth('optimistic'),
+          borderWidth: lw('optimistic'),
           tension: 0.4,
           pointRadius: 0,
           pointHitRadius: 4,
           borderDash: [8, 4],
           order: 4
         },
-        // 悲観 (破線)
+        // 悲観 (赤破線)
         {
           label: '悲観',
-          data: pessLine,
-          borderColor: applyOpacity('#ff1744', lineOpacity('pessimistic')),
+          data: pess.median,
+          borderColor: '#ff4d4d',
           backgroundColor: 'transparent',
-          borderWidth: lineWidth('pessimistic'),
+          borderWidth: lw('pessimistic'),
           tension: 0.4,
           pointRadius: 0,
           pointHitRadius: 4,
           borderDash: [4, 4],
           order: 5
         },
-        // CI上限 (帯の境界)
+        // CI上限 (ベースp90)
         {
           label: 'CI上限',
-          data: ciUpper,
+          data: base.p90,
           borderColor: 'transparent',
           backgroundColor: 'transparent',
           pointRadius: 0,
@@ -898,12 +698,12 @@ function buildForecastChart() {
           fill: false,
           order: 1
         },
-        // CI下限 → CI上限への帯
+        // CI下限 → CI上限への帯 (ベースp10)
         {
           label: 'CI下限',
-          data: ciLower,
+          data: base.p10,
           borderColor: 'transparent',
-          backgroundColor: 'rgba(66,133,244,0.15)',
+          backgroundColor: 'rgba(74,158,255,0.15)',
           pointRadius: 0,
           tension: 0.4,
           fill: '-1',
@@ -938,24 +738,20 @@ function buildForecastChart() {
       scales: {
         x: {
           ticks: {
-            color: '#8b8fa8',
-            font: { size: 10 },
+            color: '#8b8fa8', font: { size: 10 },
             callback: function(val, idx) {
               const label = this.getLabelForValue(val);
-              // 3ヶ月ごとに表示
               const m = parseInt(label.split('/')[1]);
               if (m === 1 || m === 4 || m === 7 || m === 10) return label;
               return '';
             },
-            autoSkip: false,
-            maxTicksLimit: 10
+            autoSkip: false, maxTicksLimit: 10
           },
           grid: { color: 'rgba(45,47,62,0.4)' }
         },
         y: {
           ticks: {
-            color: '#8b8fa8',
-            font: { size: 10 },
+            color: '#8b8fa8', font: { size: 10 },
             callback: function(v) {
               if (v >= 1000) return (v / 1000).toFixed(1) + 'M';
               return v + 'K';
@@ -965,438 +761,121 @@ function buildForecastChart() {
           beginAtZero: false
         }
       }
-    },
-    plugins: [
-      // カレンダー効果注釈プラグイン
-      {
-        id: 'calendarAnnotations',
-        afterDraw(chart) {
-          if (!gpCalendarEffects || gpCalendarEffects.length === 0) return;
-          const drawCtx = chart.ctx;
-          const meta = chart.getDatasetMeta(0); // 現状維持ライン
-          if (!meta || !meta.data) return;
-
-          drawCtx.save();
-          drawCtx.font = '9px sans-serif';
-          drawCtx.textAlign = 'center';
-
-          for (let i = 0; i < gpCalendarEffects.length && i < meta.data.length; i++) {
-            const ce = gpCalendarEffects[i];
-            if (!ce) continue;
-            const dm = ce.demand_multiplier || 1.0;
-            const events = ce.events || [];
-            // カレンダー効果が大きい月 (>1.3 or <0.7) に注釈表示
-            if ((dm > 1.3 || dm < 0.7) && events.length > 0) {
-              const point = meta.data[i];
-              if (!point) continue;
-              const x = point.x;
-              const yTop = chart.chartArea.top;
-              const label = events[0] + (dm > 1.3 ? ' +' : ' ') + ((dm - 1) * 100).toFixed(0) + '%';
-              drawCtx.fillStyle = dm > 1.3 ? 'rgba(0,230,118,0.7)' : 'rgba(255,77,77,0.7)';
-              drawCtx.fillText(label, x, yTop + 10);
-            }
-          }
-          drawCtx.restore();
-        }
-      }
-    ]
+    }
   });
-
-  // GP不確実性凡例の表示制御
-  const legendEl = document.getElementById('gpUncertaintyLegend');
-  const badgeEl = document.getElementById('gpModelBadge');
-  const gpLegendItem = document.getElementById('gpLegendItem');
-  if (gpUncertaintyData.length > 0) {
-    legendEl.style.display = 'block';
-    gpLegendItem.style.display = 'flex';
-    badgeEl.textContent = 'Model: ' + gpModelType.toUpperCase();
-    badgeEl.style.color = gpModelType === 'GP' ? '#51cf66' : '#ffa94d';
-  } else {
-    legendEl.style.display = 'none';
-    gpLegendItem.style.display = 'none';
-  }
 }
 
 // ===================================================================
-// SECTION 3: 国別内訳チャート (シナリオ選択時のみ表示)
+// SCENARIO SUMMARY CARDS
 // ===================================================================
-function buildBreakdownChart() {
-  const placeholder = document.getElementById('breakdownPlaceholder');
-  const content = document.getElementById('breakdownContent');
-  const titleEl = document.getElementById('breakdownTitle');
+function renderScenarioSummaryCards() {
+  const data = threeScenarioData;
+  if (!data || !data.scenarios) return;
 
-  if (activeScenario === null) {
-    placeholder.style.display = '';
-    content.style.display = 'none';
-    if (breakdownChart) { breakdownChart.destroy(); breakdownChart = null; }
+  const base = data.scenarios.base;
+  const opt = data.scenarios.optimistic;
+  const pess = data.scenarios.pessimistic;
+
+  const fmtPct = (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+
+  document.getElementById('cardChangeBase').textContent = fmtPct(base.total_change_pct || 0);
+  document.getElementById('cardChangeOpt').textContent = fmtPct(opt.total_change_pct || 0);
+  document.getElementById('cardChangePess').textContent = fmtPct(pess.total_change_pct || 0);
+}
+
+// ===================================================================
+// COUNTRY IMPACT TABLE (3列横並び)
+// ===================================================================
+function renderCountryImpactTable() {
+  const data = threeScenarioData;
+  const container = document.getElementById('countryImpactContainer');
+  if (!data || !data.country_impacts || Object.keys(data.country_impacts).length === 0) {
+    container.innerHTML = '<div class="breakdown-placeholder">国別影響データなし</div>';
     return;
   }
 
-  // シナリオ影響テーブルが既にレンダリングされている場合はそちらを優先
-  if (currentScenarioData && currentScenarioData.by_country) {
-    const isBase = (currentScenarioData.total_change_pct === 0 &&
-      (currentScenarioData.up_markets||[]).length === 0 &&
-      (currentScenarioData.down_markets||[]).length === 0);
-    if (!isBase) {
-      const scenarioLabel = currentScenarioData.label || activeScenario;
-      titleEl.textContent = '[' + scenarioLabel + 'シナリオ] 国別影響分析';
-      placeholder.style.display = 'none';
-      content.style.display = '';
-      document.getElementById('impactTableContainer').style.display = '';
-      document.getElementById('breakdownChartContainer').style.display = 'none';
-      renderCountryImpactTable(currentScenarioData.by_country);
-      if (breakdownChart) { breakdownChart.destroy(); breakdownChart = null; }
-      return;
-    }
-  }
-
-  placeholder.style.display = 'none';
-  content.style.display = '';
-  document.getElementById('impactTableContainer').style.display = 'none';
-  document.getElementById('breakdownChartContainer').style.display = '';
-
-  const scenarioLabel = currentScenarioData ? (currentScenarioData.label || activeScenario) : activeScenario;
-  titleEl.textContent = '[' + scenarioLabel + 'シナリオ] 国別寄与内訳 (2026-2027)';
-
-  const ctx = document.getElementById('countryBreakdownChart').getContext('2d');
-
-  // 未来21ヶ月のラベル
-  const futureLabels = [];
-  for (let y = 2026; y <= 2027; y++) {
-    const startM = (y === 2026) ? 4 : 1;
-    for (let m = startM; m <= 12; m++) {
-      futureLabels.push(`${y}/${String(m).padStart(2,'0')}`);
-    }
-  }
-
-  const scenarioName = activeScenario;
-  const countries = ['CN','KR','TW','US','AU'];
-
-  const datasets = countries.map(c => ({
-    label: MARKET_DATA[c].name,
-    data: futureLabels.map((_, fi) => {
-      const mi = ACTUAL_MONTHS + fi;
-      return Math.round(getMonthlyForPref(c, currentPref, mi, scenarioName));
-    }),
-    backgroundColor: COUNTRY_COLORS[c] + '88',
-    borderColor: COUNTRY_COLORS[c],
-    borderWidth: 1,
-    order: 1,
-  }));
-
-  // 合計線
-  const totalLine = {
-    label: '合計',
-    data: futureLabels.map((_, fi) => {
-      const mi = ACTUAL_MONTHS + fi;
-      return Math.round(getMonthlyForPref('ALL', currentPref, mi, scenarioName));
-    }),
-    type: 'line',
-    borderColor: '#f0f6fc',
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    pointRadius: 2,
-    pointBackgroundColor: '#f0f6fc',
-    fill: false,
-    order: 0,
-  };
-  datasets.push(totalLine);
-
-  // 凡例
-  const legendEl = document.getElementById('breakdownChartLegend');
-  legendEl.innerHTML = countries.map(c =>
-    `<div class="chart-legend-item"><div class="swatch" style="background:${COUNTRY_COLORS[c]}"></div>${MARKET_DATA[c].name}</div>`
-  ).join('') + '<div class="chart-legend-item"><div class="swatch" style="background:#f0f6fc"></div>合計</div>';
-
-  if (breakdownChart) breakdownChart.destroy();
-
-  breakdownChart = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: futureLabels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(22,27,34,0.95)',
-          titleColor: '#f0f6fc',
-          bodyColor: '#e8e6e0',
-          borderColor: '#2d2f3e',
-          borderWidth: 1,
-          callbacks: {
-            label: function(ctx) {
-              if (ctx.raw === null || ctx.raw === undefined) return null;
-              const v = ctx.raw;
-              if (v >= 1000) return ctx.dataset.label + ': ' + (v / 1000).toFixed(1) + 'M人';
-              return ctx.dataset.label + ': ' + v.toFixed(0) + '千人';
-            },
-            afterBody: function(context) {
-              const idx = context[0].datasetIndex;
-              if (idx >= countries.length) return ''; // 合計線
-              const c = countries[idx];
-              const m = MARKET_DATA[c];
-              if (!m) return '';
-
-              const probKey = activeScenario === 'optimistic' ? 'optimistic_probability' :
-                             activeScenario === 'pessimistic' ? 'pessimistic_probability' : 'base_probability';
-
-              // 期待損失計算
-              const risks = RISK_SCENARIOS[c] || [];
-              const totalExpLoss = risks.reduce((sum, s) => sum + s[probKey] * s.impact, 0);
-
-              const lines = [
-                '',
-                '期待損失: ' + totalExpLoss.toFixed(1) + '%',
-                '',
-                'このシナリオでは以下のリスクが顕在化:',
-              ];
-
-              risks.forEach(s => {
-                const prob = (s[probKey] * 100).toFixed(0);
-                const expected = (s[probKey] * s.impact).toFixed(1);
-                lines.push('  \u30FB' + s.name + ' (確率' + prob + '%\u00D7影響' + s.impact + '% = ' + expected + '%)');
-              });
-
-              return lines;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          stacked: true,
-          ticks: {
-            color: '#8b8fa8',
-            font: { size: 10 },
-          },
-          grid: { color: 'rgba(45,47,62,0.4)' }
-        },
-        y: {
-          stacked: true,
-          ticks: {
-            color: '#8b8fa8',
-            font: { size: 10 },
-            callback: function(v) {
-              if (v >= 1000) return (v / 1000).toFixed(1) + 'M';
-              return v + 'K';
-            }
-          },
-          grid: { color: 'rgba(45,47,62,0.4)' },
-          beginAtZero: true
-        }
-      }
-    }
+  const impacts = data.country_impacts;
+  const countries = Object.keys(impacts).sort((a, b) => {
+    const va = (MARKET_DATA_FALLBACK[a] || {}).visitors_2024 || 0;
+    const vb = (MARKET_DATA_FALLBACK[b] || {}).visitors_2024 || 0;
+    return vb - va;
   });
-}
 
-// ===================================================================
-// SCENARIO FALLBACK DATA (9シナリオ)
-// ===================================================================
-const SCENARIO_FALLBACK = {
-  "base": {label:"現状維持", description:"現在の為替・経済・地政学状況が継続", by_country:{
-    KR:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    CN:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    TW:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    US:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    AU:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-  }, total_change_pct:0, up_markets:[], down_markets:[]},
-  "jpy_weak_10": {label:"円安10%", description:"JPYが全通貨に対して10%下落", by_country:{
-    KR:{change_pct:10.5,direction:"UP",breakdown:{fx:10.5,gdp:0,political:0,flight:0}},
-    CN:{change_pct:9.5,direction:"UP",breakdown:{fx:9.5,gdp:0,political:0,flight:0}},
-    TW:{change_pct:10.8,direction:"UP",breakdown:{fx:10.8,gdp:0,political:0,flight:0}},
-    US:{change_pct:11.8,direction:"UP",breakdown:{fx:11.8,gdp:0,political:0,flight:0}},
-    AU:{change_pct:12.2,direction:"UP",breakdown:{fx:12.2,gdp:0,political:0,flight:0}},
-  }, total_change_pct:10.5, up_markets:["KR","CN","TW","US","AU"], down_markets:[]},
-  "japan_china_tension": {label:"日中関係悪化", description:"外交事件で日中関係が急悪化", by_country:{
-    KR:{change_pct:2.0,direction:"UP",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    CN:{change_pct:-38.5,direction:"DOWN",breakdown:{fx:0,gdp:0,political:-28,flight:-12}},
-    TW:{change_pct:-3.0,direction:"DOWN",breakdown:{fx:0,gdp:0,political:-3,flight:0}},
-    US:{change_pct:0.5,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    AU:{change_pct:0.3,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-  }, total_change_pct:-11.2, up_markets:["KR"], down_markets:["CN","TW"]},
-  "us_recession": {label:"米国景気後退", description:"米国GDP -1%、USD若干安", by_country:{
-    KR:{change_pct:1.5,direction:"FLAT",breakdown:{fx:1.5,gdp:0,political:0,flight:0}},
-    CN:{change_pct:0.5,direction:"FLAT",breakdown:{fx:0.5,gdp:0,political:0,flight:0}},
-    TW:{change_pct:1.0,direction:"FLAT",breakdown:{fx:1.0,gdp:0,political:0,flight:0}},
-    US:{change_pct:-16.8,direction:"DOWN",breakdown:{fx:-5.9,gdp:-1.2,political:0,flight:0}},
-    AU:{change_pct:-2.5,direction:"DOWN",breakdown:{fx:-2.5,gdp:0,political:0,flight:0}},
-  }, total_change_pct:-3.2, up_markets:[], down_markets:["US","AU"]},
-  "stagflation_mixed": {label:"スタグフレーション混合", description:"USD高/CNY安/AUD安。中国低迷、米国堅調。", by_country:{
-    KR:{change_pct:-3.2,direction:"DOWN",breakdown:{fx:-3.2,gdp:0,political:0,flight:0}},
-    CN:{change_pct:-14.8,direction:"DOWN",breakdown:{fx:-7.6,gdp:-2.5,political:0,flight:0}},
-    TW:{change_pct:-1.5,direction:"FLAT",breakdown:{fx:-1.5,gdp:0,political:0,flight:0}},
-    US:{change_pct:7.2,direction:"UP",breakdown:{fx:5.9,gdp:1.2,political:0,flight:0}},
-    AU:{change_pct:-7.3,direction:"DOWN",breakdown:{fx:-7.3,gdp:0,political:0,flight:0}},
-  }, total_change_pct:-4.8, up_markets:["US"], down_markets:["KR","CN","AU"]},
-  "taiwan_strait_risk": {label:"台湾海峡緊張", description:"軍事的緊張でTW/HK旅行者控え", by_country:{
-    KR:{change_pct:1.5,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    CN:{change_pct:-8.0,direction:"DOWN",breakdown:{fx:0,gdp:0,political:-8,flight:0}},
-    TW:{change_pct:-28.5,direction:"DOWN",breakdown:{fx:-5.4,gdp:0,political:-15,flight:-9}},
-    US:{change_pct:0.5,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    AU:{change_pct:0.3,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-  }, total_change_pct:-8.5, up_markets:[], down_markets:["CN","TW"]},
-  "china_stimulus": {label:"中国景気刺激策", description:"中国政府が大型消費刺激策発動", by_country:{
-    KR:{change_pct:0.5,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    CN:{change_pct:18.5,direction:"UP",breakdown:{fx:3.0,gdp:2.5,political:0,flight:6.0}},
-    TW:{change_pct:1.0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    US:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    AU:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-  }, total_change_pct:4.2, up_markets:["CN"], down_markets:[]},
-  "flight_expansion": {label:"アジア路線増便", description:"LCC参入でKR/TW/TH座席15%増", by_country:{
-    KR:{change_pct:9.0,direction:"UP",breakdown:{fx:0,gdp:0,political:0,flight:9.0}},
-    CN:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    TW:{change_pct:9.0,direction:"UP",breakdown:{fx:0,gdp:0,political:0,flight:9.0}},
-    US:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-    AU:{change_pct:0,direction:"FLAT",breakdown:{fx:0,gdp:0,political:0,flight:0}},
-  }, total_change_pct:4.8, up_markets:["KR","TW"], down_markets:[]},
-  "jpy_strong_10": {label:"円高10%", description:"リスクオフでJPYが10%上昇", by_country:{
-    KR:{change_pct:-10.5,direction:"DOWN",breakdown:{fx:-10.5,gdp:0,political:0,flight:0}},
-    CN:{change_pct:-9.5,direction:"DOWN",breakdown:{fx:-9.5,gdp:0,political:0,flight:0}},
-    TW:{change_pct:-10.8,direction:"DOWN",breakdown:{fx:-10.8,gdp:0,political:0,flight:0}},
-    US:{change_pct:-11.8,direction:"DOWN",breakdown:{fx:-11.8,gdp:0,political:0,flight:0}},
-    AU:{change_pct:-12.2,direction:"DOWN",breakdown:{fx:-12.2,gdp:0,political:0,flight:0}},
-  }, total_change_pct:-10.5, up_markets:[], down_markets:["KR","CN","TW","US","AU"]},
-};
-
-// ===================================================================
-// SCENARIO SELECTION (9シナリオ ドロップダウン)
-// ===================================================================
-async function onScenarioSelect(scenarioName) {
-  // API呼び出し
-  try {
-    const resp = await fetch('/api/v1/tourism/scenario-analysis', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({scenario: scenarioName}),
-    });
-    if (resp.ok) {
-      const json = await resp.json();
-      currentScenarioData = json.data || json;
-    } else {
-      currentScenarioData = SCENARIO_FALLBACK[scenarioName] || SCENARIO_FALLBACK.base;
-    }
-  } catch(e) {
-    currentScenarioData = SCENARIO_FALLBACK[scenarioName] || SCENARIO_FALLBACK.base;
-  }
-
-  // シナリオ名をマッピング（予測チャート用）
-  // 楽観系 → optimistic, 悲観系 → pessimistic, その他 → base
-  const optimisticScenarios = ['jpy_weak_10', 'china_stimulus', 'flight_expansion'];
-  const pessimisticScenarios = ['jpy_strong_10', 'japan_china_tension', 'us_recession', 'taiwan_strait_risk', 'stagflation_mixed'];
-  if (optimisticScenarios.includes(scenarioName)) {
-    activeScenario = 'optimistic';
-    currentScenarioName = 'optimistic';
-  } else if (pessimisticScenarios.includes(scenarioName)) {
-    activeScenario = 'pessimistic';
-    currentScenarioName = 'pessimistic';
-  } else {
-    activeScenario = 'base';
-    currentScenarioName = 'base';
-  }
-
-  updateScenarioDisplay(currentScenarioData);
-  buildForecastChart();
-  buildBreakdownChart();
-}
-
-function updateScenarioDisplay(data) {
-  // 1. シナリオ解説を更新
-  document.getElementById('scenarioDescription').textContent = data.description || '';
-
-  // 2. base以外ではポートフォリオパネルを表示
-  const panel = document.getElementById('portfolioPanel');
-  const isBase = (data.total_change_pct === 0 && (data.up_markets||[]).length === 0 && (data.down_markets||[]).length === 0);
-  panel.style.display = isBase ? 'none' : 'block';
-
-  if (!isBase) {
-    document.getElementById('upMarkets').textContent = (data.up_markets || []).join(', ') || 'なし';
-    document.getElementById('downMarkets').textContent = (data.down_markets || []).join(', ') || 'なし';
-    const totalPct = data.total_change_pct || 0;
-    const totalEl = document.getElementById('totalChangePct');
-    totalEl.textContent = (totalPct >= 0 ? '+' : '') + totalPct.toFixed(1) + '%';
-    totalEl.style.color = totalPct >= 0 ? '#51cf66' : '#ff4d4d';
-
-    const note = data.diversification_note ||
-      ((data.up_markets||[]).length > 0 && (data.down_markets||[]).length > 0
-        ? '市場間で方向が異なるため、日本全体への影響は個別市場の変化より小さくなっています（分散効果）。'
-        : '全市場が同方向に動いています。');
-    document.getElementById('portfolioNote').textContent = note;
-  }
-
-  // 3. バブル色を更新
-  if (data.by_country) {
-    updateBubbleColors(data.by_country);
-  }
-
-  // 4. 国別テーブルを表示（セクション3）
-  if (data.by_country && !isBase) {
-    renderCountryImpactTable(data.by_country);
-    document.getElementById('breakdownPlaceholder').style.display = 'none';
-    document.getElementById('breakdownContent').style.display = '';
-  }
-
-  // 5. 予測チャートをシナリオに合わせて更新
-  updateForecastForScenario(data);
-}
-
-function updateBubbleColors(byCountry) {
-  d3.selectAll('#worldMap circle').each(function() {
-    const el = d3.select(this);
-    // バブルデータを持つ要素のみ処理
-    const d = el.datum();
-    if (!d || !d.code) return;
-    const impact = byCountry[d.code];
-    if (!impact) return;
-
-    const color = impact.direction === 'UP' ? '#00e676' :
-                  impact.direction === 'DOWN' ? '#ff1744' : '#8b8fa8';
-    if (el.attr('fill-opacity') && parseFloat(el.attr('fill-opacity')) >= 0.5) {
-      el.attr('fill', color).attr('fill-opacity', 0.7);
-    }
-  });
-}
-
-function renderCountryImpactTable(byCountry) {
-  const container = document.getElementById('impactTableContainer');
-  const rows = Object.entries(byCountry)
-    .sort((a,b) => b[1].change_pct - a[1].change_pct);
-
-  container.innerHTML =
-    '<table style="width:100%;font-size:12px;border-collapse:collapse">' +
-    '<thead><tr style="border-bottom:1px solid #2d2f3e;color:#8b8fa8">' +
-    '<th style="text-align:left;padding:6px">市場</th>' +
-    '<th style="text-align:right;padding:6px">変化率</th>' +
-    '<th style="text-align:left;padding:6px">内訳</th>' +
-    '</tr></thead><tbody>' +
-    rows.map(function(entry) {
-      var iso2 = entry[0], imp = entry[1];
-      var arrow = imp.direction === 'UP' ? '\u25B2' : imp.direction === 'DOWN' ? '\u25BC' : '\u2192';
-      var color = imp.direction === 'UP' ? '#51cf66' : imp.direction === 'DOWN' ? '#ff4d4d' : '#8b8fa8';
-      var bd = imp.breakdown || {};
-      var details = Object.entries(bd)
+  function buildColumn(scenarioKey, label, dotColor) {
+    let rows = '';
+    countries.forEach(cc => {
+      const imp = impacts[cc] ? impacts[cc][scenarioKey] : null;
+      if (!imp) return;
+      const mkt = MARKET_DATA_FALLBACK[cc] || {};
+      const flag = mkt.flag || '';
+      const name = mkt.name || cc;
+      const pct = imp.change_pct || 0;
+      const color = pct > 0.5 ? '#51cf66' : pct < -0.5 ? '#ff4d4d' : '#8b8fa8';
+      const arrow = pct > 0.5 ? '\u25B2' : pct < -0.5 ? '\u25BC' : '\u2192';
+      const bd = imp.breakdown || {};
+      const details = Object.entries(bd)
         .filter(function(e) { return Math.abs(e[1]) > 0.5; })
         .map(function(e) { return e[0] + (e[1]>=0?'+':'') + e[1].toFixed(1) + '%'; })
         .join(' ');
-      var mkt = MARKET_DATA_FALLBACK[iso2] || {};
-      var name = mkt.name || iso2;
-      var flag = mkt.flag || '';
-      return '<tr style="border-bottom:1px solid #1e2030">' +
-        '<td style="padding:6px">' + flag + ' ' + name + '</td>' +
-        '<td style="padding:6px;text-align:right;color:' + color + ';font-weight:600">' + arrow + ' ' + (imp.change_pct>=0?'+':'') + imp.change_pct.toFixed(1) + '%</td>' +
-        '<td style="padding:6px;font-size:10px;color:#8b8fa8">' + (details || '変化なし') + '</td>' +
-        '</tr>';
-    }).join('') +
-    '</tbody></table>';
+      rows += '<tr><td>' + flag + ' ' + name + '</td>' +
+        '<td style="text-align:right;color:' + color + ';font-weight:600">' + arrow + ' ' + (pct>=0?'+':'') + pct.toFixed(1) + '%</td>' +
+        '<td style="font-size:9px;color:#8b8fa8">' + (details || '-') + '</td></tr>';
+    });
+
+    return '<div class="impact-col">' +
+      '<div class="impact-col-title"><div style="width:8px;height:8px;border-radius:50%;background:' + dotColor + '"></div>' + label + '</div>' +
+      '<table><thead><tr><th>市場</th><th style="text-align:right">変化率</th><th>内訳</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+  }
+
+  container.innerHTML = '<div class="impact-3col">' +
+    buildColumn('pessimistic', '悲観', '#ff4d4d') +
+    buildColumn('base', 'ベース', '#4a9eff') +
+    buildColumn('optimistic', '楽観', '#51cf66') +
+    '</div>';
 }
 
-function updateForecastForScenario(scenarioData) {
-  // シナリオの国別変化率を使って予測チャートのラベルにメモを追加
-  // buildForecastChart内で既にactiveScenarioに基づいて線が更新されているため
-  // ここでは追加的なアノテーション（チャート上のシナリオ名表示）を行う
-  if (!forecastChart) return;
-  // チャートタイトルの更新は buildForecastChart が担当
+// ===================================================================
+// CARD CLICK → 太さ変更のみ
+// ===================================================================
+function onCardClick(scenario) {
+  activeScenario = scenario;
+
+  // カード枠色更新
+  document.querySelectorAll('.scenario-card').forEach(card => {
+    const s = card.getAttribute('data-scenario');
+    const colors = {base:'#4a9eff', optimistic:'#51cf66', pessimistic:'#ff4d4d'};
+    if (s === scenario) {
+      card.classList.add('active');
+      card.style.borderColor = colors[s];
+    } else {
+      card.classList.remove('active');
+      card.style.borderColor = '#2d2f3e';
+    }
+  });
+
+  // チャートの線太さを更新（再描画）
+  renderThreeScenarioChart();
+}
+
+// ===================================================================
+// LOAD THREE SCENARIOS (API1回呼び出し)
+// ===================================================================
+async function loadThreeScenarios() {
+  try {
+    const resp = await fetch('/api/v1/tourism/three-scenarios?source_country=' + currentCountry + '&prefecture=' + encodeURIComponent(currentPref));
+    if (!resp.ok) throw new Error('API error ' + resp.status);
+    const json = await resp.json();
+    threeScenarioData = json;
+    console.log('Three-scenarios API loaded, model=' + (json.model || 'unknown'));
+  } catch(e) {
+    console.warn('Three-scenarios API fallback:', e.message);
+    threeScenarioData = SCENARIO_FALLBACK;
+  }
+
+  renderThreeScenarioChart();
+  renderScenarioSummaryCards();
+  renderCountryImpactTable();
 }
 
 // ===================================================================
@@ -1406,7 +885,7 @@ function drawWorldMap() {
   const container = document.getElementById('worldPanel');
   const width = container.clientWidth;
   const height = container.clientHeight;
-  const svg = d3.select('#worldMap').attr('viewBox', `0 0 ${width} ${height}`);
+  const svg = d3.select('#worldMap').attr('viewBox', '0 0 ' + width + ' ' + height);
   svg.selectAll('*').remove();
 
   const projection = d3.geoNaturalEarth1()
@@ -1414,7 +893,7 @@ function drawWorldMap() {
     .translate([width / 2, height / 2]);
   const path = d3.geoPath().projection(projection);
 
-  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world => {
+  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(function(world) {
     const countries = topojson.feature(world, world.objects.countries);
 
     svg.append('g').selectAll('path')
@@ -1426,120 +905,84 @@ function drawWorldMap() {
       .attr('stroke-width', 0.3);
 
     svg.append('g').selectAll('path')
-      .data(countries.features.filter(d => isoFromNumeric(d.id) === 'JPN'))
+      .data(countries.features.filter(function(d) { return isoFromNumeric(d.id) === 'JPN'; }))
       .join('path')
       .attr('d', path)
       .attr('fill', '#1a3a5c')
       .attr('stroke', '#58a6ff')
       .attr('stroke-width', 1.5);
 
-    svg.append('g').selectAll('circle')
-      .data(countries.features.filter(d => isoFromNumeric(d.id) === 'JPN'))
-      .join('circle')
-      .attr('cx', d => path.centroid(d)[0])
-      .attr('cy', d => path.centroid(d)[1])
-      .attr('r', 4)
-      .attr('fill', '#58a6ff')
-      .attr('stroke', '#f0f6fc')
-      .attr('stroke-width', 1.5)
-      .style('pointer-events', 'none');
-
-    const bubbleData = Object.entries(MARKET_DATA).map(([code, m]) => {
-      const coords = projection([m.lon, m.lat]);
-      return { code, ...m, x: coords[0], y: coords[1] };
+    const bubbleData = Object.entries(MARKET_DATA).map(function(entry) {
+      var code = entry[0], m = entry[1];
+      var coords = projection([m.lon, m.lat]);
+      return Object.assign({code: code}, m, {x: coords[0], y: coords[1]});
     });
 
     svg.append('g').selectAll('circle.outer')
       .data(bubbleData)
       .join('circle')
-      .attr('cx', d => d.x)
-      .attr('cy', d => d.y)
-      .attr('r', d => 5 + d.share * 2.5 + d.expected_loss * 0.8)
-      .attr('fill', d => lossColor(d.expected_loss))
+      .attr('cx', function(d){return d.x})
+      .attr('cy', function(d){return d.y})
+      .attr('r', function(d){return 5 + d.share * 2.5 + d.expected_loss * 0.8})
+      .attr('fill', function(d){return lossColor(d.expected_loss)})
       .attr('fill-opacity', 0.15)
-      .attr('stroke', d => lossColor(d.expected_loss))
+      .attr('stroke', function(d){return lossColor(d.expected_loss)})
       .attr('stroke-width', 0.5)
       .attr('stroke-opacity', 0.3)
       .style('pointer-events', 'none');
 
-    const bubbles = svg.append('g').selectAll('circle.bubble')
+    svg.append('g').selectAll('circle.bubble')
       .data(bubbleData)
       .join('circle')
-      .attr('cx', d => d.x)
-      .attr('cy', d => d.y)
-      .attr('r', d => 5 + d.share * 2.5)
-      .attr('fill', d => lossColor(d.expected_loss))
+      .attr('cx', function(d){return d.x})
+      .attr('cy', function(d){return d.y})
+      .attr('r', function(d){return 5 + d.share * 2.5})
+      .attr('fill', function(d){return lossColor(d.expected_loss)})
       .attr('fill-opacity', 0.7)
-      .attr('stroke', d => d.code === currentCountry ? '#f0f6fc' : lossColor(d.expected_loss))
-      .attr('stroke-width', d => d.code === currentCountry ? 2.5 : 1)
+      .attr('stroke', function(d){return d.code === currentCountry ? '#f0f6fc' : lossColor(d.expected_loss)})
+      .attr('stroke-width', function(d){return d.code === currentCountry ? 2.5 : 1})
       .style('cursor', 'pointer')
       .on('mouseover', function(event, d) {
         d3.select(this).attr('fill-opacity', 0.9).attr('stroke', '#f0f6fc').attr('stroke-width', 2.5);
-        const lClass = d.expected_loss >= 15 ? 'tt-risk-hi' : d.expected_loss >= 10 ? 'tt-risk-mid' : d.expected_loss >= 5 ? 'tt-risk-warn' : 'tt-risk-lo';
-        const sign = d.change >= 0 ? '+' : '';
-        let scenarioHtml = '';
-        d.scenarios.forEach(s => {
-          scenarioHtml += `<div class="tt-row" style="font-size:11px"><span>${s.name}</span><span class="tt-val">${s.loss.toFixed(1)}%</span></div>`;
-        });
-        // 3シナリオ計算
-        const baseV = d.visitors_2024;
-        const bestDelta = Math.round(baseV * 0.18);
-        const worstPct = -(d.expected_loss * 1.8);
-        const worstDelta = Math.round(baseV * worstPct / 100);
-        const anyRiskProb = Math.round((1 - d.scenarios.reduce((p,s) => p * (1 - (s.prob || 0.15)), 1)) * 100);
-        const worstLossJpy = Math.abs(worstDelta) * 230000;
-
-        tooltip.html(`
-          <div class="tt-title">${d.flag} ${d.name}</div>
-          <div style="background:#1a1d27;border-radius:6px;padding:8px;margin:6px 0">
-            <div style="font-size:10px;color:#8b8fa8;margin-bottom:4px">来訪者数シナリオ（2026年予測）</div>
-            <div class="tt-row" style="font-size:12px"><span style="color:#51cf66">◆ 楽観</span><span class="tt-val">${((baseV+bestDelta)/10000).toFixed(0)}万人 <span style="color:#51cf66">(+18%)</span></span></div>
-            <div class="tt-row" style="font-size:12px"><span style="color:#4a9eff">● 基本</span><span class="tt-val">${((baseV+Math.round(baseV*d.change/100))/10000).toFixed(0)}万人 <span style="color:${d.change>=0?'#51cf66':'#ff4d4d'}">(${sign}${d.change}%)</span></span></div>
-            <div class="tt-row" style="font-size:12px"><span style="color:#ff4d4d">▼ 悲観</span><span class="tt-val">${(Math.max(0,baseV+worstDelta)/10000).toFixed(0)}万人 <span style="color:#ff4d4d">(${worstPct.toFixed(0)}%)</span></span></div>
-          </div>
-          <div style="background:#2a1515;border:1px solid #4a1515;border-radius:6px;padding:8px;margin:6px 0">
-            <div style="font-size:10px;color:#ff6b6b;margin-bottom:4px">⚠ リスクの実態</div>
-            <div style="font-size:12px">今年中にリスク顕在化: <span style="font-weight:700;color:${anyRiskProb>40?'#ff4d4d':'#ffd43b'}">${anyRiskProb}%</span></div>
-            <div style="font-size:11px;color:#8b8fa8;margin-top:2px">最悪ケース: <span style="color:#ff6b6b">-${(worstLossJpy/100000000).toFixed(0)}億円</span></div>
-          </div>
-          <div style="font-size:10px;color:#8b8fa8;margin-bottom:3px">リスク要因内訳:</div>
-          ${scenarioHtml}
-          <div style="border-top:1px solid #2d2f3e;margin-top:4px;padding-top:4px" class="tt-row"><span style="font-weight:600">期待損失合計</span><span class="tt-val ${lClass}">${d.expected_loss}%</span></div>
-        `).style('display', 'block');
+        var sign = d.change >= 0 ? '+' : '';
+        tooltip.html(
+          '<div class="tt-title">' + d.flag + ' ' + d.name + '</div>' +
+          '<div class="tt-row"><span>シェア</span><span class="tt-val">' + d.share + '%</span></div>' +
+          '<div class="tt-row"><span>期待損失</span><span class="tt-val">' + d.expected_loss + '%</span></div>' +
+          '<div class="tt-row"><span>前年比</span><span class="tt-val">' + sign + d.change + '%</span></div>'
+        ).style('display', 'block');
       })
       .on('mousemove', function(event) {
         tooltip.style('left', (event.pageX + 14) + 'px').style('top', (event.pageY - 12) + 'px');
       })
       .on('mouseout', function(event, d) {
-        const isSelected = d.code === currentCountry;
+        var isSelected = d.code === currentCountry;
         d3.select(this)
           .attr('fill-opacity', 0.7)
           .attr('stroke', isSelected ? '#f0f6fc' : lossColor(d.expected_loss))
           .attr('stroke-width', isSelected ? 2.5 : 1);
         tooltip.style('display', 'none');
       })
-      .on('click', function(event, d) {
-        setCountry(d.code);
-      });
+      .on('click', function(event, d) { setCountry(d.code); });
 
     svg.append('g').selectAll('text.flag')
       .data(bubbleData)
       .join('text')
       .attr('class', 'bubble-flag')
-      .attr('x', d => d.x)
-      .attr('y', d => d.y)
-      .attr('font-size', d => Math.max(10, 5 + d.share * 1.2) + 'px')
-      .text(d => d.flag)
+      .attr('x', function(d){return d.x})
+      .attr('y', function(d){return d.y})
+      .attr('font-size', function(d){return Math.max(10, 5 + d.share * 1.2) + 'px'})
+      .text(function(d){return d.flag})
       .style('pointer-events', 'none');
 
     svg.append('g').selectAll('text.label')
       .data(bubbleData)
       .join('text')
       .attr('class', 'bubble-label')
-      .attr('x', d => d.x)
-      .attr('y', d => d.y + 5 + d.share * 2.5 + 10)
-      .html(d => `${d.share}% / ${d.expected_loss}%`)
-      .attr('fill', d => lossColor(d.expected_loss))
+      .attr('x', function(d){return d.x})
+      .attr('y', function(d){return d.y + 5 + d.share * 2.5 + 10})
+      .html(function(d){return d.share + '% / ' + d.expected_loss + '%'})
+      .attr('fill', function(d){return lossColor(d.expected_loss)})
       .style('pointer-events', 'none');
   });
 }
@@ -1556,11 +999,11 @@ function drawJapanMap() {
   const container = document.getElementById('japanPanel');
   const width = container.clientWidth;
   const height = container.clientHeight;
-  const svg = d3.select('#japanMap').attr('viewBox', `0 0 ${width} ${height}`);
+  const svg = d3.select('#japanMap').attr('viewBox', '0 0 ' + width + ' ' + height);
   svg.selectAll('*').remove();
 
   const legendBar = document.getElementById('japanLegendBar');
-  legendBar.style.background = `linear-gradient(90deg, ${d3.interpolateBlues(0.1)}, ${d3.interpolateBlues(0.35)}, ${d3.interpolateBlues(0.6)}, ${d3.interpolateBlues(1.0)})`;
+  legendBar.style.background = 'linear-gradient(90deg, ' + d3.interpolateBlues(0.1) + ', ' + d3.interpolateBlues(0.35) + ', ' + d3.interpolateBlues(0.6) + ', ' + d3.interpolateBlues(1.0) + ')';
 
   const projection = d3.geoMercator()
     .center([136.5, 35.5])
@@ -1568,39 +1011,33 @@ function drawJapanMap() {
     .translate([width / 2, height / 2]);
   const path = d3.geoPath().projection(projection);
 
-  d3.json('https://raw.githubusercontent.com/dataofjapan/land/master/japan.topojson').then(japan => {
+  d3.json('https://raw.githubusercontent.com/dataofjapan/land/master/japan.topojson').then(function(japan) {
     const prefectures = topojson.feature(japan, japan.objects.japan);
 
     svg.append('g').selectAll('path')
       .data(prefectures.features)
       .join('path')
       .attr('d', path)
-      .attr('fill', d => {
-        const pid = d.properties.id;
-        const prefName = PREF_ID_MAP[pid];
-        const v = prefName ? PREF_VISITORS[prefName] : null;
-        if (v) {
-          const t = prefLogScale(v);
-          return d3.interpolateBlues(t);
-        }
+      .attr('fill', function(d) {
+        var pid = d.properties.id;
+        var prefName = PREF_ID_MAP[pid];
+        var v = prefName ? PREF_VISITORS[prefName] : null;
+        if (v) return d3.interpolateBlues(prefLogScale(v));
         return '#1a1f2e';
       })
       .attr('stroke', '#30363d')
       .attr('stroke-width', 0.5)
-      .style('cursor', d => PREF_ID_TO_SELECT[d.properties.id] ? 'pointer' : 'default')
+      .style('cursor', function(d) { return PREF_ID_TO_SELECT[d.properties.id] ? 'pointer' : 'default'; })
       .on('mouseover', function(event, d) {
-        const pid = d.properties.id;
-        const prefName = PREF_ID_MAP[pid];
-        const v = prefName ? PREF_VISITORS[prefName] : null;
+        var pid = d.properties.id;
+        var prefName = PREF_ID_MAP[pid];
+        var v = prefName ? PREF_VISITORS[prefName] : null;
         d3.select(this).attr('stroke', '#58a6ff').attr('stroke-width', 1.5);
-        const displayName = prefName || d.properties.nam_ja || d.properties.name || `ID:${pid}`;
+        var displayName = prefName || d.properties.nam_ja || d.properties.name || 'ID:' + pid;
         if (v) {
-          tooltip.html(`
-            <div class="tt-title">${displayName}</div>
-            <div class="tt-row"><span>来訪者数</span><span class="tt-val">${v}万人</span></div>
-          `).style('display', 'block');
+          tooltip.html('<div class="tt-title">' + displayName + '</div><div class="tt-row"><span>来訪者数</span><span class="tt-val">' + v + '万人</span></div>').style('display', 'block');
         } else {
-          tooltip.html(`<div class="tt-title">${displayName}</div><div style="color:#8b8fa8">データなし</div>`).style('display', 'block');
+          tooltip.html('<div class="tt-title">' + displayName + '</div><div style="color:#8b8fa8">データなし</div>').style('display', 'block');
         }
       })
       .on('mousemove', function(event) {
@@ -1611,16 +1048,16 @@ function drawJapanMap() {
         tooltip.style('display', 'none');
       })
       .on('click', function(event, d) {
-        const pid = d.properties.id;
-        const selVal = PREF_ID_TO_SELECT[pid];
+        var pid = d.properties.id;
+        var selVal = PREF_ID_TO_SELECT[pid];
         if (selVal) setPref(selVal);
       });
 
-    const g = svg.append('g');
-    CITIES.forEach(c => {
-      const [x, y] = projection([c.lon, c.lat]);
-      g.append('circle').attr('cx', x).attr('cy', y).attr('r', 2).attr('class', 'city-dot');
-      g.append('text').attr('x', x).attr('y', y - 5).attr('class', 'city-label').text(c.name);
+    var g = svg.append('g');
+    CITIES.forEach(function(c) {
+      var xy = projection([c.lon, c.lat]);
+      g.append('circle').attr('cx', xy[0]).attr('cy', xy[1]).attr('r', 2).attr('class', 'city-dot');
+      g.append('text').attr('x', xy[0]).attr('y', xy[1] - 5).attr('class', 'city-label').text(c.name);
     });
   });
 }
@@ -1631,48 +1068,47 @@ function drawJapanMap() {
 function setCountry(iso2) {
   currentCountry = iso2;
   document.getElementById('selCountry').value = iso2;
-  rebuildAllCharts();
+  buildContextChart();
+  loadThreeScenarios();
   drawWorldMap();
 }
 
 function setPref(prefName) {
   currentPref = prefName;
   document.getElementById('selPref').value = prefName;
-  rebuildAllCharts();
-}
-
-function rebuildAllCharts() {
   buildContextChart();
-  buildForecastChart();
-  buildBreakdownChart();
+  loadThreeScenarios();
 }
 
 document.getElementById('selCountry').addEventListener('change', function() {
   currentCountry = this.value;
-  rebuildAllCharts();
+  buildContextChart();
+  loadThreeScenarios();
   drawWorldMap();
 });
 
 document.getElementById('selPref').addEventListener('change', function() {
   currentPref = this.value;
-  rebuildAllCharts();
+  buildContextChart();
+  loadThreeScenarios();
 });
 
 // ===================================================================
 // RESIZE
 // ===================================================================
 let resizeTimer;
-window.addEventListener('resize', () => {
+window.addEventListener('resize', function() {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
+  resizeTimer = setTimeout(function() {
     drawWorldMap();
     drawJapanMap();
-    rebuildAllCharts();
+    buildContextChart();
+    renderThreeScenarioChart();
   }, 250);
 });
 
 // ===================================================================
-// API連携: 市場ランキングデータ取得（フォールバック付き）
+// API連携: 市場ランキングデータ取得
 // ===================================================================
 async function loadMarketData() {
   try {
@@ -1689,19 +1125,17 @@ async function loadMarketData() {
         if (m.share !== undefined) MARKET_DATA[code].share = m.share;
       }
     }
-    ALL_EXPECTED_LOSS = Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.expected_loss, 0) / 100;
-    ALL_CHANGE = Math.round(Object.values(MARKET_DATA).reduce((s,m) => s + m.share * m.change, 0) / 100);
-
+    ALL_EXPECTED_LOSS = Object.values(MARKET_DATA).reduce(function(s,m){return s + m.share * m.expected_loss}, 0) / 100;
+    ALL_CHANGE = Math.round(Object.values(MARKET_DATA).reduce(function(s,m){return s + m.share * m.change}, 0) / 100);
     console.log('Tourism API: market data updated');
-    document.getElementById('update-time').textContent =
-      new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
-    const dsEl = document.getElementById('dataSource');
+    document.getElementById('update-time').textContent = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+    var dsEl = document.getElementById('dataSource');
     dsEl.textContent = 'LIVE';
     dsEl.style.background = 'rgba(81,207,102,0.2)';
     dsEl.style.color = '#51cf66';
   } catch(e) {
     console.warn('Tourism API fallback:', e.message);
-    const dsEl = document.getElementById('dataSource');
+    var dsEl = document.getElementById('dataSource');
     dsEl.textContent = 'STATIC';
     dsEl.style.background = 'rgba(255,169,77,0.2)';
     dsEl.style.color = '#ffa94d';
@@ -1710,66 +1144,15 @@ async function loadMarketData() {
 }
 
 // ===================================================================
-// GP予測API呼び出し (use_gp: true)
-// ===================================================================
-async function loadGPForecast() {
-  // 予測対象月リスト生成 (2026/04 - 2027/12)
-  const months = [];
-  for (let y = 2026; y <= 2027; y++) {
-    const startM = (y === 2026) ? 4 : 1;
-    for (let m = startM; m <= 12; m++) {
-      months.push(y + '/' + String(m).padStart(2, '0'));
-    }
-  }
-
-  try {
-    const resp = await fetch('/api/v1/tourism/japan-forecast', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        months: months,
-        n_samples: 1000,
-        use_gp: true
-      })
-    });
-    if (!resp.ok) throw new Error('GP API error ' + resp.status);
-    const json = await resp.json();
-
-    gpForecastData = json;
-    gpModelType = json.model || 'fallback';
-    gpUncertaintyData = json.uncertainty_by_month || [];
-    gpCalendarEffects = json.calendar_effects || [];
-
-    // セクション2の説明文を更新
-    const descEl = document.getElementById('forecastDesc');
-    if (gpModelType === 'GP') {
-      descEl.textContent = 'ガウス過程(GP)モデルによる確率的予測。カレンダー効果・不確実性マーカー付き。';
-    } else {
-      descEl.textContent = 'PPML重力モデル + STL季節分解 + ベイズ更新による確率的予測。3シナリオの比較。';
-    }
-
-    console.log('GP Forecast API: model=' + gpModelType);
-    rebuildAllCharts();
-  } catch(e) {
-    console.warn('GP Forecast API fallback:', e.message);
-    gpForecastData = null;
-    gpUncertaintyData = [];
-    gpCalendarEffects = [];
-    gpModelType = 'fallback';
-    // 既存のフォールバックチャートをそのまま使用
-  }
-}
-
-// ===================================================================
 // INIT
 // ===================================================================
 drawWorldMap();
 drawJapanMap();
-requestAnimationFrame(() => { rebuildAllCharts(); });
+buildContextChart();
+loadThreeScenarios();
 loadMarketData();
-loadGPForecast();
-setInterval(() => { loadMarketData(); }, 30 * 60 * 1000);
-setInterval(() => { loadGPForecast(); }, 30 * 60 * 1000);
+setInterval(function() { loadMarketData(); }, 30 * 60 * 1000);
+setInterval(function() { loadThreeScenarios(); }, 30 * 60 * 1000);
 </script>
 </body>
 </html>

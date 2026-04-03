@@ -13,6 +13,7 @@ POST /api/v1/tourism/prefecture-forecast
 POST /api/v1/tourism/decompose-forecast
 GET  /api/v1/tourism/scenarios
 POST /api/v1/tourism/scenario-analysis
+GET  /api/v1/tourism/three-scenarios
 """
 import logging
 import math
@@ -1065,3 +1066,156 @@ def post_scenario_analysis(req: ScenarioAnalysisRequest):
         status_code=503,
         detail="ScenarioEngine未初期化。依存モジュールを確認してください。",
     )
+
+
+# ── v1.5.0 3シナリオ同時表示 ──
+
+# 月別ベースライン（千人）— GP失敗時フォールバック
+BASE_MONTHLY = {
+    "KR": [672, 598, 746, 724, 662, 588, 756, 693, 640, 798, 682, 756,
+           699, 622, 776, 753, 688, 612, 786, 721, 666],
+    "CN": [322, 276, 432, 469, 442, 377, 552, 506, 405, 626, 460, 515,
+           301, 258, 404, 439, 414, 353, 517, 474, 379],
+    "TW": [412, 453, 407, 443, 397, 371, 464, 443, 386, 489, 433, 448,
+           422, 464, 417, 454, 407, 380, 475, 454, 395],
+    "US": [185, 174, 246, 291, 274, 302, 353, 314, 269, 330, 252, 218,
+           203, 191, 270, 319, 300, 331, 387, 344, 295],
+    "AU": [74, 68, 55, 46, 36, 38, 50, 55, 65, 70, 74, 85,
+           79, 73, 59, 49, 39, 41, 54, 59, 70],
+}
+
+# 予測月ラベル（2026/04 ~ 2027/12, 21ヶ月）
+_THREE_SCENARIO_MONTHS = []
+for _y in (2026, 2027):
+    _sm = 4 if _y == 2026 else 1
+    for _m in range(_sm, 13):
+        _THREE_SCENARIO_MONTHS.append(f"{_y}/{str(_m).zfill(2)}")
+
+
+@router.get("/three-scenarios")
+def get_three_scenarios(
+    source_country: str = Query(default="ALL", description="国コード (ALL=全市場)"),
+    prefecture: str = Query(default="JAPAN", description="都道府県 (JAPAN=全国)"),
+):
+    """3シナリオ (base/optimistic/pessimistic) を同時計算して返す
+
+    常に3本分のmedian/p10/p90を返す。GPモデルでベース予測を生成し、
+    ScenarioEngine.apply_to_forecastで乗数適用。GP失敗時はBASE_MONTHLYを使用。
+    """
+    months = list(_THREE_SCENARIO_MONTHS)
+
+    # ── ベースライン予測を取得 ──
+    baseline_median = None
+    baseline_p10 = None
+    baseline_p90 = None
+    gp_model_used = False
+
+    # GPモデルで予測
+    if _gp_aggregator is not None:
+        try:
+            gp_result = _gp_aggregator.predict_japan_total_gp(months=months)
+            baseline_median = gp_result.get("median", [])
+            baseline_p10 = gp_result.get("p10", [])
+            baseline_p90 = gp_result.get("p90", [])
+            if baseline_median and len(baseline_median) == len(months):
+                gp_model_used = True
+            else:
+                baseline_median = None
+        except Exception as e:
+            logger.warning("three-scenarios GP予測失敗: %s", e)
+
+    # フォールバック: BASE_MONTHLYから集計
+    if baseline_median is None:
+        baseline_median = []
+        for i in range(len(months)):
+            total = 0
+            for cdata in BASE_MONTHLY.values():
+                if i < len(cdata):
+                    total += cdata[i]
+            # 非掲載市場分 (HK, TH, SG等) 25%加算
+            total = int(total * 1.25)
+            baseline_median.append(total)
+        # p10/p90はmedianから±12%
+        baseline_p10 = [round(v * 0.88) for v in baseline_median]
+        baseline_p90 = [round(v * 1.12) for v in baseline_median]
+
+    # ── ScenarioEngine で3シナリオ計算 ──
+    engine = None
+    try:
+        from features.tourism.scenario_engine import ScenarioEngine as _SE
+        engine = _SE()
+    except Exception as e:
+        logger.warning("ScenarioEngine初期化失敗: %s", e)
+
+    if engine is None:
+        # ScenarioEngine失敗時は楽観+18%/悲観-18%の固定乗数
+        opt_mult = 1.18
+        pess_mult = 0.82
+        country_impacts = {}
+    else:
+        all_three = engine.calculate_all_three()
+        opt_data = all_three.get("optimistic", {})
+        pess_data = all_three.get("pessimistic", {})
+        opt_mult = 1.0 + opt_data.get("total_change_pct", 18.0) / 100.0
+        pess_mult = 1.0 + pess_data.get("total_change_pct", -18.0) / 100.0
+
+        # 国別影響テーブル
+        country_impacts = {}
+        base_impacts = all_three.get("base", {}).get("country_impacts", {})
+        opt_impacts = opt_data.get("country_impacts", {})
+        pess_impacts = pess_data.get("country_impacts", {})
+        for cc in set(list(base_impacts.keys()) + list(opt_impacts.keys()) + list(pess_impacts.keys())):
+            country_impacts[cc] = {
+                "base": base_impacts.get(cc, {"change_pct": 0, "direction": "FLAT", "breakdown": {}}),
+                "optimistic": opt_impacts.get(cc, {"change_pct": 0, "direction": "FLAT", "breakdown": {}}),
+                "pessimistic": pess_impacts.get(cc, {"change_pct": 0, "direction": "FLAT", "breakdown": {}}),
+            }
+
+    # ── 3シナリオの月別予測値 ──
+    base_med = baseline_median
+    opt_med = [round(v * opt_mult) for v in baseline_median]
+    pess_med = [round(v * pess_mult) for v in baseline_median]
+
+    base_p10 = baseline_p10
+    base_p90 = baseline_p90
+    opt_p10 = [round(v * opt_mult) for v in baseline_p10]
+    opt_p90 = [round(v * opt_mult) for v in baseline_p90]
+    pess_p10 = [round(v * pess_mult) for v in baseline_p10]
+    pess_p90 = [round(v * pess_mult) for v in baseline_p90]
+
+    base_total_change = 0.0
+    opt_total_change = round((opt_mult - 1.0) * 100.0, 1)
+    pess_total_change = round((pess_mult - 1.0) * 100.0, 1)
+
+    return {
+        "status": "ok",
+        "model": "GP" if gp_model_used else "fallback",
+        "months": months,
+        "scenarios": {
+            "base": {
+                "label": "ベース",
+                "color": "#4a9eff",
+                "median": base_med,
+                "p10": base_p10,
+                "p90": base_p90,
+                "total_change_pct": base_total_change,
+            },
+            "optimistic": {
+                "label": "楽観",
+                "color": "#51cf66",
+                "median": opt_med,
+                "p10": opt_p10,
+                "p90": opt_p90,
+                "total_change_pct": opt_total_change,
+            },
+            "pessimistic": {
+                "label": "悲観",
+                "color": "#ff4d4d",
+                "median": pess_med,
+                "p10": pess_p10,
+                "p90": pess_p90,
+                "total_change_pct": pess_total_change,
+            },
+        },
+        "country_impacts": country_impacts,
+    }
