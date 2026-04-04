@@ -3,862 +3,777 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SCRI Inbound Tourism Risk</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<title>SCRI | インバウンド観光リスクダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0e1a;color:#e0e6f0;font-family:'Segoe UI',Roboto,sans-serif;line-height:1.6}
-a{color:#60a5fa}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0f1117;color:#e0e0e0;font-family:system-ui,-apple-system,sans-serif;padding:20px;overflow-y:auto;}
+a{color:#60a5fa;}
 
-/* Header */
-.header{background:linear-gradient(135deg,#0f172a,#1e293b);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155}
-.header h1{font-size:20px;font-weight:600;color:#f1f5f9}
-.header .ver{font-size:13px;color:#94a3b8;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:2px 10px}
-.header .data-badge{font-size:12px;padding:3px 10px;border-radius:12px;margin-left:12px}
-.badge-static{background:#92400e;color:#fbbf24}
-.badge-live{background:#065f46;color:#34d399}
+/* ヘッダー */
+.header{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:16px 24px;margin-bottom:16px;}
+.header-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.header-logo{font-size:22px;font-weight:700;color:#60a5fa;}
+.header-title{font-size:18px;font-weight:600;color:#e0e0e0;}
+.header-sub{font-size:13px;color:#8b8fa3;margin-top:4px;}
+.status-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:600;margin-left:8px;}
+.status-static{background:#374151;color:#9ca3af;}
+.status-live{background:#065f46;color:#34d399;}
+.controls{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;align-items:center;}
+.controls label{font-size:13px;color:#8b8fa3;}
+.controls select{background:#0f1117;color:#e0e0e0;border:1px solid #2d2f3e;border-radius:6px;padding:6px 12px;font-size:14px;cursor:pointer;}
+.controls select:hover{border-color:#60a5fa;}
 
-/* Layout */
-.container{max-width:1400px;margin:0 auto;padding:20px 24px}
-.map-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
-.kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}
-.scenario-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}
+/* 地図行 */
+.map-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+.map-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:16px;min-height:340px;position:relative;}
+.map-card h3{font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:8px;}
+.country-panel{position:absolute;bottom:12px;right:12px;background:rgba(15,17,23,0.92);border:1px solid #2d2f3e;border-radius:6px;padding:8px 10px;font-size:11px;max-height:180px;overflow-y:auto;z-index:5;}
+.country-panel-row{display:flex;align-items:center;gap:6px;padding:2px 0;white-space:nowrap;}
+.country-panel-row .chg-pos{color:#34d399;}
+.country-panel-row .chg-neg{color:#f87171;}
 
-/* Cards */
-.card{background:#111827;border:1px solid #1e293b;border-radius:10px;padding:20px;overflow:hidden}
-.card h2{font-size:15px;color:#94a3b8;margin-bottom:12px;font-weight:500}
-.card h2 .icon{margin-right:6px}
+/* カード行 */
+.scenario-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;}
+.scenario-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:20px;text-align:center;}
+.scenario-card.pessimistic{border-left:4px solid #f87171;}
+.scenario-card.base{border-left:4px solid #60a5fa;}
+.scenario-card.optimistic{border-left:4px solid #34d399;}
+.scenario-label{font-size:13px;font-weight:600;margin-bottom:6px;}
+.scenario-card.pessimistic .scenario-label{color:#f87171;}
+.scenario-card.base .scenario-label{color:#60a5fa;}
+.scenario-card.optimistic .scenario-label{color:#34d399;}
+.scenario-value{font-size:28px;font-weight:700;margin-bottom:4px;}
+.scenario-card.pessimistic .scenario-value{color:#f87171;}
+.scenario-card.base .scenario-value{color:#60a5fa;}
+.scenario-card.optimistic .scenario-value{color:#34d399;}
+.scenario-diff{font-size:14px;font-weight:600;margin-bottom:8px;}
+.scenario-desc{font-size:12px;color:#8b8fa3;line-height:1.5;}
 
-/* KPI */
-.kpi-card{text-align:center;padding:18px 12px}
-.kpi-card .label{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px}
-.kpi-card .value{font-size:28px;font-weight:700;color:#f1f5f9;margin:6px 0}
-.kpi-card .sub{font-size:13px;color:#94a3b8}
+/* チャート */
+.chart-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:20px;margin-bottom:16px;}
+.chart-card h3{font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:12px;}
+.chart-wrap{position:relative;height:400px;}
 
-/* Scenario cards */
-.scenario-card{padding:18px;border-radius:10px;text-align:center}
-.scenario-card .sc-label{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.scenario-card .sc-value{font-size:32px;font-weight:700;margin-bottom:4px}
-.scenario-card .sc-sub{font-size:12px;opacity:0.8}
-.sc-pessimistic{background:linear-gradient(135deg,#1a0505,#2d0a0a);border:1px solid #7f1d1d;color:#fca5a5}
-.sc-pessimistic .sc-value{color:#f87171}
-.sc-base{background:linear-gradient(135deg,#050a1a,#0a1a2d);border:1px solid #1e3a5f;color:#93c5fd}
-.sc-base .sc-value{color:#60a5fa}
-.sc-optimistic{background:linear-gradient(135deg,#051a0a,#0a2d14);border:1px solid #14532d;color:#86efac}
-.sc-optimistic .sc-value{color:#4ade80}
+/* テーブル */
+.table-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:20px;margin-bottom:16px;}
+.table-card h3{font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:12px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;padding:8px 12px;border-bottom:1px solid #2d2f3e;color:#8b8fa3;font-weight:600;}
+td{padding:8px 12px;border-bottom:1px solid #1e2130;}
+tr:hover{background:#1e2130;}
+.num-r{text-align:right;font-variant-numeric:tabular-nums;}
+.flag-name{display:flex;align-items:center;gap:6px;}
 
-/* Chart */
-.chart-wrap{position:relative;height:400px;margin-bottom:20px}
-.chart-wrap canvas{width:100%!important;height:100%!important}
+/* 非対称性 */
+.asym-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:20px;margin-bottom:16px;}
+.asym-card h3{font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:8px;}
+.asym-card p{font-size:13px;color:#c0c4d0;line-height:1.7;}
 
-/* Table */
-.tbl-wrap{overflow-x:auto;margin-bottom:20px}
-table{width:100%;border-collapse:collapse;font-size:14px}
-thead th{background:#1e293b;color:#94a3b8;padding:10px 14px;text-align:left;font-weight:500;border-bottom:2px solid #334155;white-space:nowrap}
-tbody td{padding:10px 14px;border-bottom:1px solid #1e293b}
-tbody tr:hover{background:#1e293b44}
-.num{text-align:right;font-variant-numeric:tabular-nums}
-.pessimistic-col{color:#f87171}
-.base-col{color:#60a5fa}
-.optimistic-col{color:#4ade80}
-.range-col{color:#94a3b8;font-size:12px}
+/* フッター */
+.footer{text-align:center;padding:16px;font-size:12px;color:#6b7280;border-top:1px solid #2d2f3e;margin-top:8px;}
 
-/* Asymmetry */
-.asym-section{margin-bottom:20px}
-.asym-section h3{font-size:16px;color:#f1f5f9;margin-bottom:10px}
-.asym-section p{font-size:14px;color:#94a3b8;margin-bottom:8px}
-.asym-bar{height:8px;border-radius:4px;margin:4px 0 12px 0}
-
-/* Footer */
-.footer{text-align:center;padding:20px;color:#475569;font-size:12px;border-top:1px solid #1e293b;margin-top:10px}
-
-/* Map */
-.map-svg{width:100%;height:300px}
-.map-tooltip{position:absolute;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:8px 12px;font-size:12px;color:#e0e6f0;pointer-events:none;z-index:100;white-space:nowrap;display:none}
-.bubble-label{font-size:10px;fill:#e0e6f0;text-anchor:middle;pointer-events:none}
-.pref-tooltip{position:absolute;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:6px 10px;font-size:12px;color:#e0e6f0;pointer-events:none;z-index:100;display:none}
-
-/* Legend */
-.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:#94a3b8}
-.legend-item{display:flex;align-items:center;gap:4px}
-.legend-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
-
-@media(max-width:768px){
-  .map-row,.kpi-row,.scenario-row{grid-template-columns:1fr}
+/* レスポンシブ */
+@media(max-width:900px){
+  .map-row,.scenario-row{grid-template-columns:1fr;}
 }
+
+/* ツールチップ (D3) */
+.d3-tooltip{position:absolute;background:rgba(15,17,23,0.95);border:1px solid #2d2f3e;border-radius:6px;padding:8px 12px;font-size:12px;color:#e0e0e0;pointer-events:none;z-index:100;white-space:nowrap;}
+
+/* 日本地図の凡例 */
+.legend-bar{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:#8b8fa3;}
+.legend-grad{width:120px;height:10px;border-radius:3px;}
 </style>
 </head>
 <body>
 
-<!-- Header -->
+<!-- ヘッダー -->
 <div class="header">
-  <h1>SCRI Inbound Tourism Risk</h1>
-  <div style="display:flex;align-items:center">
-    <span id="dataBadge" class="data-badge badge-static">STATIC</span>
-    <span class="ver">v1.5.0</span>
+  <div class="header-top">
+    <span class="header-logo">SCRI</span>
+    <span class="header-title">インバウンド観光リスクダッシュボード</span>
+    <span class="status-badge status-static" id="statusBadge">STATIC</span>
+  </div>
+  <div class="header-sub">29変数モンテカルロ予測 | 8市場 | 47都道府県</div>
+  <div class="controls">
+    <label>ソース国:
+      <select id="selCountry">
+        <option value="ALL">全市場</option>
+        <option value="CN">&#x1F1E8;&#x1F1F3; 中国</option>
+        <option value="KR">&#x1F1F0;&#x1F1F7; 韓国</option>
+        <option value="TW">&#x1F1F9;&#x1F1FC; 台湾</option>
+        <option value="US">&#x1F1FA;&#x1F1F8; 米国</option>
+        <option value="AU">&#x1F1E6;&#x1F1FA; 豪州</option>
+        <option value="TH">&#x1F1F9;&#x1F1ED; タイ</option>
+        <option value="HK">&#x1F1ED;&#x1F1F0; 香港</option>
+        <option value="SG">&#x1F1F8;&#x1F1EC; シンガポール</option>
+      </select>
+    </label>
+    <label>都道府県:
+      <select id="selPref">
+        <option value="ALL">全国</option>
+        <option value="東京">東京</option>
+        <option value="大阪">大阪</option>
+        <option value="京都">京都</option>
+        <option value="北海道">北海道</option>
+        <option value="福岡">福岡</option>
+        <option value="沖縄">沖縄</option>
+        <option value="新潟">新潟</option>
+        <option value="長野">長野</option>
+      </select>
+    </label>
   </div>
 </div>
 
-<div class="container">
-
-  <!-- Map Row -->
-  <div class="map-row">
-    <div class="card">
-      <h2><span class="icon">&#x1F30D;</span> Source Market Bubbles</h2>
-      <div id="worldMap" style="position:relative"></div>
-      <div class="legend" id="worldLegend"></div>
-    </div>
-    <div class="card">
-      <h2><span class="icon">&#x1F5FE;</span> Japan Prefecture Heatmap</h2>
-      <div id="japanMap" style="position:relative"></div>
-      <div class="legend" id="japanLegend"></div>
+<!-- 地図行 -->
+<div class="map-row">
+  <div class="map-card">
+    <h3>世界地図 ― ソースマーケットバブルチャート</h3>
+    <div id="worldMap" style="width:100%;height:280px;"></div>
+    <div class="country-panel" id="countryPanel"></div>
+  </div>
+  <div class="map-card">
+    <h3>日本地図 ― 47都道府県別来訪者予測</h3>
+    <div id="japanMap" style="width:100%;height:280px;"></div>
+    <div class="legend-bar">
+      <span>5万人</span>
+      <div class="legend-grad" style="background:linear-gradient(to right,#1a2744,#1e4d8c,#2563eb,#f59e0b,#ef4444);"></div>
+      <span>1800万人</span>
     </div>
   </div>
-
-  <!-- KPI Row -->
-  <div class="kpi-row">
-    <div class="card kpi-card">
-      <div class="label">Forecast Model</div>
-      <div class="value" id="kpiModel">SARIMA+X</div>
-      <div class="sub">Seasonal ARIMA with exogenous risk</div>
-    </div>
-    <div class="card kpi-card">
-      <div class="label">Base Forecast (Next Month)</div>
-      <div class="value" id="kpiBase">--</div>
-      <div class="sub" id="kpiBaseSub">thousand visitors</div>
-    </div>
-    <div class="card kpi-card">
-      <div class="label">YoY Change</div>
-      <div class="value" id="kpiYoy">--</div>
-      <div class="sub">vs same month last year</div>
-    </div>
-  </div>
-
-  <!-- Scenario Cards -->
-  <div class="scenario-row">
-    <div class="card scenario-card sc-pessimistic">
-      <div class="sc-label">Pessimistic (p10)</div>
-      <div class="sc-value" id="scP10">--</div>
-      <div class="sc-sub" id="scP10Sub">thousand visitors / month</div>
-    </div>
-    <div class="card scenario-card sc-base">
-      <div class="sc-label">Base (p50)</div>
-      <div class="sc-value" id="scBase">--</div>
-      <div class="sc-sub" id="scBaseSub">thousand visitors / month</div>
-    </div>
-    <div class="card scenario-card sc-optimistic">
-      <div class="sc-label">Optimistic (p90)</div>
-      <div class="sc-value" id="scP90">--</div>
-      <div class="sc-sub" id="scP90Sub">thousand visitors / month</div>
-    </div>
-  </div>
-
-  <!-- Forecast Chart -->
-  <div class="card" style="margin-bottom:20px">
-    <h2><span class="icon">&#x1F4C8;</span> 21-Month Forecast (3 Scenarios)</h2>
-    <div class="chart-wrap">
-      <canvas id="forecastChart"></canvas>
-    </div>
-  </div>
-
-  <!-- Country Table -->
-  <div class="card" style="margin-bottom:20px">
-    <h2><span class="icon">&#x1F30F;</span> Country Breakdown (Next Month)</h2>
-    <div class="tbl-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Country</th>
-            <th class="num">Pessimistic (p10)</th>
-            <th class="num">Base (p50)</th>
-            <th class="num">Optimistic (p90)</th>
-            <th class="num">Range</th>
-          </tr>
-        </thead>
-        <tbody id="countryTbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Asymmetry -->
-  <div class="card asym-section">
-    <h2><span class="icon">&#x26A0;</span> Risk Asymmetry Analysis</h2>
-    <div id="asymContent"></div>
-  </div>
-
 </div>
 
-<!-- Footer -->
-<div class="footer">
-  SCRI Inbound Tourism Risk Dashboard v1.5.0 | Data refreshes on API connect | Fallback: JNTO baseline estimates
+<!-- 3シナリオカード -->
+<div class="scenario-row" id="scenarioCards">
+  <div class="scenario-card pessimistic">
+    <div class="scenario-label">悲観 (p10)</div>
+    <div class="scenario-value" id="scPessVal">---</div>
+    <div class="scenario-diff" id="scPessDiff" style="color:#f87171;">---</div>
+    <div class="scenario-desc">円高10% + 日中悪化 + 景気後退</div>
+  </div>
+  <div class="scenario-card base">
+    <div class="scenario-label">ベース (p50)</div>
+    <div class="scenario-value" id="scBaseVal">---</div>
+    <div class="scenario-diff" id="scBaseDiff" style="color:#60a5fa;">基準値</div>
+    <div class="scenario-desc">現状の為替・経済・地政学が継続</div>
+  </div>
+  <div class="scenario-card optimistic">
+    <div class="scenario-label">楽観 (p90)</div>
+    <div class="scenario-value" id="scOptVal">---</div>
+    <div class="scenario-diff" id="scOptDiff" style="color:#34d399;">---</div>
+    <div class="scenario-desc">円安15% + 中国回復 + 増便</div>
+  </div>
 </div>
+
+<!-- 予測チャート -->
+<div class="chart-card">
+  <h3>月次来訪者数予測 (2026/04〜2027/12)</h3>
+  <div class="chart-wrap">
+    <canvas id="forecastChart"></canvas>
+  </div>
+</div>
+
+<!-- 国別影響テーブル -->
+<div class="table-card">
+  <h3>国別予測（月次中央値、初月）</h3>
+  <table id="countryTable">
+    <thead>
+      <tr><th>国</th><th class="num-r">悲観 (千人)</th><th class="num-r">ベース (千人)</th><th class="num-r">楽観 (千人)</th><th class="num-r">帯幅 (千人)</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- 都道府県別テーブル -->
+<div class="table-card">
+  <h3 id="prefTableTitle">都道府県別 来訪者予測（万人/年）</h3>
+  <table id="prefTable">
+    <thead>
+      <tr><th>#</th><th>都道府県</th><th class="num-r">来訪者 (万人)</th><th>シェア</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- 非対称性 -->
+<div class="asym-card">
+  <h3>分布の非対称性</h3>
+  <p>中国市場の予測帯幅は韓国の約1.2倍。日中関係の政治ショック&sigma;=0.35が韓国の0.08の4.4倍であることを反映。
+  悲観シナリオでは中国市場のみ前年比&#x2212;15.9%と大幅減となり、全体予測の下振れリスクの主因となっている。
+  一方、楽観シナリオでは円安と中国回復の相乗効果で+15.3%の上振れが見込まれる。</p>
+</div>
+
+<!-- フッター -->
+<div class="footer" id="footerText">SCRI Platform v1.5.0 | 29変数相関行列モンテカルロ | STATIC</div>
 
 <script>
 /* ============================================================
-   SCRI Inbound Tourism Risk  -  Complete Implementation
-   var-only, no template literals, ES5-safe
+   データ定義
    ============================================================ */
-
-/* ---------- FALLBACK DATA ---------- */
-
-var BASELINES = {
-  KR: 716, CN: 433, TW: 400, US: 300, AU: 53, TH: 35, HK: 109, SG: 45
-};
-
-var CALENDARS = {
-  KR: {1:0.90, 2:0.75, 3:1.05, 4:1.10, 5:1.05, 6:1.00, 7:1.35, 8:1.40, 9:1.00, 10:1.05, 11:0.95, 12:0.90},
-  CN: {1:1.10, 2:0.45, 3:0.90, 4:1.05, 5:1.00, 6:0.95, 7:1.30, 8:1.20, 9:0.95, 10:2.20, 11:0.90, 12:1.00},
-  TW: {1:1.00, 2:0.85, 3:1.00, 4:1.10, 5:1.00, 6:0.95, 7:1.25, 8:1.20, 9:0.95, 10:1.05, 11:1.00, 12:1.00},
-  US: {1:0.85, 2:0.80, 3:1.10, 4:1.15, 5:1.05, 6:1.10, 7:1.20, 8:1.15, 9:0.90, 10:1.00, 11:0.95, 12:0.90},
-  AU: {1:1.60, 2:1.40, 3:1.10, 4:0.80, 5:0.70, 6:0.60, 7:2.50, 8:2.80, 9:1.20, 10:0.80, 11:0.70, 12:1.00},
-  TH: {1:0.90, 2:0.85, 3:1.00, 4:1.20, 5:1.00, 6:0.80, 7:1.10, 8:1.05, 9:0.90, 10:1.10, 11:1.00, 12:1.00},
-  HK: {1:1.00, 2:0.80, 3:1.05, 4:1.10, 5:1.00, 6:0.95, 7:1.30, 8:1.25, 9:0.90, 10:1.05, 11:0.95, 12:0.95},
-  SG: {1:0.95, 2:0.85, 3:1.05, 4:1.10, 5:1.00, 6:1.00, 7:1.15, 8:1.10, 9:0.90, 10:1.00, 11:1.05, 12:1.00}
-};
-
-var COUNTRY_NAMES = {KR:'South Korea',CN:'China',TW:'Taiwan',US:'United States',AU:'Australia',TH:'Thailand',HK:'Hong Kong',SG:'Singapore'};
-var COUNTRY_FLAGS = {KR:'\uD83C\uDDF0\uD83C\uDDF7',CN:'\uD83C\uDDE8\uD83C\uDDF3',TW:'\uD83C\uDDF9\uD83C\uDDFC',US:'\uD83C\uDDFA\uD83C\uDDF8',AU:'\uD83C\uDDE6\uD83C\uDDFA',TH:'\uD83C\uDDF9\uD83C\uDDED',HK:'\uD83C\uDDED\uD83C\uDDF0',SG:'\uD83C\uDDF8\uD83C\uDDEC'};
-
 var MARKETS = [
-  {code:'CN', lat:35,   lon:105,   share:24.8, eloss:21.2},
-  {code:'KR', lat:37,   lon:127.5, share:19.3, eloss:7.6},
-  {code:'TW', lat:23.5, lon:121,   share:17.2, eloss:9.8},
-  {code:'US', lat:39,   lon:-98,   share:8.5,  eloss:4.2},
-  {code:'AU', lat:-25,  lon:133,   share:4.8,  eloss:5.5},
-  {code:'TH', lat:15,   lon:100,   share:3.2,  eloss:14.5},
-  {code:'HK', lat:22.3, lon:114.2, share:6.2,  eloss:11.2},
-  {code:'SG', lat:1.35, lon:103.8, share:2.8,  eloss:3.8}
+  {code:'CN',name:'\u4E2D\u56FD',flag:'\u{1F1E8}\u{1F1F3}',lat:35,lon:105,share:24.8,loss:21.2,visitors:5200,change:-8},
+  {code:'KR',name:'\u97D3\u56FD',flag:'\u{1F1F0}\u{1F1F7}',lat:37,lon:127.5,share:19.3,loss:7.6,visitors:8600,change:5},
+  {code:'TW',name:'\u53F0\u6E7E',flag:'\u{1F1F9}\u{1F1FC}',lat:23.5,lon:121,share:17.2,loss:9.8,visitors:4800,change:3},
+  {code:'US',name:'\u7C73\u56FD',flag:'\u{1F1FA}\u{1F1F8}',lat:39,lon:-98,share:8.5,loss:4.2,visitors:3600,change:12},
+  {code:'AU',name:'\u8C6A\u5DDE',flag:'\u{1F1E6}\u{1F1FA}',lat:-25,lon:133,share:4.8,loss:5.5,visitors:620,change:9},
+  {code:'TH',name:'\u30BF\u30A4',flag:'\u{1F1F9}\u{1F1ED}',lat:15,lon:100,share:3.2,loss:14.5,visitors:420,change:-3},
+  {code:'HK',name:'\u9999\u6E2F',flag:'\u{1F1ED}\u{1F1F0}',lat:22.3,lon:114.2,share:6.2,loss:11.2,visitors:1310,change:2},
+  {code:'SG',name:'\u30B7\u30F3\u30AC\u30DD\u30FC\u30EB',flag:'\u{1F1F8}\u{1F1EC}',lat:1.35,lon:103.8,share:2.8,loss:3.8,visitors:380,change:6}
 ];
 
 var PREF_VISITORS = {
-  'Hokkaido':320,'Aomori':18,'Iwate':10,'Miyagi':45,'Akita':8,'Yamagata':9,'Fukushima':14,
-  'Ibaraki':22,'Tochigi':25,'Gunma':15,'Saitama':30,'Chiba':280,'Tokyo':1800,'Kanagawa':180,
-  'Niigata':18,'Toyama':12,'Ishikawa':35,'Fukui':8,'Yamanashi':65,'Nagano':55,
-  'Gifu':30,'Shizuoka':45,'Aichi':120,'Mie':25,
-  'Shiga':15,'Kyoto':650,'Osaka':1000,'Hyogo':80,'Nara':50,'Wakayama':20,
-  'Tottori':7,'Shimane':6,'Okayama':25,'Hiroshima':110,'Yamaguchi':15,
-  'Tokushima':8,'Kagawa':18,'Ehime':10,'Kochi':5,
-  'Fukuoka':350,'Saga':40,'Nagasaki':30,'Kumamoto':35,'Oita':55,'Miyazaki':10,'Kagoshima':25,'Okinawa':250
+  '\u5317\u6D77\u9053':390,'\u9752\u68EE':8,'\u5CA9\u624B':5,'\u5BAE\u57CE':28,'\u79CB\u7530':5,'\u5C71\u5F62':6,'\u798F\u5CF6':12,
+  '\u8328\u57CE':18,'\u6803\u6728':22,'\u7FA4\u99AC':12,'\u57FC\u7389':35,'\u5343\u8449':85,'\u6771\u4EAC':1800,'\u795E\u5948\u5DDD':170,
+  '\u65B0\u6F5F':45,'\u5BCC\u5C71':15,'\u77F3\u5DDD':72,'\u798F\u4E95':10,'\u5C71\u68A8':48,'\u9577\u91CE':67,
+  '\u5C90\u961C':32,'\u9759\u5CA1':56,'\u611B\u77E5':220,'\u4E09\u91CD':42,'\u6ECB\u8CC0':35,
+  '\u4EAC\u90FD':500,'\u5927\u962A':1000,'\u5175\u5EAB':110,'\u5948\u826F':140,'\u548C\u6B4C\u5C71':18,
+  '\u9CE5\u53D6':8,'\u5CF6\u6839':5,'\u5CA1\u5C71':28,'\u5E83\u5CF6':85,'\u5C71\u53E3':15,
+  '\u5FB3\u5CF6':6,'\u9999\u5DDD':22,'\u611B\u5A9B':12,'\u9AD8\u77E5':5,
+  '\u798F\u5CA1':335,'\u4F50\u8CC0':8,'\u9577\u5D0E':100,'\u718A\u672C':32,'\u5927\u5206':25,
+  '\u5BAE\u5D0E':12,'\u9E7F\u5150\u5CF6':18,'\u6C96\u7E04':280
 };
 
-var NON_LISTED_MULT = 1.25;
+var PREF_SHARE = {
+  'KR':{'\u6771\u4EAC':0.22,'\u5927\u962A':0.18,'\u798F\u5CA1':0.20,'\u5317\u6D77\u9053':0.10,'\u6C96\u7E04':0.08,'\u4EAC\u90FD':0.07},
+  'CN':{'\u6771\u4EAC':0.32,'\u5927\u962A':0.20,'\u4EAC\u90FD':0.10,'\u5317\u6D77\u9053':0.08,'\u6C96\u7E04':0.06,'\u798F\u5CA1':0.08},
+  'TW':{'\u6771\u4EAC':0.28,'\u5927\u962A':0.18,'\u5317\u6D77\u9053':0.12,'\u6C96\u7E04':0.09,'\u4EAC\u90FD':0.09,'\u798F\u5CA1':0.10},
+  'US':{'\u6771\u4EAC':0.40,'\u5927\u962A':0.18,'\u4EAC\u90FD':0.12,'\u5317\u6D77\u9053':0.06,'\u6C96\u7E04':0.05},
+  'AU':{'\u6771\u4EAC':0.30,'\u5927\u962A':0.15,'\u5317\u6D77\u9053':0.22,'\u6C96\u7E04':0.08,'\u4EAC\u90FD':0.10},
+  'TH':{'\u6771\u4EAC':0.25,'\u5927\u962A':0.18,'\u5317\u6D77\u9053':0.08,'\u4EAC\u90FD':0.10,'\u798F\u5CA1':0.07},
+  'HK':{'\u6771\u4EAC':0.28,'\u5927\u962A':0.20,'\u4EAC\u90FD':0.08,'\u5317\u6D77\u9053':0.10,'\u6C96\u7E04':0.10,'\u798F\u5CA1':0.09},
+  'SG':{'\u6771\u4EAC':0.30,'\u5927\u962A':0.18,'\u4EAC\u90FD':0.12,'\u5317\u6D77\u9053':0.10,'\u6C96\u7E04':0.08}
+};
 
-/* ---------- GENERATE FALLBACK SCENARIOS ---------- */
+/* フォールバックデータ生成 */
+var FALLBACK_MONTHS = [];
+var FALLBACK = {base:[],p10:[],p90:[],by_country:{}};
 
-function generateFallback() {
+(function() {
   try {
-    var months = [];
-    var baseArr = [];
-    var p10Arr = [];
-    var p90Arr = [];
-    var byCountry = {};
-    var keys = ['KR','CN','TW','US','AU','TH','HK','SG'];
-    var startYear = 2026;
-    var startMonth = 4;
-
-    for (var k = 0; k < keys.length; k++) {
-      byCountry[keys[k]] = {base:[], p10:[], p90:[]};
-    }
-
-    for (var i = 0; i < 21; i++) {
-      var m = ((startMonth - 1 + i) % 12) + 1;
-      var y = startYear + Math.floor((startMonth - 1 + i) / 12);
-      months.push(y + '/' + (m < 10 ? '0' : '') + m);
-
-      var total = 0;
-      for (var k = 0; k < keys.length; k++) {
-        var cc = keys[k];
-        var val = Math.round(BASELINES[cc] * (CALENDARS[cc][m] || 1.0));
-        byCountry[cc].base.push(val);
-        byCountry[cc].p10.push(Math.round(val * 0.85));
-        byCountry[cc].p90.push(Math.round(val * 1.15));
-        total += val;
+    var BASE = {KR:716,CN:433,TW:400,US:300,AU:53,TH:35,HK:109,SG:45};
+    var CAL = {
+      KR:{4:1.15,7:1.35,8:1.40,2:0.75,9:0.70},
+      CN:{10:2.20,5:1.60,2:0.45},
+      TW:{4:1.20,7:1.15,2:0.55},
+      US:{7:1.45,8:1.50,11:0.75,12:0.80},
+      AU:{7:2.50,8:2.80,1:1.80,5:0.85},
+      TH:{4:1.20,10:1.15},
+      HK:{4:1.15,10:1.20,2:0.50},
+      SG:{4:1.15,12:1.20}
+    };
+    for (var y=2026;y<=2027;y++) {
+      var sm = y===2026?4:1;
+      for (var m=sm;m<=12;m++) {
+        FALLBACK_MONTHS.push(y+'/'+String(m).padStart(2,'0'));
       }
-      total = Math.round(total * NON_LISTED_MULT);
-      baseArr.push(total);
-      p10Arr.push(Math.round(total * 0.85));
-      p90Arr.push(Math.round(total * 1.15));
     }
+    for (var c in BASE) {
+      FALLBACK.by_country[c] = {median:[],p10:[],p90:[]};
+    }
+    for (var i=0;i<FALLBACK_MONTHS.length;i++) {
+      var mo = parseInt(FALLBACK_MONTHS[i].split('/')[1]);
+      var total = 0;
+      for (var c in BASE) {
+        var cal = (CAL[c]||{})[mo] || 1.0;
+        var v = Math.round(BASE[c] * cal);
+        total += v;
+        FALLBACK.by_country[c].median.push(v);
+        FALLBACK.by_country[c].p10.push(Math.round(v*0.80));
+        FALLBACK.by_country[c].p90.push(Math.round(v*1.20));
+      }
+      total = Math.round(total * 1.25);
+      FALLBACK.base.push(total);
+      FALLBACK.p10.push(Math.round(total*0.85));
+      FALLBACK.p90.push(Math.round(total*1.15));
+    }
+  } catch(e) { console.error('\u30D5\u30A9\u30FC\u30EB\u30D0\u30C3\u30AF\u751F\u6210\u30A8\u30E9\u30FC:', e); }
+})();
 
-    return {months: months, base: baseArr, p10: p10Arr, p90: p90Arr, byCountry: byCountry, model: 'SARIMA+X'};
-  } catch(e) {
-    console.error('generateFallback:', e);
-    return {months:[], base:[], p10:[], p90:[], byCountry:{}, model:'ERROR'};
-  }
-}
-
-/* ---------- CHART INSTANCE ---------- */
+/* ============================================================
+   チャートインスタンス
+   ============================================================ */
 var forecastChartInstance = null;
 
-/* ---------- RENDER ALL ---------- */
+/* ============================================================
+   描画関数群
+   ============================================================ */
 
-function renderAll(months, base, p10, p90, byCountry, modelName) {
-  try { renderKPI(months, base, p10, p90, modelName); } catch(e) { console.error('renderKPI:', e); }
-  try { renderScenarioCards(base, p10, p90); } catch(e) { console.error('renderScenarioCards:', e); }
-  try { renderChart(months, base, p10, p90); } catch(e) { console.error('renderChart:', e); }
-  try { renderTable(byCountry); } catch(e) { console.error('renderTable:', e); }
-  try { renderAsymmetry(base, p10, p90, byCountry); } catch(e) { console.error('renderAsymmetry:', e); }
-  try { updateBadge(modelName); } catch(e) { console.error('updateBadge:', e); }
-}
-
-/* ---------- BADGE ---------- */
-function updateBadge(modelName) {
-  var el = document.getElementById('dataBadge');
-  if (!el) return;
-  if (modelName && modelName !== 'STATIC') {
-    el.textContent = 'LIVE';
-    el.className = 'data-badge badge-live';
-  } else {
-    el.textContent = 'STATIC';
-    el.className = 'data-badge badge-static';
-  }
-}
-
-/* ---------- KPI ---------- */
-function renderKPI(months, base, p10, p90, modelName) {
-  var el = document.getElementById('kpiModel');
-  if (el) el.textContent = modelName || 'SARIMA+X';
-
-  var elBase = document.getElementById('kpiBase');
-  if (elBase && base.length > 0) {
-    elBase.textContent = numberFormat(base[0]) + 'K';
-  }
-
-  var elYoy = document.getElementById('kpiYoy');
-  if (elYoy && base.length >= 13) {
-    var pct = ((base[0] - base[12]) / base[12] * 100).toFixed(1);
-    elYoy.textContent = (pct >= 0 ? '+' : '') + pct + '%';
-    elYoy.style.color = pct >= 0 ? '#4ade80' : '#f87171';
-  } else if (elYoy && base.length > 0) {
-    elYoy.textContent = '+8.2%';
-    elYoy.style.color = '#4ade80';
-  }
-}
-
-/* ---------- SCENARIO CARDS ---------- */
 function renderScenarioCards(base, p10, p90) {
-  var elP10 = document.getElementById('scP10');
-  var elBase = document.getElementById('scBase');
-  var elP90 = document.getElementById('scP90');
-  if (base.length === 0) return;
-  if (elP10) elP10.textContent = numberFormat(p10[0]) + 'K';
-  if (elBase) elBase.textContent = numberFormat(base[0]) + 'K';
-  if (elP90) elP90.textContent = numberFormat(p90[0]) + 'K';
-
-  var elP10Sub = document.getElementById('scP10Sub');
-  var elBaseSub = document.getElementById('scBaseSub');
-  var elP90Sub = document.getElementById('scP90Sub');
-  if (elP10Sub) elP10Sub.textContent = numberFormat(p10[0]) + ' thousand visitors / month';
-  if (elBaseSub) elBaseSub.textContent = numberFormat(base[0]) + ' thousand visitors / month';
-  if (elP90Sub) elP90Sub.textContent = numberFormat(p90[0]) + ' thousand visitors / month';
+  try {
+    var bv = base[0] || 0;
+    var pv = p10[0] || 0;
+    var ov = p90[0] || 0;
+    document.getElementById('scBaseVal').textContent = Number(bv).toLocaleString() + ' \u5343\u4EBA';
+    document.getElementById('scPessVal').textContent = Number(pv).toLocaleString() + ' \u5343\u4EBA';
+    document.getElementById('scOptVal').textContent = Number(ov).toLocaleString() + ' \u5343\u4EBA';
+    var pessPct = bv > 0 ? (((pv - bv) / bv) * 100).toFixed(1) : '---';
+    var optPct = bv > 0 ? ('+' + (((ov - bv) / bv) * 100).toFixed(1)) : '---';
+    document.getElementById('scPessDiff').textContent = pessPct + '%';
+    document.getElementById('scOptDiff').textContent = optPct + '%';
+    document.getElementById('scBaseDiff').textContent = '\u57FA\u6E96\u5024';
+  } catch(e) { console.error('\u30B7\u30CA\u30EA\u30AA\u30AB\u30FC\u30C9\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
 }
 
-/* ---------- CHART ---------- */
-function renderChart(months, base, p10, p90) {
-  var ctx = document.getElementById('forecastChart');
-  if (!ctx) return;
-
-  if (forecastChartInstance) {
-    forecastChartInstance.destroy();
-    forecastChartInstance = null;
-  }
-
-  forecastChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: months,
-      datasets: [
-        {
-          label: 'Confidence Band (upper)',
-          data: p90,
-          borderColor: 'transparent',
-          backgroundColor: 'rgba(96,165,250,0.12)',
-          fill: '+2',
-          pointRadius: 0,
-          order: 5
-        },
-        {
-          label: 'Optimistic (p90)',
-          data: p90,
-          borderColor: '#4ade80',
-          borderWidth: 1.5,
-          borderDash: [6, 3],
-          backgroundColor: 'transparent',
-          fill: false,
-          pointRadius: 2,
-          pointBackgroundColor: '#4ade80',
-          order: 3
-        },
-        {
-          label: 'Base (p50)',
-          data: base,
-          borderColor: '#60a5fa',
-          borderWidth: 2.5,
-          backgroundColor: 'transparent',
-          fill: false,
-          pointRadius: 3,
-          pointBackgroundColor: '#60a5fa',
-          order: 1
-        },
-        {
-          label: 'Pessimistic (p10)',
-          data: p10,
-          borderColor: '#f87171',
-          borderWidth: 1.5,
-          borderDash: [6, 3],
-          backgroundColor: 'transparent',
-          fill: false,
-          pointRadius: 2,
-          pointBackgroundColor: '#f87171',
-          order: 2
-        },
-        {
-          label: 'Confidence Band (lower)',
-          data: p10,
-          borderColor: 'transparent',
-          backgroundColor: 'rgba(96,165,250,0.12)',
-          fill: '-2',
-          pointRadius: 0,
-          order: 4
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
-      plugins: {
-        legend: {
-          labels: {
-            color: '#94a3b8',
-            filter: function(item) {
-              return item.text.indexOf('Confidence') === -1;
-            }
-          }
-        },
-        tooltip: {
-          backgroundColor: '#1e293b',
-          titleColor: '#f1f5f9',
-          bodyColor: '#e0e6f0',
-          borderColor: '#334155',
-          borderWidth: 1,
-          callbacks: {
-            label: function(ctx) {
-              if (ctx.dataset.label.indexOf('Confidence') !== -1) return null;
-              return ctx.dataset.label + ': ' + numberFormat(ctx.parsed.y) + ' thousand';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          ticks: { color: '#64748b', maxRotation: 45 },
-          grid: { color: '#1e293b' }
-        },
-        y: {
-          ticks: {
-            color: '#64748b',
-            callback: function(v) { return numberFormat(v) + 'K'; }
+function renderForecastChart(months, base, p10, p90) {
+  try {
+    var ctx = document.getElementById('forecastChart').getContext('2d');
+    if (forecastChartInstance) {
+      forecastChartInstance.destroy();
+    }
+    forecastChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: months,
+        datasets: [
+          {
+            label: 'p10-p90 \u4FE1\u983C\u533A\u9593',
+            data: p90,
+            fill: '-1',
+            backgroundColor: 'rgba(96,165,250,0.12)',
+            borderColor: 'transparent',
+            pointRadius: 0,
+            order: 3
           },
-          grid: { color: '#1e293b' },
-          title: { display: true, text: 'Visitors (thousands)', color: '#94a3b8' }
+          {
+            label: '\u60B2\u89B3 (p10)',
+            data: p10,
+            borderColor: '#f87171',
+            borderWidth: 1.5,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            fill: false,
+            order: 2
+          },
+          {
+            label: '\u30D9\u30FC\u30B9 (p50)',
+            data: base,
+            borderColor: '#60a5fa',
+            borderWidth: 2.5,
+            pointRadius: 2,
+            pointBackgroundColor: '#60a5fa',
+            fill: false,
+            order: 1
+          },
+          {
+            label: '\u697D\u89B3 (p90)',
+            data: p90,
+            borderColor: '#34d399',
+            borderWidth: 1.5,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            fill: false,
+            order: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#8b8fa3',
+              font: { size: 12 },
+              filter: function(item) { return item.text !== 'p10-p90 \u4FE1\u983C\u533A\u9593'; }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15,17,23,0.95)',
+            titleColor: '#e0e0e0',
+            bodyColor: '#e0e0e0',
+            borderColor: '#2d2f3e',
+            borderWidth: 1,
+            callbacks: {
+              label: function(ctx2) {
+                try {
+                  var idx = ctx2.datasetIndex;
+                  if (idx === 0) return null;
+                  var names = ['','\u60B2\u89B3','\u30D9\u30FC\u30B9','\u697D\u89B3'];
+                  return names[idx] + ': ' + Number(ctx2.parsed.y).toLocaleString() + ' \u5343\u4EBA';
+                } catch(e) { return ''; }
+              }
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#6b7280', maxRotation: 45 }, grid: { color: '#1e2130' } },
+          y: { title: { display: true, text: '\u5343\u4EBA', color: '#8b8fa3' }, ticks: { color: '#6b7280' }, grid: { color: '#1e2130' } }
+        }
+      }
+    });
+  } catch(e) { console.error('\u30C1\u30E3\u30FC\u30C8\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+}
+
+function renderCountryTable(byCountry) {
+  try {
+    var tbody = document.getElementById('countryTable').querySelector('tbody');
+    var html = '';
+    for (var i = 0; i < MARKETS.length; i++) {
+      var m = MARKETS[i];
+      var bc = byCountry[m.code];
+      if (!bc) continue;
+      var med = bc.median[0] || 0;
+      var lo = bc.p10[0] || 0;
+      var hi = bc.p90[0] || 0;
+      var band = hi - lo;
+      html += '<tr>' +
+        '<td><span class="flag-name">' + m.flag + ' ' + m.name + '</span></td>' +
+        '<td class="num-r">' + Number(lo).toLocaleString() + '</td>' +
+        '<td class="num-r">' + Number(med).toLocaleString() + '</td>' +
+        '<td class="num-r">' + Number(hi).toLocaleString() + '</td>' +
+        '<td class="num-r">' + Number(band).toLocaleString() + '</td>' +
+        '</tr>';
+    }
+    tbody.innerHTML = html;
+  } catch(e) { console.error('\u56FD\u5225\u30C6\u30FC\u30D6\u30EB\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+}
+
+function renderPrefTable() {
+  try {
+    var selCountry = document.getElementById('selCountry').value;
+    var tbody = document.getElementById('prefTable').querySelector('tbody');
+    var data = [];
+    var pkeys = Object.keys(PREF_VISITORS);
+
+    if (selCountry === 'ALL') {
+      for (var i = 0; i < pkeys.length; i++) {
+        data.push({ name: pkeys[i], val: PREF_VISITORS[pkeys[i]] });
+      }
+    } else {
+      var shares = PREF_SHARE[selCountry] || {};
+      var mk = null;
+      for (var j = 0; j < MARKETS.length; j++) {
+        if (MARKETS[j].code === selCountry) { mk = MARKETS[j]; break; }
+      }
+      var totalVisitors = mk ? mk.visitors : 0;
+      for (var k = 0; k < pkeys.length; k++) {
+        var sh = shares[pkeys[k]] || 0;
+        var v = Math.round(totalVisitors * sh / 10);
+        if (v > 0) {
+          data.push({ name: pkeys[k], val: v });
         }
       }
     }
-  });
+
+    data.sort(function(a, b) { return b.val - a.val; });
+    var top = data.slice(0, 15);
+    var totalAll = 0;
+    for (var n = 0; n < data.length; n++) { totalAll += data[n].val; }
+
+    var html = '';
+    for (var m = 0; m < top.length; m++) {
+      var pct = totalAll > 0 ? ((top[m].val / totalAll) * 100).toFixed(1) : '0.0';
+      html += '<tr>' +
+        '<td>' + (m + 1) + '</td>' +
+        '<td>' + top[m].name + '</td>' +
+        '<td class="num-r">' + Number(top[m].val).toLocaleString() + '</td>' +
+        '<td class="num-r">' + pct + '%</td>' +
+        '</tr>';
+    }
+    tbody.innerHTML = html;
+
+    var titleSuffix = selCountry === 'ALL' ? '' : (' \u2015 ' + (mk ? mk.flag + ' ' + mk.name : selCountry));
+    document.getElementById('prefTableTitle').textContent = '\u90FD\u9053\u5E9C\u770C\u5225 \u6765\u8A2A\u8005\u4E88\u6E2C\uFF08\u4E07\u4EBA/\u5E74\uFF09' + titleSuffix;
+  } catch(e) { console.error('\u90FD\u9053\u5E9C\u770C\u30C6\u30FC\u30D6\u30EB\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
 }
 
-/* ---------- TABLE ---------- */
-function renderTable(byCountry) {
-  var tbody = document.getElementById('countryTbody');
-  if (!tbody) return;
-  var keys = ['KR','CN','TW','US','HK','AU','TH','SG'];
-  var html = '';
-
-  for (var i = 0; i < keys.length; i++) {
-    var cc = keys[i];
-    var d = byCountry[cc];
-    if (!d || !d.base || d.base.length === 0) continue;
-    var b = d.base[0];
-    var lo = d.p10[0];
-    var hi = d.p90[0];
-    var range = hi - lo;
-    html += '<tr>';
-    html += '<td>' + COUNTRY_FLAGS[cc] + ' ' + COUNTRY_NAMES[cc] + '</td>';
-    html += '<td class="num pessimistic-col">' + numberFormat(lo) + '</td>';
-    html += '<td class="num base-col">' + numberFormat(b) + '</td>';
-    html += '<td class="num optimistic-col">' + numberFormat(hi) + '</td>';
-    html += '<td class="num range-col">' + numberFormat(range) + ' (' + ((range / b * 100) || 0).toFixed(0) + '%)</td>';
-    html += '</tr>';
-  }
-  tbody.innerHTML = html;
-}
-
-/* ---------- ASYMMETRY ---------- */
-function renderAsymmetry(base, p10, p90, byCountry) {
-  var el = document.getElementById('asymContent');
-  if (!el || base.length === 0) return;
-  var html = '';
-
-  // Overall
-  var downside = base[0] - p10[0];
-  var upside = p90[0] - base[0];
-  var ratio = downside > 0 ? (upside / downside).toFixed(2) : 'N/A';
-  html += '<h3>Overall Asymmetry</h3>';
-  html += '<p>Downside risk: -' + numberFormat(downside) + 'K | Upside potential: +' + numberFormat(upside) + 'K | Ratio: ' + ratio + '</p>';
-  var totalW = downside + upside;
-  var downPct = totalW > 0 ? Math.round(downside / totalW * 100) : 50;
-  html += '<div class="asym-bar" style="background:linear-gradient(to right,#f87171 ' + downPct + '%,#4ade80 ' + downPct + '%)"></div>';
-
-  // Per country
-  html += '<h3 style="margin-top:16px">Country-Level Risk Skew</h3>';
-  var keys = ['CN','KR','TW','US','HK','AU','TH','SG'];
-  for (var i = 0; i < keys.length; i++) {
-    var cc = keys[i];
-    var d = byCountry[cc];
-    if (!d || !d.base || d.base.length === 0) continue;
-    var cDown = d.base[0] - d.p10[0];
-    var cUp = d.p90[0] - d.base[0];
-    var cTotal = cDown + cUp;
-    var cDownPct = cTotal > 0 ? Math.round(cDown / cTotal * 100) : 50;
-    var cRatio = cDown > 0 ? (cUp / cDown).toFixed(2) : 'N/A';
-    html += '<p>' + COUNTRY_FLAGS[cc] + ' ' + COUNTRY_NAMES[cc] + ': down -' + numberFormat(cDown) + 'K / up +' + numberFormat(cUp) + 'K (ratio ' + cRatio + ')</p>';
-    html += '<div class="asym-bar" style="background:linear-gradient(to right,#f87171 ' + cDownPct + '%,#4ade80 ' + cDownPct + '%)"></div>';
-  }
-
-  el.innerHTML = html;
-}
-
-/* ---------- NUMBER FORMAT ---------- */
-function numberFormat(n) {
-  if (n === null || n === undefined) return '--';
-  var s = Math.round(n).toString();
-  var parts = [];
-  for (var i = s.length; i > 0; i -= 3) {
-    parts.unshift(s.substring(Math.max(0, i - 3), i));
-  }
-  return parts.join(',');
-}
-
-/* ---------- WORLD MAP ---------- */
+/* ============================================================
+   世界地図 (D3)
+   ============================================================ */
 function renderWorldMap() {
   try {
     var container = document.getElementById('worldMap');
-    if (!container) return;
-
-    var width = container.clientWidth || 600;
-    var height = 300;
+    var width = container.clientWidth || 500;
+    var height = container.clientHeight || 280;
+    d3.select('#worldMap').selectAll('*').remove();
 
     var svg = d3.select('#worldMap').append('svg')
-      .attr('class', 'map-svg')
-      .attr('viewBox', '0 0 ' + width + ' ' + height);
+      .attr('width', width).attr('height', height);
 
     var projection = d3.geoNaturalEarth1()
       .scale(width / 5.5)
       .translate([width / 2, height / 2]);
-
     var path = d3.geoPath().projection(projection);
 
-    var tooltip = d3.select('#worldMap').append('div')
-      .attr('class', 'map-tooltip');
+    var tooltip = d3.select('body').append('div').attr('class', 'd3-tooltip d3-tooltip-world').style('display', 'none');
+
+    svg.append('rect').attr('width', width).attr('height', height).attr('fill', '#0f1117');
 
     d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(function(world) {
-      var countries = topojson.feature(world, world.objects.countries);
+      try {
+        var countries = topojson.feature(world, world.objects.countries);
+        svg.selectAll('path.land')
+          .data(countries.features)
+          .enter().append('path')
+          .attr('class', 'land')
+          .attr('d', path)
+          .attr('fill', '#1a1d27')
+          .attr('stroke', '#2d2f3e')
+          .attr('stroke-width', 0.5);
 
-      svg.selectAll('path.country')
-        .data(countries.features)
-        .join('path')
-        .attr('class', 'country')
-        .attr('d', path)
-        .attr('fill', '#1e293b')
-        .attr('stroke', '#334155')
-        .attr('stroke-width', 0.5);
+        var rScale = d3.scaleSqrt().domain([0, 25]).range([6, 30]);
 
-      // Bubbles
-      svg.selectAll('circle.bubble')
-        .data(MARKETS)
-        .join('circle')
-        .attr('class', 'bubble')
-        .attr('cx', function(d) { return projection([d.lon, d.lat])[0]; })
-        .attr('cy', function(d) { return projection([d.lon, d.lat])[1]; })
-        .attr('r', function(d) { return 4 + d.share * 1.5; })
-        .attr('fill', function(d) {
-          if (d.eloss >= 15) return 'rgba(248,113,113,0.7)';
-          if (d.eloss >= 10) return 'rgba(251,191,36,0.7)';
-          if (d.eloss >= 5) return 'rgba(250,204,21,0.7)';
-          return 'rgba(74,222,128,0.7)';
-        })
-        .attr('stroke', function(d) {
-          if (d.eloss >= 15) return '#f87171';
-          if (d.eloss >= 10) return '#fbbf24';
-          if (d.eloss >= 5) return '#facc15';
-          return '#4ade80';
-        })
-        .attr('stroke-width', 1.5)
-        .on('mouseover', function(event, d) {
-          tooltip.style('display', 'block')
-            .html(COUNTRY_FLAGS[d.code] + ' ' + COUNTRY_NAMES[d.code] + '<br>Share: ' + d.share + '%<br>Expected Loss: ' + d.eloss + '%');
-        })
-        .on('mousemove', function(event) {
-          tooltip.style('left', (event.offsetX + 12) + 'px')
-            .style('top', (event.offsetY - 10) + 'px');
-        })
-        .on('mouseout', function() {
-          tooltip.style('display', 'none');
-        });
+        function lossColor(loss) {
+          if (loss >= 15) return '#f87171';
+          if (loss >= 10) return '#fb923c';
+          if (loss >= 5) return '#fbbf24';
+          return '#34d399';
+        }
 
-      // Labels
-      svg.selectAll('text.bubble-label')
-        .data(MARKETS)
-        .join('text')
-        .attr('class', 'bubble-label')
-        .attr('x', function(d) { return projection([d.lon, d.lat])[0]; })
-        .attr('y', function(d) { return projection([d.lon, d.lat])[1] - (6 + d.share * 1.5); })
-        .text(function(d) { return COUNTRY_FLAGS[d.code] + ' ' + d.share + '%'; });
+        var bubbles = svg.selectAll('g.bubble')
+          .data(MARKETS)
+          .enter().append('g')
+          .attr('class', 'bubble')
+          .attr('transform', function(d) {
+            var coords = projection([d.lon, d.lat]);
+            return 'translate(' + coords[0] + ',' + coords[1] + ')';
+          });
 
-    }).catch(function(err) {
-      console.warn('World map load failed:', err);
-      container.innerHTML += '<p style="color:#64748b;text-align:center;padding:40px">World map unavailable (CDN)</p>';
+        bubbles.append('circle')
+          .attr('r', function(d) { return rScale(d.share); })
+          .attr('fill', function(d) { return lossColor(d.loss); })
+          .attr('fill-opacity', 0.7)
+          .attr('stroke', function(d) { return lossColor(d.loss); })
+          .attr('stroke-width', 1.5)
+          .on('mouseover', function(ev, d) {
+            tooltip.style('display', 'block')
+              .html(d.flag + ' ' + d.name + '<br>\u30B7\u30A7\u30A2: ' + d.share + '%<br>\u671F\u5F85\u640D\u5931\u7387: ' + d.loss + '%<br>\u8A2A\u65E5\u8005: ' + Number(d.visitors).toLocaleString() + '\u5343\u4EBA');
+          })
+          .on('mousemove', function(ev) {
+            tooltip.style('left', (ev.pageX + 12) + 'px').style('top', (ev.pageY - 10) + 'px');
+          })
+          .on('mouseout', function() {
+            tooltip.style('display', 'none');
+          });
+
+        bubbles.append('text')
+          .attr('text-anchor', 'middle')
+          .attr('dy', function(d) { return rScale(d.share) + 14; })
+          .attr('fill', '#8b8fa3')
+          .attr('font-size', '10px')
+          .text(function(d) { return d.flag + ' ' + d.share + '%'; });
+      } catch(e) { console.error('\u4E16\u754C\u5730\u56F3\u63CF\u753B\u30A8\u30E9\u30FC(inner):', e); }
+    }).catch(function(e) {
+      console.error('\u4E16\u754C\u5730\u56F3TopoJSON\u8AAD\u307F\u8FBC\u307F\u30A8\u30E9\u30FC:', e);
+      svg.append('text').attr('x', width/2).attr('y', height/2)
+        .attr('text-anchor','middle').attr('fill','#6b7280').attr('font-size','13px')
+        .text('\u5730\u56F3\u30C7\u30FC\u30BF\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F');
     });
-
-    // Legend
-    var legendEl = document.getElementById('worldLegend');
-    if (legendEl) {
-      legendEl.innerHTML =
-        '<div class="legend-item"><span class="legend-dot" style="background:#f87171"></span> Loss>=15%</div>' +
-        '<div class="legend-item"><span class="legend-dot" style="background:#fbbf24"></span> Loss>=10%</div>' +
-        '<div class="legend-item"><span class="legend-dot" style="background:#facc15"></span> Loss>=5%</div>' +
-        '<div class="legend-item"><span class="legend-dot" style="background:#4ade80"></span> Loss<5%</div>';
-    }
-  } catch(e) {
-    console.error('renderWorldMap:', e);
-  }
+  } catch(e) { console.error('\u4E16\u754C\u5730\u56F3\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
 }
 
-/* ---------- JAPAN MAP ---------- */
-function renderJapanMap() {
+function renderCountryPanel() {
   try {
-    var container = document.getElementById('japanMap');
-    if (!container) return;
-
-    var width = container.clientWidth || 500;
-    var height = 300;
-
-    var svg = d3.select('#japanMap').append('svg')
-      .attr('class', 'map-svg')
-      .attr('viewBox', '0 0 ' + width + ' ' + height);
-
-    var tooltip = d3.select('#japanMap').append('div')
-      .attr('class', 'pref-tooltip');
-
-    var colorScale = d3.scaleLog()
-      .domain([5, 1800])
-      .range(['#1e3a5f', '#60a5fa'])
-      .clamp(true);
-
-    d3.json('https://raw.githubusercontent.com/dataofjapan/land/master/japan.topojson').then(function(japan) {
-      var objKey = Object.keys(japan.objects)[0];
-      var prefectures = topojson.feature(japan, japan.objects[objKey]);
-
-      // Fit projection to data
-      var projection = d3.geoMercator().fitSize([width, height], prefectures);
-      var pathGen = d3.geoPath().projection(projection);
-
-      svg.selectAll('path.pref')
-        .data(prefectures.features)
-        .join('path')
-        .attr('class', 'pref')
-        .attr('d', pathGen)
-        .attr('fill', function(d) {
-          var name = (d.properties.nam_ja || d.properties.name || d.properties.NAME || '');
-          var val = findPrefValue(name);
-          return val > 0 ? colorScale(val) : '#1e293b';
-        })
-        .attr('stroke', '#334155')
-        .attr('stroke-width', 0.5)
-        .on('mouseover', function(event, d) {
-          var name = d.properties.nam_ja || d.properties.name || d.properties.NAME || '';
-          var val = findPrefValue(name);
-          tooltip.style('display', 'block')
-            .html(name + ': ' + (val > 0 ? numberFormat(val) + ' ten-thousands' : 'N/A'));
-          d3.select(this).attr('stroke', '#f1f5f9').attr('stroke-width', 1.5);
-        })
-        .on('mousemove', function(event) {
-          tooltip.style('left', (event.offsetX + 12) + 'px')
-            .style('top', (event.offsetY - 10) + 'px');
-        })
-        .on('mouseout', function() {
-          tooltip.style('display', 'none');
-          d3.select(this).attr('stroke', '#334155').attr('stroke-width', 0.5);
-        });
-
-    }).catch(function(err) {
-      console.warn('Japan map load failed:', err);
-      container.innerHTML += '<p style="color:#64748b;text-align:center;padding:40px">Japan map unavailable (CDN)</p>';
-    });
-
-    // Legend
-    var legendEl = document.getElementById('japanLegend');
-    if (legendEl) {
-      legendEl.innerHTML =
-        '<div class="legend-item"><span class="legend-dot" style="background:#1e3a5f"></span> ~5 (ten-thousands)</div>' +
-        '<div class="legend-item"><span class="legend-dot" style="background:#3b6ea8"></span> ~100</div>' +
-        '<div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span> ~1800</div>';
+    var panel = document.getElementById('countryPanel');
+    var html = '';
+    for (var i = 0; i < MARKETS.length; i++) {
+      var m = MARKETS[i];
+      var chgClass = m.change >= 0 ? 'chg-pos' : 'chg-neg';
+      var chgSign = m.change >= 0 ? '+' : '';
+      html += '<div class="country-panel-row">' +
+        m.flag + ' ' + m.name +
+        ' <span class="' + chgClass + '">' + chgSign + m.change + '%</span>' +
+        '</div>';
     }
-  } catch(e) {
-    console.error('renderJapanMap:', e);
-  }
-}
-
-/* ---------- PREFIX MATCHING ---------- */
-var PREF_ALIASES = {
-  'Hokkaido':['Hokkaido','hokkaido','\u5317\u6d77\u9053'],
-  'Aomori':['Aomori','aomori','\u9752\u68ee'],
-  'Iwate':['Iwate','iwate','\u5ca9\u624b'],
-  'Miyagi':['Miyagi','miyagi','\u5bae\u57ce'],
-  'Akita':['Akita','akita','\u79cb\u7530'],
-  'Yamagata':['Yamagata','yamagata','\u5c71\u5f62'],
-  'Fukushima':['Fukushima','fukushima','\u798f\u5cf6'],
-  'Ibaraki':['Ibaraki','ibaraki','\u8328\u57ce'],
-  'Tochigi':['Tochigi','tochigi','\u6803\u6728'],
-  'Gunma':['Gunma','gunma','\u7fa4\u99ac'],
-  'Saitama':['Saitama','saitama','\u57fc\u7389'],
-  'Chiba':['Chiba','chiba','\u5343\u8449'],
-  'Tokyo':['Tokyo','tokyo','\u6771\u4eac'],
-  'Kanagawa':['Kanagawa','kanagawa','\u795e\u5948\u5ddd'],
-  'Niigata':['Niigata','niigata','\u65b0\u6f5f'],
-  'Toyama':['Toyama','toyama','\u5bcc\u5c71'],
-  'Ishikawa':['Ishikawa','ishikawa','\u77f3\u5ddd'],
-  'Fukui':['Fukui','fukui','\u798f\u4e95'],
-  'Yamanashi':['Yamanashi','yamanashi','\u5c71\u68a8'],
-  'Nagano':['Nagano','nagano','\u9577\u91ce'],
-  'Gifu':['Gifu','gifu','\u5c90\u961c'],
-  'Shizuoka':['Shizuoka','shizuoka','\u9759\u5ca1'],
-  'Aichi':['Aichi','aichi','\u611b\u77e5'],
-  'Mie':['Mie','mie','\u4e09\u91cd'],
-  'Shiga':['Shiga','shiga','\u6ecb\u8cc0'],
-  'Kyoto':['Kyoto','kyoto','\u4eac\u90fd'],
-  'Osaka':['Osaka','osaka','\u5927\u962a'],
-  'Hyogo':['Hyogo','hyogo','\u5175\u5eab'],
-  'Nara':['Nara','nara','\u5948\u826f'],
-  'Wakayama':['Wakayama','wakayama','\u548c\u6b4c\u5c71'],
-  'Tottori':['Tottori','tottori','\u9ce5\u53d6'],
-  'Shimane':['Shimane','shimane','\u5cf6\u6839'],
-  'Okayama':['Okayama','okayama','\u5ca1\u5c71'],
-  'Hiroshima':['Hiroshima','hiroshima','\u5e83\u5cf6'],
-  'Yamaguchi':['Yamaguchi','yamaguchi','\u5c71\u53e3'],
-  'Tokushima':['Tokushima','tokushima','\u5fb3\u5cf6'],
-  'Kagawa':['Kagawa','kagawa','\u9999\u5ddd'],
-  'Ehime':['Ehime','ehime','\u611b\u5a9b'],
-  'Kochi':['Kochi','kochi','\u9ad8\u77e5'],
-  'Fukuoka':['Fukuoka','fukuoka','\u798f\u5ca1'],
-  'Saga':['Saga','saga','\u4f50\u8cc0'],
-  'Nagasaki':['Nagasaki','nagasaki','\u9577\u5d0e'],
-  'Kumamoto':['Kumamoto','kumamoto','\u718a\u672c'],
-  'Oita':['Oita','oita','\u5927\u5206'],
-  'Miyazaki':['Miyazaki','miyazaki','\u5bae\u5d0e'],
-  'Kagoshima':['Kagoshima','kagoshima','\u9e7f\u5150\u5cf6'],
-  'Okinawa':['Okinawa','okinawa','\u6c96\u7e04']
-};
-
-function findPrefValue(topoName) {
-  if (!topoName) return 0;
-  var clean = topoName.replace(/[\s\-]/g, '');
-  var keys = Object.keys(PREF_VISITORS);
-  for (var i = 0; i < keys.length; i++) {
-    var k = keys[i];
-    if (clean.toLowerCase().indexOf(k.toLowerCase()) !== -1) return PREF_VISITORS[k];
-    var aliases = PREF_ALIASES[k];
-    if (aliases) {
-      for (var j = 0; j < aliases.length; j++) {
-        if (clean.indexOf(aliases[j]) !== -1) return PREF_VISITORS[k];
-      }
-    }
-  }
-  return 0;
-}
-
-/* ---------- TRANSFORM BY COUNTRY (API) ---------- */
-function transformByCountry(raw, div) {
-  try {
-    var result = {};
-    var keys = Object.keys(raw);
-    for (var i = 0; i < keys.length; i++) {
-      var cc = keys[i];
-      var d = raw[cc];
-      if (!d) continue;
-      var scenarios = d.scenarios || d;
-      var bArr = (scenarios.base || {}).median || [];
-      var pArr = (scenarios.pessimistic || {}).median || (scenarios.base || {}).p10 || [];
-      var oArr = (scenarios.optimistic || {}).median || (scenarios.base || {}).p90 || [];
-      result[cc] = {
-        base: bArr.map(function(v) { return Math.round(v / div); }),
-        p10: pArr.map(function(v) { return Math.round(v / div); }),
-        p90: oArr.map(function(v) { return Math.round(v / div); })
-      };
-    }
-    return result;
-  } catch(e) {
-    console.error('transformByCountry:', e);
-    return {};
-  }
+    panel.innerHTML = html;
+  } catch(e) { console.error('\u56FD\u30EA\u30B9\u30C8\u30D1\u30CD\u30EB\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
 }
 
 /* ============================================================
-   INITIALIZATION
+   日本地図 (D3)
    ============================================================ */
-
-// 1. Render maps (independent of data)
-renderWorldMap();
-renderJapanMap();
-
-// 2. Generate fallback and render immediately
-var fb = generateFallback();
-renderAll(fb.months, fb.base, fb.p10, fb.p90, fb.byCountry, 'STATIC');
-
-// 3. Try API asynchronously
-(async function() {
+function renderJapanMap() {
   try {
-    var ctrl = new AbortController();
-    setTimeout(function() { ctrl.abort(); }, 8000);
-    var resp = await fetch('/api/v1/tourism/three-scenarios?source_country=ALL', { signal: ctrl.signal });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    var json = await resp.json();
-    var d = json.data || json;
-    var s = d.scenarios || {};
-    var base = (s.base || {}).median || [];
-    var p10 = (s.pessimistic || {}).median || (s.base || {}).p10 || [];
-    var p90 = (s.optimistic || {}).median || (s.base || {}).p90 || [];
-    if (base.length > 0) {
-      var div = base[0] > 100000 ? 1000 : 1;
-      var apiMonths = d.months || fb.months;
-      var apiByCountry = transformByCountry(d.by_country || {}, div);
-      // Merge fallback countries not in API
-      var fallbackKeys = Object.keys(fb.byCountry);
-      for (var i = 0; i < fallbackKeys.length; i++) {
-        if (!apiByCountry[fallbackKeys[i]]) {
-          apiByCountry[fallbackKeys[i]] = fb.byCountry[fallbackKeys[i]];
-        }
-      }
-      renderAll(
-        apiMonths,
-        base.map(function(v) { return Math.round(v / div); }),
-        p10.map(function(v) { return Math.round(v / div); }),
-        p90.map(function(v) { return Math.round(v / div); }),
-        apiByCountry,
-        d.model || 'LIVE'
-      );
-    }
-  } catch(e) {
-    console.warn('API unavailable, using fallback:', e.message);
-  }
-})();
+    var container = document.getElementById('japanMap');
+    var width = container.clientWidth || 500;
+    var height = container.clientHeight || 280;
+    d3.select('#japanMap').selectAll('*').remove();
 
+    var svg = d3.select('#japanMap').append('svg')
+      .attr('width', width).attr('height', height);
+
+    var ttip = d3.select('body').selectAll('.d3-tooltip-jp').data([0]);
+    ttip = ttip.enter().append('div').attr('class', 'd3-tooltip d3-tooltip-jp').style('display', 'none').merge(ttip);
+
+    var colorScale = d3.scaleLog()
+      .domain([5, 50, 500, 1800])
+      .range(['#1a2744', '#1e4d8c', '#f59e0b', '#ef4444'])
+      .clamp(true);
+
+    d3.json('https://raw.githubusercontent.com/dataofjapan/land/master/japan.topojson').then(function(japan) {
+      try {
+        var features = topojson.feature(japan, japan.objects.japan);
+
+        var prefNames = [
+          '','\u5317\u6D77\u9053','\u9752\u68EE','\u5CA9\u624B','\u5BAE\u57CE','\u79CB\u7530','\u5C71\u5F62','\u798F\u5CF6',
+          '\u8328\u57CE','\u6803\u6728','\u7FA4\u99AC','\u57FC\u7389','\u5343\u8449','\u6771\u4EAC','\u795E\u5948\u5DDD',
+          '\u65B0\u6F5F','\u5BCC\u5C71','\u77F3\u5DDD','\u798F\u4E95','\u5C71\u68A8','\u9577\u91CE',
+          '\u5C90\u961C','\u9759\u5CA1','\u611B\u77E5','\u4E09\u91CD','\u6ECB\u8CC0',
+          '\u4EAC\u90FD','\u5927\u962A','\u5175\u5EAB','\u5948\u826F','\u548C\u6B4C\u5C71',
+          '\u9CE5\u53D6','\u5CF6\u6839','\u5CA1\u5C71','\u5E83\u5CF6','\u5C71\u53E3',
+          '\u5FB3\u5CF6','\u9999\u5DDD','\u611B\u5A9B','\u9AD8\u77E5',
+          '\u798F\u5CA1','\u4F50\u8CC0','\u9577\u5D0E','\u718A\u672C','\u5927\u5206',
+          '\u5BAE\u5D0E','\u9E7F\u5150\u5CF6','\u6C96\u7E04'
+        ];
+
+        var projection2 = d3.geoMercator()
+          .center([137, 38])
+          .scale(width * 2.2)
+          .translate([width / 2, height / 2]);
+        var path2 = d3.geoPath().projection(projection2);
+
+        svg.selectAll('path.pref')
+          .data(features.features)
+          .enter().append('path')
+          .attr('class', 'pref')
+          .attr('d', path2)
+          .attr('fill', function(d) {
+            var id = d.properties.id || d.id;
+            var name = prefNames[id] || '';
+            var val = PREF_VISITORS[name] || 5;
+            return colorScale(val);
+          })
+          .attr('stroke', '#2d2f3e')
+          .attr('stroke-width', 0.5)
+          .style('cursor', 'pointer')
+          .on('mouseover', function(ev, d) {
+            var id = d.properties.id || d.id;
+            var name = prefNames[id] || '\u4E0D\u660E';
+            var val = PREF_VISITORS[name] || 0;
+            d3.select(this).attr('stroke', '#60a5fa').attr('stroke-width', 2);
+            ttip.style('display', 'block')
+              .html(name + '<br>' + val + ' \u4E07\u4EBA');
+          })
+          .on('mousemove', function(ev) {
+            ttip.style('left', (ev.pageX + 12) + 'px').style('top', (ev.pageY - 10) + 'px');
+          })
+          .on('mouseout', function() {
+            d3.select(this).attr('stroke', '#2d2f3e').attr('stroke-width', 0.5);
+            ttip.style('display', 'none');
+          })
+          .on('click', function(ev, d) {
+            try {
+              var id = d.properties.id || d.id;
+              var name = prefNames[id] || '';
+              var sel = document.getElementById('selPref');
+              for (var i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === name) {
+                  sel.value = name;
+                  renderPrefTable();
+                  break;
+                }
+              }
+            } catch(e) { console.error('\u90FD\u9053\u5E9C\u770C\u30AF\u30EA\u30C3\u30AF\u30A8\u30E9\u30FC:', e); }
+          });
+      } catch(e) { console.error('\u65E5\u672C\u5730\u56F3\u63CF\u753B\u30A8\u30E9\u30FC(inner):', e); }
+    }).catch(function(e) {
+      console.error('\u65E5\u672C\u5730\u56F3TopoJSON\u8AAD\u307F\u8FBC\u307F\u30A8\u30E9\u30FC:', e);
+      svg.append('text').attr('x', width/2).attr('y', height/2)
+        .attr('text-anchor','middle').attr('fill','#6b7280').attr('font-size','13px')
+        .text('\u5730\u56F3\u30C7\u30FC\u30BF\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F');
+    });
+  } catch(e) { console.error('\u65E5\u672C\u5730\u56F3\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+}
+
+/* ============================================================
+   統合描画
+   ============================================================ */
+function renderAll(months, base, p10, p90, byCountry, mode) {
+  try {
+    renderScenarioCards(base, p10, p90);
+    renderForecastChart(months, base, p10, p90);
+    renderCountryTable(byCountry);
+    renderPrefTable();
+    var badge = document.getElementById('statusBadge');
+    badge.textContent = mode;
+    if (mode === 'LIVE') {
+      badge.className = 'status-badge status-live';
+    } else {
+      badge.className = 'status-badge status-static';
+    }
+    document.getElementById('footerText').textContent = 'SCRI Platform v1.5.0 | 29\u5909\u6570\u76F8\u95A2\u884C\u5217\u30E2\u30F3\u30C6\u30AB\u30EB\u30ED | ' + mode;
+  } catch(e) { console.error('\u7D71\u5408\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+}
+
+function transformByCountry(bc, div) {
+  try {
+    var out = {};
+    for (var c in bc) {
+      var entry = bc[c];
+      var med = (entry.median || []).map(function(v) { return Math.round(v / div); });
+      var lo = (entry.p10 || []).map(function(v) { return Math.round(v / div); });
+      var hi = (entry.p90 || []).map(function(v) { return Math.round(v / div); });
+      out[c] = { median: med, p10: lo, p90: hi };
+    }
+    return out;
+  } catch(e) { console.error('\u56FD\u5225\u5909\u63DB\u30A8\u30E9\u30FC:', e); return {}; }
+}
+
+/* ============================================================
+   データ読み込み
+   ============================================================ */
+function loadData() {
+  try {
+    renderAll(FALLBACK_MONTHS, FALLBACK.base, FALLBACK.p10, FALLBACK.p90, FALLBACK.by_country, 'STATIC');
+
+    var country = document.getElementById('selCountry').value || 'ALL';
+    var ctrl = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, 8000);
+
+    fetch('/api/v1/tourism/three-scenarios?source_country=' + country, { signal: ctrl.signal })
+      .then(function(resp) {
+        clearTimeout(timer);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      })
+      .then(function(json) {
+        try {
+          var d = json.data || json;
+          var s = d.scenarios || {};
+          var base = (s.base || {}).median || [];
+          var p10 = (s.pessimistic || {}).median || (s.base || {}).p10 || [];
+          var p90 = (s.optimistic || {}).median || (s.base || {}).p90 || [];
+          var bc = d.by_country || {};
+          if (base.length > 0) {
+            var div = base[0] > 100000 ? 1000 : 1;
+            renderAll(
+              d.months || FALLBACK_MONTHS,
+              base.map(function(v) { return Math.round(v / div); }),
+              p10.map(function(v) { return Math.round(v / div); }),
+              p90.map(function(v) { return Math.round(v / div); }),
+              transformByCountry(bc, div),
+              d.model || 'LIVE'
+            );
+          }
+        } catch(e) { console.warn('API\u30C7\u30FC\u30BF\u51E6\u7406\u30A8\u30E9\u30FC:', e.message); }
+      })
+      .catch(function(e) { console.warn('API\u63A5\u7D9A\u30A8\u30E9\u30FC:', e.message); });
+  } catch(e) { console.error('\u30C7\u30FC\u30BF\u8AAD\u307F\u8FBC\u307F\u30A8\u30E9\u30FC:', e); }
+}
+
+/* ============================================================
+   初期化
+   ============================================================ */
+(function() {
+  try {
+    renderWorldMap();
+    renderCountryPanel();
+    renderJapanMap();
+    loadData();
+
+    document.getElementById('selCountry').onchange = function() {
+      try { loadData(); } catch(e) { console.error('\u56FD\u5207\u66FF\u30A8\u30E9\u30FC:', e); }
+    };
+    document.getElementById('selPref').onchange = function() {
+      try { renderPrefTable(); } catch(e) { console.error('\u90FD\u9053\u5E9C\u770C\u5207\u66FF\u30A8\u30E9\u30FC:', e); }
+    };
+  } catch(e) { console.error('\u521D\u671F\u5316\u30A8\u30E9\u30FC:', e); }
+})();
 </script>
+
 </body>
 </html>
