@@ -866,8 +866,9 @@ async function loadThreeScenarios() {
     const resp = await fetch('/api/v1/tourism/three-scenarios?source_country=' + currentCountry + '&prefecture=' + encodeURIComponent(currentPref));
     if (!resp.ok) throw new Error('API error ' + resp.status);
     const json = await resp.json();
-    threeScenarioData = json;
-    console.log('Three-scenarios API loaded, model=' + (json.model || 'unknown'));
+    // APIミドルウェアの data ラッパーを解除
+    threeScenarioData = json.data || json;
+    console.log('Three-scenarios API loaded, model=' + (threeScenarioData.model || 'unknown'));
   } catch(e) {
     console.warn('Three-scenarios API fallback:', e.message);
     threeScenarioData = SCENARIO_FALLBACK;
