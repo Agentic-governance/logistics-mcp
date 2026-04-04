@@ -102,8 +102,8 @@ tr:hover{background:#1e2130;}
     <label>ソース国:
       <select id="selCountry">
         <option value="ALL">全市場</option>
-        <option value="CN">&#x1F1E8;&#x1F1F3; 中国</option>
         <option value="KR">&#x1F1F0;&#x1F1F7; 韓国</option>
+        <option value="CN">&#x1F1E8;&#x1F1F3; 中国</option>
         <option value="TW">&#x1F1F9;&#x1F1FC; 台湾</option>
         <option value="US">&#x1F1FA;&#x1F1F8; 米国</option>
         <option value="AU">&#x1F1E6;&#x1F1FA; 豪州</option>
@@ -115,14 +115,6 @@ tr:hover{background:#1e2130;}
     <label>都道府県:
       <select id="selPref">
         <option value="ALL">全国</option>
-        <option value="東京">東京</option>
-        <option value="大阪">大阪</option>
-        <option value="京都">京都</option>
-        <option value="北海道">北海道</option>
-        <option value="福岡">福岡</option>
-        <option value="沖縄">沖縄</option>
-        <option value="新潟">新潟</option>
-        <option value="長野">長野</option>
       </select>
     </label>
   </div>
@@ -147,199 +139,289 @@ tr:hover{background:#1e2130;}
 </div>
 
 <!-- 3シナリオカード -->
-<div class="scenario-row" id="scenarioCards">
+<div class="scenario-row">
   <div class="scenario-card pessimistic">
     <div class="scenario-label">悲観 (p10)</div>
-    <div class="scenario-value" id="scPessVal">---</div>
-    <div class="scenario-diff" id="scPessDiff" style="color:#f87171;">---</div>
-    <div class="scenario-desc">円高10% + 日中悪化 + 景気後退</div>
+    <div class="scenario-value" id="valPess">---</div>
+    <div class="scenario-diff" id="diffPess"></div>
+    <div class="scenario-desc">地政学リスク・入国制限強化等のダウンサイドシナリオ</div>
   </div>
   <div class="scenario-card base">
     <div class="scenario-label">ベース (p50)</div>
-    <div class="scenario-value" id="scBaseVal">---</div>
-    <div class="scenario-diff" id="scBaseDiff" style="color:#60a5fa;">基準値</div>
-    <div class="scenario-desc">現状の為替・経済・地政学が継続</div>
+    <div class="scenario-value" id="valBase">---</div>
+    <div class="scenario-diff" id="diffBase"></div>
+    <div class="scenario-desc">現行政策継続・為替安定の中央シナリオ</div>
   </div>
   <div class="scenario-card optimistic">
     <div class="scenario-label">楽観 (p90)</div>
-    <div class="scenario-value" id="scOptVal">---</div>
-    <div class="scenario-diff" id="scOptDiff" style="color:#34d399;">---</div>
-    <div class="scenario-desc">円安15% + 中国回復 + 増便</div>
+    <div class="scenario-value" id="valOpt">---</div>
+    <div class="scenario-diff" id="diffOpt"></div>
+    <div class="scenario-desc">ビザ緩和・円安進行・万博効果等のアップサイド</div>
   </div>
 </div>
 
 <!-- 予測チャート -->
 <div class="chart-card">
-  <h3>月次来訪者数予測 (2026/04〜2027/12)</h3>
+  <h3>3シナリオ予測 ― 全市場合計 (万人/月)</h3>
   <div class="chart-wrap">
-    <canvas id="forecastChart"></canvas>
+    <canvas id="chartForecast"></canvas>
   </div>
 </div>
 
-<!-- 国別影響テーブル -->
+<!-- 国別テーブル -->
 <div class="table-card">
-  <h3>国別予測（月次中央値、初月）</h3>
-  <table id="countryTable">
-    <thead>
-      <tr><th>国</th><th class="num-r">悲観 (千人)</th><th class="num-r">ベース (千人)</th><th class="num-r">楽観 (千人)</th><th class="num-r">帯幅 (千人)</th></tr>
-    </thead>
-    <tbody></tbody>
+  <h3>ソースマーケット別予測 (直近月・万人)</h3>
+  <table id="tblCountry">
+    <thead><tr><th>市場</th><th class="num-r">悲観</th><th class="num-r">ベース</th><th class="num-r">楽観</th><th class="num-r">帯幅</th></tr></thead>
+    <tbody id="tbodyCountry"></tbody>
   </table>
 </div>
 
-<!-- 都道府県別テーブル -->
+<!-- 都道府県テーブル -->
 <div class="table-card">
-  <h3 id="prefTableTitle">都道府県別 来訪者予測（万人/年）</h3>
-  <table id="prefTable">
-    <thead>
-      <tr><th>#</th><th>都道府県</th><th class="num-r">来訪者 (万人)</th><th>シェア</th></tr>
-    </thead>
-    <tbody></tbody>
+  <h3>都道府県別来訪者予測 ― 上位15 (万人/年)</h3>
+  <table id="tblPref">
+    <thead><tr><th>都道府県</th><th class="num-r">来訪者(万人/年)</th><th class="num-r">全国シェア</th></tr></thead>
+    <tbody id="tbodyPref"></tbody>
   </table>
 </div>
 
-<!-- 非対称性 -->
+<!-- 非対称性説明 -->
 <div class="asym-card">
-  <h3>分布の非対称性</h3>
-  <p>中国市場の予測帯幅は韓国の約1.2倍。日中関係の政治ショック&sigma;=0.35が韓国の0.08の4.4倍であることを反映。
-  悲観シナリオでは中国市場のみ前年比&#x2212;15.9%と大幅減となり、全体予測の下振れリスクの主因となっている。
-  一方、楽観シナリオでは円安と中国回復の相乗効果で+15.3%の上振れが見込まれる。</p>
+  <h3>予測の非対称性について</h3>
+  <p id="asymText">
+    中国市場の予測帯幅(55%)は韓国市場(23%)の約2.4倍です。
+    これは中国の政治リスク(団体旅行規制、ビザ政策変更等)による不確実性の高さを反映しています。
+    政治ショックの標準偏差は中国0.35に対し韓国0.08と推定されており、
+    モンテカルロシミュレーションの結果にも明確な非対称性が現れています。
+  </p>
 </div>
 
 <!-- フッター -->
-<div class="footer" id="footerText">SCRI Platform v1.5.0 | 29変数相関行列モンテカルロ | STATIC</div>
+<div class="footer">
+  SCRI Supply Chain Risk Intelligence &copy; 2026 | データソース: JNTO, 各国統計局, モンテカルロシミュレーション
+</div>
 
 <script>
-/* ============================================================
-   データ定義
-   ============================================================ */
-var MARKETS = [
-  {code:'CN',name:'\u4E2D\u56FD',flag:'\u{1F1E8}\u{1F1F3}',lat:35,lon:105,share:24.8,loss:21.2,visitors:5200,change:-8},
-  {code:'KR',name:'\u97D3\u56FD',flag:'\u{1F1F0}\u{1F1F7}',lat:37,lon:127.5,share:19.3,loss:7.6,visitors:8600,change:5},
-  {code:'TW',name:'\u53F0\u6E7E',flag:'\u{1F1F9}\u{1F1FC}',lat:23.5,lon:121,share:17.2,loss:9.8,visitors:4800,change:3},
-  {code:'US',name:'\u7C73\u56FD',flag:'\u{1F1FA}\u{1F1F8}',lat:39,lon:-98,share:8.5,loss:4.2,visitors:3600,change:12},
-  {code:'AU',name:'\u8C6A\u5DDE',flag:'\u{1F1E6}\u{1F1FA}',lat:-25,lon:133,share:4.8,loss:5.5,visitors:620,change:9},
-  {code:'TH',name:'\u30BF\u30A4',flag:'\u{1F1F9}\u{1F1ED}',lat:15,lon:100,share:3.2,loss:14.5,visitors:420,change:-3},
-  {code:'HK',name:'\u9999\u6E2F',flag:'\u{1F1ED}\u{1F1F0}',lat:22.3,lon:114.2,share:6.2,loss:11.2,visitors:1310,change:2},
-  {code:'SG',name:'\u30B7\u30F3\u30AC\u30DD\u30FC\u30EB',flag:'\u{1F1F8}\u{1F1EC}',lat:1.35,lon:103.8,share:2.8,loss:3.8,visitors:380,change:6}
+/* ===================================================================
+   インバウンド観光リスクダッシュボード - JavaScript
+   ルール: var のみ、テンプレートリテラル禁止、全関数 try-catch
+   =================================================================== */
+
+/* ----- 定数 ----- */
+var COUNTRY_META = {
+  KR: {flag:'\uD83C\uDDF0\uD83C\uDDF7', name:'韓国'},
+  CN: {flag:'\uD83C\uDDE8\uD83C\uDDF3', name:'中国'},
+  TW: {flag:'\uD83C\uDDF9\uD83C\uDDFC', name:'台湾'},
+  US: {flag:'\uD83C\uDDFA\uD83C\uDDF8', name:'米国'},
+  AU: {flag:'\uD83C\uDDE6\uD83C\uDDFA', name:'豪州'},
+  TH: {flag:'\uD83C\uDDF9\uD83C\uDDED', name:'タイ'},
+  HK: {flag:'\uD83C\uDDED\uD83C\uDDF0', name:'香港'},
+  SG: {flag:'\uD83C\uDDF8\uD83C\uDDEC', name:'シンガポール'}
+};
+var COUNTRY_CODES = ['KR','CN','TW','US','AU','TH','HK','SG'];
+
+/* 世界地図用座標 */
+var COUNTRY_COORDS = {
+  KR:[127.0,37.5], CN:[104.2,35.9], TW:[121.0,23.7], US:[-95.7,37.1],
+  AU:[133.8,-25.3], TH:[100.5,15.9], HK:[114.2,22.3], SG:[103.8,1.4]
+};
+
+/* ----- 都道府県データ (万人/年, 全市場) ----- */
+var PREF_NAMES = [
+  '東京','大阪','京都','北海道','福岡','沖縄','千葉','愛知','神奈川','兵庫',
+  '静岡','広島','奈良','長野','岐阜','山梨','熊本','宮城','石川','鹿児島',
+  '長崎','大分','栃木','群馬','三重','岡山','富山','佐賀','新潟','香川',
+  '青森','和歌山','山口','福島','滋賀','岩手','秋田','山形','島根','鳥取',
+  '徳島','愛媛','宮崎','高知','茨城','埼玉','福井'
 ];
-
-var PREF_VISITORS = {
-  '\u5317\u6D77\u9053':390,'\u9752\u68EE':8,'\u5CA9\u624B':5,'\u5BAE\u57CE':28,'\u79CB\u7530':5,'\u5C71\u5F62':6,'\u798F\u5CF6':12,
-  '\u8328\u57CE':18,'\u6803\u6728':22,'\u7FA4\u99AC':12,'\u57FC\u7389':35,'\u5343\u8449':85,'\u6771\u4EAC':1800,'\u795E\u5948\u5DDD':170,
-  '\u65B0\u6F5F':45,'\u5BCC\u5C71':15,'\u77F3\u5DDD':72,'\u798F\u4E95':10,'\u5C71\u68A8':48,'\u9577\u91CE':67,
-  '\u5C90\u961C':32,'\u9759\u5CA1':56,'\u611B\u77E5':220,'\u4E09\u91CD':42,'\u6ECB\u8CC0':35,
-  '\u4EAC\u90FD':500,'\u5927\u962A':1000,'\u5175\u5EAB':110,'\u5948\u826F':140,'\u548C\u6B4C\u5C71':18,
-  '\u9CE5\u53D6':8,'\u5CF6\u6839':5,'\u5CA1\u5C71':28,'\u5E83\u5CF6':85,'\u5C71\u53E3':15,
-  '\u5FB3\u5CF6':6,'\u9999\u5DDD':22,'\u611B\u5A9B':12,'\u9AD8\u77E5':5,
-  '\u798F\u5CA1':335,'\u4F50\u8CC0':8,'\u9577\u5D0E':100,'\u718A\u672C':32,'\u5927\u5206':25,
-  '\u5BAE\u5D0E':12,'\u9E7F\u5150\u5CF6':18,'\u6C96\u7E04':280
-};
-
+var PREF_VISITORS = [
+  1825,1203,892,745,512,398,376,365,342,298,
+  245,223,212,198,187,176,168,165,156,148,
+  142,138,132,128,125,118,112,108,105,98,
+  95,92,88,85,82,78,72,68,65,62,
+  58,55,52,48,132,125,72
+];
+/* 国別の都道府県シェア (上位県の比率調整) */
 var PREF_SHARE = {
-  'KR':{'\u6771\u4EAC':0.22,'\u5927\u962A':0.18,'\u798F\u5CA1':0.20,'\u5317\u6D77\u9053':0.10,'\u6C96\u7E04':0.08,'\u4EAC\u90FD':0.07},
-  'CN':{'\u6771\u4EAC':0.32,'\u5927\u962A':0.20,'\u4EAC\u90FD':0.10,'\u5317\u6D77\u9053':0.08,'\u6C96\u7E04':0.06,'\u798F\u5CA1':0.08},
-  'TW':{'\u6771\u4EAC':0.28,'\u5927\u962A':0.18,'\u5317\u6D77\u9053':0.12,'\u6C96\u7E04':0.09,'\u4EAC\u90FD':0.09,'\u798F\u5CA1':0.10},
-  'US':{'\u6771\u4EAC':0.40,'\u5927\u962A':0.18,'\u4EAC\u90FD':0.12,'\u5317\u6D77\u9053':0.06,'\u6C96\u7E04':0.05},
-  'AU':{'\u6771\u4EAC':0.30,'\u5927\u962A':0.15,'\u5317\u6D77\u9053':0.22,'\u6C96\u7E04':0.08,'\u4EAC\u90FD':0.10},
-  'TH':{'\u6771\u4EAC':0.25,'\u5927\u962A':0.18,'\u5317\u6D77\u9053':0.08,'\u4EAC\u90FD':0.10,'\u798F\u5CA1':0.07},
-  'HK':{'\u6771\u4EAC':0.28,'\u5927\u962A':0.20,'\u4EAC\u90FD':0.08,'\u5317\u6D77\u9053':0.10,'\u6C96\u7E04':0.10,'\u798F\u5CA1':0.09},
-  'SG':{'\u6771\u4EAC':0.30,'\u5927\u962A':0.18,'\u4EAC\u90FD':0.12,'\u5317\u6D77\u9053':0.10,'\u6C96\u7E04':0.08}
+  KR: {0:1.05,1:1.15,2:0.85,3:1.20,4:1.45,5:0.90,6:0.95,7:0.90,8:0.95,9:1.10},
+  CN: {0:1.30,1:1.10,2:0.95,3:1.15,4:0.75,5:0.60,6:1.20,7:0.85,8:1.05,9:0.90},
+  TW: {0:1.10,1:1.05,2:1.00,3:1.25,4:0.90,5:1.30,6:0.90,7:0.95,8:1.00,9:0.95},
+  US: {0:1.45,1:0.85,2:1.30,3:0.80,4:0.65,5:0.70,6:0.75,7:0.85,8:1.10,9:0.80},
+  AU: {0:1.35,1:0.80,2:1.25,3:1.10,4:0.55,5:0.75,6:0.70,7:0.80,8:1.00,9:0.75},
+  TH: {0:1.20,1:1.00,2:0.90,3:1.35,4:0.80,5:0.85,6:0.95,7:0.90,8:0.95,9:0.85},
+  HK: {0:1.25,1:1.10,2:0.90,3:1.00,4:0.95,5:0.80,6:1.05,7:0.90,8:1.00,9:0.95},
+  SG: {0:1.30,1:0.90,2:1.15,3:1.05,4:0.70,5:0.85,6:0.80,7:0.90,8:1.05,9:0.85}
 };
 
-/* フォールバックデータ生成 */
+/* ----- フォールバックデータ生成 (人単位) ----- */
 var FALLBACK_MONTHS = [];
-var FALLBACK = {base:[],p10:[],p90:[],by_country:{}};
-
-(function() {
+(function(){
   try {
-    var BASE = {KR:716,CN:433,TW:400,US:300,AU:53,TH:35,HK:109,SG:45};
-    var CAL = {
-      KR:{4:1.15,7:1.35,8:1.40,2:0.75,9:0.70},
-      CN:{10:2.20,5:1.60,2:0.45},
-      TW:{4:1.20,7:1.15,2:0.55},
-      US:{7:1.45,8:1.50,11:0.75,12:0.80},
-      AU:{7:2.50,8:2.80,1:1.80,5:0.85},
-      TH:{4:1.20,10:1.15},
-      HK:{4:1.15,10:1.20,2:0.50},
-      SG:{4:1.15,12:1.20}
-    };
-    for (var y=2026;y<=2027;y++) {
-      var sm = y===2026?4:1;
-      for (var m=sm;m<=12;m++) {
-        FALLBACK_MONTHS.push(y+'/'+String(m).padStart(2,'0'));
-      }
+    var startY = 2026, startM = 4;
+    for (var i = 0; i < 21; i++) {
+      var y = startY + Math.floor((startM + i - 1) / 12);
+      var m = ((startM + i - 1) % 12) + 1;
+      FALLBACK_MONTHS.push(y + '/' + (m < 10 ? '0' + m : m));
     }
-    for (var c in BASE) {
-      FALLBACK.by_country[c] = {median:[],p10:[],p90:[]};
-    }
-    for (var i=0;i<FALLBACK_MONTHS.length;i++) {
-      var mo = parseInt(FALLBACK_MONTHS[i].split('/')[1]);
-      var total = 0;
-      for (var c in BASE) {
-        var cal = (CAL[c]||{})[mo] || 1.0;
-        var v = Math.round(BASE[c] * cal);
-        total += v;
-        FALLBACK.by_country[c].median.push(v);
-        FALLBACK.by_country[c].p10.push(Math.round(v*0.80));
-        FALLBACK.by_country[c].p90.push(Math.round(v*1.20));
-      }
-      total = Math.round(total * 1.25);
-      FALLBACK.base.push(total);
-      FALLBACK.p10.push(Math.round(total*0.85));
-      FALLBACK.p90.push(Math.round(total*1.15));
-    }
-  } catch(e) { console.error('\u30D5\u30A9\u30FC\u30EB\u30D0\u30C3\u30AF\u751F\u6210\u30A8\u30E9\u30FC:', e); }
+  } catch(e) { console.error('FALLBACK_MONTHS:', e); }
 })();
 
-/* ============================================================
-   チャートインスタンス
-   ============================================================ */
-var forecastChartInstance = null;
+var BASE_MONTHLY = {KR:716000, CN:433000, TW:400000, US:300000, AU:53000, TH:35000, HK:109000, SG:45000};
+var CAL = {
+  KR:{7:1.35, 8:1.40, 4:1.15, 3:1.10, 2:0.75, 9:0.80, 10:1.10},
+  CN:{10:2.20, 5:1.60, 2:0.45, 1:0.55, 9:1.20},
+  TW:{4:1.20, 7:1.15, 8:1.10, 2:0.55},
+  US:{7:1.45, 8:1.50, 4:1.15, 11:0.75, 12:0.80},
+  AU:{7:2.50, 8:2.80, 1:1.80, 2:1.60, 5:0.85, 6:0.90},
+  TH:{4:1.20, 10:1.15},
+  HK:{4:1.15, 10:1.20, 2:0.50},
+  SG:{4:1.15, 12:1.20}
+};
+/* 国別の帯幅係数（政治リスク反映） */
+var BAND = {KR:0.23, CN:0.55, TW:0.20, US:0.25, AU:0.22, TH:0.18, HK:0.20, SG:0.15};
 
-/* ============================================================
-   描画関数群
-   ============================================================ */
-
-function renderScenarioCards(base, p10, p90) {
+var FALLBACK = {base:[], p10:[], p90:[], pessimistic:[], optimistic:[], by_country:{}};
+(function(){
   try {
-    var bv = base[0] || 0;
-    var pv = p10[0] || 0;
-    var ov = p90[0] || 0;
-    document.getElementById('scBaseVal').textContent = Number(bv).toLocaleString() + ' \u5343\u4EBA';
-    document.getElementById('scPessVal').textContent = Number(pv).toLocaleString() + ' \u5343\u4EBA';
-    document.getElementById('scOptVal').textContent = Number(ov).toLocaleString() + ' \u5343\u4EBA';
-    var pessPct = bv > 0 ? (((pv - bv) / bv) * 100).toFixed(1) : '---';
-    var optPct = bv > 0 ? ('+' + (((ov - bv) / bv) * 100).toFixed(1)) : '---';
-    document.getElementById('scPessDiff').textContent = pessPct + '%';
-    document.getElementById('scOptDiff').textContent = optPct + '%';
-    document.getElementById('scBaseDiff').textContent = '\u57FA\u6E96\u5024';
-  } catch(e) { console.error('\u30B7\u30CA\u30EA\u30AA\u30AB\u30FC\u30C9\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+    var c;
+    for (c in BASE_MONTHLY) {
+      FALLBACK.by_country[c] = {median:[], p10:[], p90:[]};
+    }
+    for (var i = 0; i < 21; i++) {
+      var mo = parseInt(FALLBACK_MONTHS[i].split('/')[1]);
+      var total_base = 0, total_p10 = 0, total_p90 = 0;
+      for (c in BASE_MONTHLY) {
+        var calVal = (CAL[c] || {})[mo] || 1.0;
+        var v = Math.round(BASE_MONTHLY[c] * calVal);
+        var band = BAND[c] || 0.20;
+        FALLBACK.by_country[c].median.push(v);
+        FALLBACK.by_country[c].p10.push(Math.round(v * (1 - band)));
+        FALLBACK.by_country[c].p90.push(Math.round(v * (1 + band)));
+        total_base += v;
+        total_p10 += Math.round(v * (1 - band));
+        total_p90 += Math.round(v * (1 + band));
+      }
+      /* 非掲載市場の小国を考慮して x1.01 */
+      FALLBACK.base.push(Math.round(total_base * 1.01));
+      FALLBACK.p10.push(Math.round(total_p10 * 1.01));
+      FALLBACK.p90.push(Math.round(total_p90 * 1.01));
+    }
+    /* 悲観=p10, 楽観=p90 と同義（フォールバック時） */
+    FALLBACK.pessimistic = FALLBACK.p10.slice();
+    FALLBACK.optimistic = FALLBACK.p90.slice();
+  } catch(e) { console.error('FALLBACK生成:', e); }
+})();
+
+/* ----- ユーティリティ ----- */
+function toMan(arr) {
+  try {
+    return arr.map(function(v){ return Math.round(v / 10000 * 10) / 10; });
+  } catch(e) { console.error('toMan:', e); return []; }
+}
+function toManByCountry(bc) {
+  try {
+    var out = {};
+    for (var c in bc) {
+      out[c] = {
+        median: toMan(bc[c].median),
+        p10: toMan(bc[c].p10),
+        p90: toMan(bc[c].p90)
+      };
+    }
+    return out;
+  } catch(e) { console.error('toManByCountry:', e); return {}; }
+}
+function fmtMan(v) {
+  try {
+    if (v >= 100) return Math.round(v) + '万人';
+    return v.toFixed(1) + '万人';
+  } catch(e) { return '---'; }
+}
+function fmtManMonth(v) {
+  try {
+    return Math.round(v) + '万人/月';
+  } catch(e) { return '---'; }
 }
 
-function renderForecastChart(months, base, p10, p90) {
+/* ----- グローバル状態 ----- */
+var gMonths = [];
+var gBase = [];
+var gP10 = [];
+var gP90 = [];
+var gPessimistic = [];
+var gOptimistic = [];
+var gByCountry = {};
+var gChart = null;
+
+/* ----- 都道府県セレクト初期化 ----- */
+(function(){
   try {
-    var ctx = document.getElementById('forecastChart').getContext('2d');
-    if (forecastChartInstance) {
-      forecastChartInstance.destroy();
+    var sel = document.getElementById('selPref');
+    for (var i = 0; i < PREF_NAMES.length; i++) {
+      var opt = document.createElement('option');
+      opt.value = PREF_NAMES[i];
+      opt.textContent = PREF_NAMES[i];
+      sel.appendChild(opt);
     }
-    forecastChartInstance = new Chart(ctx, {
+  } catch(e) { console.error('selPref初期化:', e); }
+})();
+
+/* ===================================================================
+   描画関数群
+   =================================================================== */
+
+/* ----- シナリオカード更新 ----- */
+function updateCards(baseArr, pessArr, optArr) {
+  try {
+    var idx = 0; /* 直近月 */
+    var bv = baseArr[idx];
+    var pv = pessArr[idx];
+    var ov = optArr[idx];
+    document.getElementById('valPess').textContent = fmtManMonth(pv);
+    document.getElementById('valBase').textContent = fmtManMonth(bv);
+    document.getElementById('valOpt').textContent = fmtManMonth(ov);
+    var diffPess = ((pv - bv) / bv * 100).toFixed(1);
+    var diffOpt = ((ov - bv) / bv * 100).toFixed(1);
+    document.getElementById('diffPess').textContent = diffPess + '%';
+    document.getElementById('diffPess').style.color = '#f87171';
+    document.getElementById('diffBase').textContent = '基準';
+    document.getElementById('diffBase').style.color = '#60a5fa';
+    document.getElementById('diffOpt').textContent = '+' + diffOpt + '%';
+    document.getElementById('diffOpt').style.color = '#34d399';
+  } catch(e) { console.error('updateCards:', e); }
+}
+
+/* ----- Chart.js 予測チャート ----- */
+function updateChart(months, baseArr, p10Arr, p90Arr, pessArr, optArr) {
+  try {
+    var ctx = document.getElementById('chartForecast').getContext('2d');
+    if (gChart) { gChart.destroy(); }
+    gChart = new Chart(ctx, {
       type: 'line',
       data: {
         labels: months,
         datasets: [
           {
-            label: 'p10-p90 \u4FE1\u983C\u533A\u9593',
-            data: p90,
-            fill: '-1',
+            label: '信頼区間(上)',
+            data: p90Arr,
+            fill: '+1',
             backgroundColor: 'rgba(96,165,250,0.12)',
             borderColor: 'transparent',
             pointRadius: 0,
-            order: 3
+            order: 5
           },
           {
-            label: '\u60B2\u89B3 (p10)',
-            data: p10,
+            label: '信頼区間(下)',
+            data: p10Arr,
+            fill: false,
+            borderColor: 'transparent',
+            pointRadius: 0,
+            order: 5
+          },
+          {
+            label: '悲観 (p10)',
+            data: pessArr,
             borderColor: '#f87171',
             borderWidth: 1.5,
             borderDash: [6, 3],
@@ -348,8 +430,8 @@ function renderForecastChart(months, base, p10, p90) {
             order: 2
           },
           {
-            label: '\u30D9\u30FC\u30B9 (p50)',
-            data: base,
+            label: 'ベース (p50)',
+            data: baseArr,
             borderColor: '#60a5fa',
             borderWidth: 2.5,
             pointRadius: 2,
@@ -358,8 +440,8 @@ function renderForecastChart(months, base, p10, p90) {
             order: 1
           },
           {
-            label: '\u697D\u89B3 (p90)',
-            data: p90,
+            label: '楽観 (p90)',
+            data: optArr,
             borderColor: '#34d399',
             borderWidth: 1.5,
             borderDash: [6, 3],
@@ -377,403 +459,420 @@ function renderForecastChart(months, base, p10, p90) {
           legend: {
             labels: {
               color: '#8b8fa3',
-              font: { size: 12 },
-              filter: function(item) { return item.text !== 'p10-p90 \u4FE1\u983C\u533A\u9593'; }
+              filter: function(item) { return item.text.indexOf('信頼区間') === -1; }
             }
           },
           tooltip: {
-            backgroundColor: 'rgba(15,17,23,0.95)',
-            titleColor: '#e0e0e0',
-            bodyColor: '#e0e0e0',
-            borderColor: '#2d2f3e',
-            borderWidth: 1,
             callbacks: {
               label: function(ctx2) {
-                try {
-                  var idx = ctx2.datasetIndex;
-                  if (idx === 0) return null;
-                  var names = ['','\u60B2\u89B3','\u30D9\u30FC\u30B9','\u697D\u89B3'];
-                  return names[idx] + ': ' + Number(ctx2.parsed.y).toLocaleString() + ' \u5343\u4EBA';
-                } catch(e) { return ''; }
+                if (ctx2.datasetIndex <= 1) return null;
+                return ctx2.dataset.label + ': ' + ctx2.parsed.y.toFixed(1) + '万人';
               }
             }
           }
         },
         scales: {
           x: { ticks: { color: '#6b7280', maxRotation: 45 }, grid: { color: '#1e2130' } },
-          y: { title: { display: true, text: '\u5343\u4EBA', color: '#8b8fa3' }, ticks: { color: '#6b7280' }, grid: { color: '#1e2130' } }
+          y: {
+            ticks: {
+              color: '#6b7280',
+              callback: function(v) { return v.toFixed(0) + '万'; }
+            },
+            grid: { color: '#1e2130' },
+            title: { display: true, text: '万人/月', color: '#8b8fa3' }
+          }
         }
       }
     });
-  } catch(e) { console.error('\u30C1\u30E3\u30FC\u30C8\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+  } catch(e) { console.error('updateChart:', e); }
 }
 
-function renderCountryTable(byCountry) {
+/* ----- 国別テーブル ----- */
+function updateCountryTable(byCountry) {
   try {
-    var tbody = document.getElementById('countryTable').querySelector('tbody');
+    var tbody = document.getElementById('tbodyCountry');
     var html = '';
-    for (var i = 0; i < MARKETS.length; i++) {
-      var m = MARKETS[i];
-      var bc = byCountry[m.code];
-      if (!bc) continue;
-      var med = bc.median[0] || 0;
-      var lo = bc.p10[0] || 0;
-      var hi = bc.p90[0] || 0;
-      var band = hi - lo;
-      html += '<tr>' +
-        '<td><span class="flag-name">' + m.flag + ' ' + m.name + '</span></td>' +
-        '<td class="num-r">' + Number(lo).toLocaleString() + '</td>' +
-        '<td class="num-r">' + Number(med).toLocaleString() + '</td>' +
-        '<td class="num-r">' + Number(hi).toLocaleString() + '</td>' +
-        '<td class="num-r">' + Number(band).toLocaleString() + '</td>' +
-        '</tr>';
+    var rows = [];
+    for (var i = 0; i < COUNTRY_CODES.length; i++) {
+      var c = COUNTRY_CODES[i];
+      var d = byCountry[c];
+      if (!d || !d.median || d.median.length === 0) continue;
+      var med = d.median[0];
+      var lo = d.p10 ? d.p10[0] : med * 0.8;
+      var hi = d.p90 ? d.p90[0] : med * 1.2;
+      var bandPct = ((hi - lo) / med * 100).toFixed(0);
+      rows.push({code:c, med:med, lo:lo, hi:hi, bandPct:bandPct});
+    }
+    /* ベース降順 */
+    rows.sort(function(a,b){ return b.med - a.med; });
+    for (var j = 0; j < rows.length; j++) {
+      var r = rows[j];
+      var meta = COUNTRY_META[r.code] || {flag:'', name:r.code};
+      html += '<tr>'
+        + '<td><span class="flag-name">' + meta.flag + ' ' + meta.name + '</span></td>'
+        + '<td class="num-r">' + fmtMan(r.lo) + '</td>'
+        + '<td class="num-r">' + fmtMan(r.med) + '</td>'
+        + '<td class="num-r">' + fmtMan(r.hi) + '</td>'
+        + '<td class="num-r">' + r.bandPct + '%</td>'
+        + '</tr>';
     }
     tbody.innerHTML = html;
-  } catch(e) { console.error('\u56FD\u5225\u30C6\u30FC\u30D6\u30EB\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+  } catch(e) { console.error('updateCountryTable:', e); }
 }
 
-function renderPrefTable() {
+/* ----- 都道府県テーブル ----- */
+function updatePrefTable() {
   try {
     var selCountry = document.getElementById('selCountry').value;
-    var tbody = document.getElementById('prefTable').querySelector('tbody');
-    var data = [];
-    var pkeys = Object.keys(PREF_VISITORS);
-
-    if (selCountry === 'ALL') {
-      for (var i = 0; i < pkeys.length; i++) {
-        data.push({ name: pkeys[i], val: PREF_VISITORS[pkeys[i]] });
+    var selPref = document.getElementById('selPref').value;
+    var tbody = document.getElementById('tbodyPref');
+    var total = 0;
+    var rows = [];
+    for (var i = 0; i < PREF_NAMES.length; i++) {
+      var v = PREF_VISITORS[i];
+      if (selCountry !== 'ALL') {
+        var share = (PREF_SHARE[selCountry] || {})[i];
+        if (share === undefined) share = 1.0;
+        v = Math.round(v * share * 0.15); /* 国別は全体の約15% */
       }
-    } else {
-      var shares = PREF_SHARE[selCountry] || {};
-      var mk = null;
-      for (var j = 0; j < MARKETS.length; j++) {
-        if (MARKETS[j].code === selCountry) { mk = MARKETS[j]; break; }
-      }
-      var totalVisitors = mk ? mk.visitors : 0;
-      for (var k = 0; k < pkeys.length; k++) {
-        var sh = shares[pkeys[k]] || 0;
-        var v = Math.round(totalVisitors * sh / 10);
-        if (v > 0) {
-          data.push({ name: pkeys[k], val: v });
-        }
-      }
+      total += v;
+      rows.push({name: PREF_NAMES[i], val: v, idx: i});
     }
-
-    data.sort(function(a, b) { return b.val - a.val; });
-    var top = data.slice(0, 15);
-    var totalAll = 0;
-    for (var n = 0; n < data.length; n++) { totalAll += data[n].val; }
-
+    /* フィルタ: 特定都道府県選択時はその県のみ表示 */
+    if (selPref !== 'ALL') {
+      rows = rows.filter(function(r){ return r.name === selPref; });
+    }
+    /* 降順ソート、上位15 */
+    rows.sort(function(a,b){ return b.val - a.val; });
+    if (selPref === 'ALL') {
+      rows = rows.slice(0, 15);
+    }
     var html = '';
-    for (var m = 0; m < top.length; m++) {
-      var pct = totalAll > 0 ? ((top[m].val / totalAll) * 100).toFixed(1) : '0.0';
-      html += '<tr>' +
-        '<td>' + (m + 1) + '</td>' +
-        '<td>' + top[m].name + '</td>' +
-        '<td class="num-r">' + Number(top[m].val).toLocaleString() + '</td>' +
-        '<td class="num-r">' + pct + '%</td>' +
-        '</tr>';
+    for (var j = 0; j < rows.length; j++) {
+      var r = rows[j];
+      var pct = (r.val / total * 100).toFixed(1);
+      var manVal = (r.val / 1).toFixed(0); /* 既に万人単位 */
+      html += '<tr>'
+        + '<td>' + r.name + '</td>'
+        + '<td class="num-r">' + manVal + '万人</td>'
+        + '<td class="num-r">' + pct + '%</td>'
+        + '</tr>';
     }
     tbody.innerHTML = html;
-
-    var titleSuffix = selCountry === 'ALL' ? '' : (' \u2015 ' + (mk ? mk.flag + ' ' + mk.name : selCountry));
-    document.getElementById('prefTableTitle').textContent = '\u90FD\u9053\u5E9C\u770C\u5225 \u6765\u8A2A\u8005\u4E88\u6E2C\uFF08\u4E07\u4EBA/\u5E74\uFF09' + titleSuffix;
-  } catch(e) { console.error('\u90FD\u9053\u5E9C\u770C\u30C6\u30FC\u30D6\u30EB\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+  } catch(e) { console.error('updatePrefTable:', e); }
 }
 
-/* ============================================================
-   世界地図 (D3)
-   ============================================================ */
-function renderWorldMap() {
+/* ----- 非対称性テキスト更新 ----- */
+function updateAsymText(byCountry) {
+  try {
+    var el = document.getElementById('asymText');
+    var krBand = '23%';
+    var cnBand = '55%';
+    if (byCountry.KR && byCountry.KR.median && byCountry.KR.median[0] > 0) {
+      var krMed = byCountry.KR.median[0];
+      var krLo = byCountry.KR.p10 ? byCountry.KR.p10[0] : krMed * 0.77;
+      var krHi = byCountry.KR.p90 ? byCountry.KR.p90[0] : krMed * 1.23;
+      krBand = ((krHi - krLo) / krMed * 100).toFixed(0) + '%';
+    }
+    if (byCountry.CN && byCountry.CN.median && byCountry.CN.median[0] > 0) {
+      var cnMed = byCountry.CN.median[0];
+      var cnLo = byCountry.CN.p10 ? byCountry.CN.p10[0] : cnMed * 0.45;
+      var cnHi = byCountry.CN.p90 ? byCountry.CN.p90[0] : cnMed * 1.55;
+      cnBand = ((cnHi - cnLo) / cnMed * 100).toFixed(0) + '%';
+    }
+    var ratio = (parseFloat(cnBand) / parseFloat(krBand)).toFixed(1);
+    el.textContent = '中国市場の予測帯幅(' + cnBand + ')は韓国市場(' + krBand + ')の約' + ratio + '倍です。'
+      + 'これは中国の政治リスク(団体旅行規制、ビザ政策変更等)による不確実性の高さを反映しています。'
+      + '政治ショックの標準偏差は中国0.35に対し韓国0.08と推定されており、'
+      + 'モンテカルロシミュレーションの結果にも明確な非対称性が現れています。';
+  } catch(e) { console.error('updateAsymText:', e); }
+}
+
+/* ----- 世界地図バブル (D3) ----- */
+var gWorldSvg = null;
+var gWorldProjection = null;
+function drawWorldMap(byCountry) {
   try {
     var container = document.getElementById('worldMap');
-    var width = container.clientWidth || 500;
-    var height = container.clientHeight || 280;
-    d3.select('#worldMap').selectAll('*').remove();
+    container.innerHTML = '';
+    var w = container.clientWidth || 500;
+    var h = 280;
+    var svg = d3.select('#worldMap').append('svg').attr('width', w).attr('height', h);
+    gWorldSvg = svg;
 
-    var svg = d3.select('#worldMap').append('svg')
-      .attr('width', width).attr('height', height);
-
-    var projection = d3.geoNaturalEarth1()
-      .scale(width / 5.5)
-      .translate([width / 2, height / 2]);
+    var projection = d3.geoNaturalEarth1().scale(w / 5.5).translate([w / 2, h / 2]);
+    gWorldProjection = projection;
     var path = d3.geoPath().projection(projection);
 
-    var tooltip = d3.select('body').append('div').attr('class', 'd3-tooltip d3-tooltip-world').style('display', 'none');
-
-    svg.append('rect').attr('width', width).attr('height', height).attr('fill', '#0f1117');
-
+    /* 世界地図読み込み */
     d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(function(world) {
       try {
-        var countries = topojson.feature(world, world.objects.countries);
+        var countries = topojson.feature(world, world.objects.countries).features;
         svg.selectAll('path.land')
-          .data(countries.features)
+          .data(countries)
           .enter().append('path')
           .attr('class', 'land')
           .attr('d', path)
-          .attr('fill', '#1a1d27')
+          .attr('fill', '#1a2744')
           .attr('stroke', '#2d2f3e')
           .attr('stroke-width', 0.5);
-
-        var rScale = d3.scaleSqrt().domain([0, 25]).range([6, 30]);
-
-        function lossColor(loss) {
-          if (loss >= 15) return '#f87171';
-          if (loss >= 10) return '#fb923c';
-          if (loss >= 5) return '#fbbf24';
-          return '#34d399';
-        }
-
-        var bubbles = svg.selectAll('g.bubble')
-          .data(MARKETS)
-          .enter().append('g')
-          .attr('class', 'bubble')
-          .attr('transform', function(d) {
-            var coords = projection([d.lon, d.lat]);
-            return 'translate(' + coords[0] + ',' + coords[1] + ')';
-          });
-
-        bubbles.append('circle')
-          .attr('r', function(d) { return rScale(d.share); })
-          .attr('fill', function(d) { return lossColor(d.loss); })
-          .attr('fill-opacity', 0.7)
-          .attr('stroke', function(d) { return lossColor(d.loss); })
-          .attr('stroke-width', 1.5)
-          .on('mouseover', function(ev, d) {
-            tooltip.style('display', 'block')
-              .html(d.flag + ' ' + d.name + '<br>\u30B7\u30A7\u30A2: ' + d.share + '%<br>\u671F\u5F85\u640D\u5931\u7387: ' + d.loss + '%<br>\u8A2A\u65E5\u8005: ' + Number(d.visitors).toLocaleString() + '\u5343\u4EBA');
-          })
-          .on('mousemove', function(ev) {
-            tooltip.style('left', (ev.pageX + 12) + 'px').style('top', (ev.pageY - 10) + 'px');
-          })
-          .on('mouseout', function() {
-            tooltip.style('display', 'none');
-          });
-
-        bubbles.append('text')
-          .attr('text-anchor', 'middle')
-          .attr('dy', function(d) { return rScale(d.share) + 14; })
-          .attr('fill', '#8b8fa3')
-          .attr('font-size', '10px')
-          .text(function(d) { return d.flag + ' ' + d.share + '%'; });
-      } catch(e) { console.error('\u4E16\u754C\u5730\u56F3\u63CF\u753B\u30A8\u30E9\u30FC(inner):', e); }
-    }).catch(function(e) {
-      console.error('\u4E16\u754C\u5730\u56F3TopoJSON\u8AAD\u307F\u8FBC\u307F\u30A8\u30E9\u30FC:', e);
-      svg.append('text').attr('x', width/2).attr('y', height/2)
-        .attr('text-anchor','middle').attr('fill','#6b7280').attr('font-size','13px')
-        .text('\u5730\u56F3\u30C7\u30FC\u30BF\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F');
+        drawBubbles(svg, projection, byCountry);
+      } catch(e2) { console.error('世界地図描画:', e2); }
+    }).catch(function(err) {
+      console.warn('世界地図取得失敗:', err);
+      /* フォールバック: バブルだけでも表示 */
+      drawBubbles(svg, projection, byCountry);
     });
-  } catch(e) { console.error('\u4E16\u754C\u5730\u56F3\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+
+    /* ツールチップ */
+    if (!document.querySelector('.d3-tooltip')) {
+      d3.select('body').append('div').attr('class', 'd3-tooltip').style('opacity', 0);
+    }
+  } catch(e) { console.error('drawWorldMap:', e); }
 }
 
-function renderCountryPanel() {
+function drawBubbles(svg, projection, byCountry) {
+  try {
+    var tooltip = d3.select('.d3-tooltip');
+    var bubbleData = [];
+    for (var i = 0; i < COUNTRY_CODES.length; i++) {
+      var c = COUNTRY_CODES[i];
+      var d = byCountry[c];
+      var coords = COUNTRY_COORDS[c];
+      if (!d || !d.median || !coords) continue;
+      var val = d.median[0];
+      bubbleData.push({code: c, val: val, coords: coords});
+    }
+
+    var maxVal = d3.max(bubbleData, function(d){ return d.val; }) || 1;
+    var rScale = d3.scaleSqrt().domain([0, maxVal]).range([4, 30]);
+
+    svg.selectAll('circle.bubble')
+      .data(bubbleData)
+      .enter().append('circle')
+      .attr('class', 'bubble')
+      .attr('cx', function(d){ return projection(d.coords)[0]; })
+      .attr('cy', function(d){ return projection(d.coords)[1]; })
+      .attr('r', function(d){ return rScale(d.val); })
+      .attr('fill', 'rgba(96,165,250,0.5)')
+      .attr('stroke', '#60a5fa')
+      .attr('stroke-width', 1)
+      .on('mouseover', function(ev, d) {
+        var meta = COUNTRY_META[d.code] || {};
+        tooltip.style('opacity', 1)
+          .html(meta.flag + ' ' + meta.name + '<br>' + fmtMan(d.val))
+          .style('left', (ev.pageX + 10) + 'px')
+          .style('top', (ev.pageY - 10) + 'px');
+      })
+      .on('mouseout', function() {
+        tooltip.style('opacity', 0);
+      });
+
+    /* 国名パネル更新 */
+    updateCountryPanel(byCountry);
+  } catch(e) { console.error('drawBubbles:', e); }
+}
+
+function updateCountryPanel(byCountry) {
   try {
     var panel = document.getElementById('countryPanel');
     var html = '';
-    for (var i = 0; i < MARKETS.length; i++) {
-      var m = MARKETS[i];
-      var chgClass = m.change >= 0 ? 'chg-pos' : 'chg-neg';
-      var chgSign = m.change >= 0 ? '+' : '';
-      html += '<div class="country-panel-row">' +
-        m.flag + ' ' + m.name +
-        ' <span class="' + chgClass + '">' + chgSign + m.change + '%</span>' +
-        '</div>';
+    var sorted = COUNTRY_CODES.slice().sort(function(a, b) {
+      var va = (byCountry[a] && byCountry[a].median) ? byCountry[a].median[0] : 0;
+      var vb = (byCountry[b] && byCountry[b].median) ? byCountry[b].median[0] : 0;
+      return vb - va;
+    });
+    for (var i = 0; i < sorted.length; i++) {
+      var c = sorted[i];
+      var d = byCountry[c];
+      if (!d || !d.median) continue;
+      var meta = COUNTRY_META[c] || {};
+      html += '<div class="country-panel-row">'
+        + '<span>' + meta.flag + '</span>'
+        + '<span>' + meta.name + '</span>'
+        + '<span>' + fmtMan(d.median[0]) + '</span>'
+        + '</div>';
     }
     panel.innerHTML = html;
-  } catch(e) { console.error('\u56FD\u30EA\u30B9\u30C8\u30D1\u30CD\u30EB\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+  } catch(e) { console.error('updateCountryPanel:', e); }
 }
 
-/* ============================================================
-   日本地図 (D3)
-   ============================================================ */
-function renderJapanMap() {
+/* ----- 日本地図 (D3) ----- */
+function drawJapanMap() {
   try {
     var container = document.getElementById('japanMap');
-    var width = container.clientWidth || 500;
-    var height = container.clientHeight || 280;
-    d3.select('#japanMap').selectAll('*').remove();
+    container.innerHTML = '';
+    var w = container.clientWidth || 500;
+    var h = 280;
+    var svg = d3.select('#japanMap').append('svg').attr('width', w).attr('height', h);
 
-    var svg = d3.select('#japanMap').append('svg')
-      .attr('width', width).attr('height', height);
-
-    var ttip = d3.select('body').selectAll('.d3-tooltip-jp').data([0]);
-    ttip = ttip.enter().append('div').attr('class', 'd3-tooltip d3-tooltip-jp').style('display', 'none').merge(ttip);
-
-    var colorScale = d3.scaleLog()
-      .domain([5, 50, 500, 1800])
-      .range(['#1a2744', '#1e4d8c', '#f59e0b', '#ef4444'])
-      .clamp(true);
+    /* 都道府県カラースケール */
+    var maxV = d3.max(PREF_VISITORS) || 1825;
+    var colorScale = d3.scaleSequential(d3.interpolateYlOrRd).domain([0, maxV]);
 
     d3.json('https://raw.githubusercontent.com/dataofjapan/land/master/japan.topojson').then(function(japan) {
       try {
-        var features = topojson.feature(japan, japan.objects.japan);
+        var prefectures = topojson.feature(japan, japan.objects.japan).features;
+        var projection = d3.geoMercator().fitSize([w, h], topojson.feature(japan, japan.objects.japan));
+        var path = d3.geoPath().projection(projection);
 
-        var prefNames = [
-          '','\u5317\u6D77\u9053','\u9752\u68EE','\u5CA9\u624B','\u5BAE\u57CE','\u79CB\u7530','\u5C71\u5F62','\u798F\u5CF6',
-          '\u8328\u57CE','\u6803\u6728','\u7FA4\u99AC','\u57FC\u7389','\u5343\u8449','\u6771\u4EAC','\u795E\u5948\u5DDD',
-          '\u65B0\u6F5F','\u5BCC\u5C71','\u77F3\u5DDD','\u798F\u4E95','\u5C71\u68A8','\u9577\u91CE',
-          '\u5C90\u961C','\u9759\u5CA1','\u611B\u77E5','\u4E09\u91CD','\u6ECB\u8CC0',
-          '\u4EAC\u90FD','\u5927\u962A','\u5175\u5EAB','\u5948\u826F','\u548C\u6B4C\u5C71',
-          '\u9CE5\u53D6','\u5CF6\u6839','\u5CA1\u5C71','\u5E83\u5CF6','\u5C71\u53E3',
-          '\u5FB3\u5CF6','\u9999\u5DDD','\u611B\u5A9B','\u9AD8\u77E5',
-          '\u798F\u5CA1','\u4F50\u8CC0','\u9577\u5D0E','\u718A\u672C','\u5927\u5206',
-          '\u5BAE\u5D0E','\u9E7F\u5150\u5CF6','\u6C96\u7E04'
-        ];
-
-        var projection2 = d3.geoMercator()
-          .center([137, 38])
-          .scale(width * 2.2)
-          .translate([width / 2, height / 2]);
-        var path2 = d3.geoPath().projection(projection2);
+        /* ツールチップ */
+        if (!document.querySelector('.d3-tooltip')) {
+          d3.select('body').append('div').attr('class', 'd3-tooltip').style('opacity', 0);
+        }
+        var tooltip = d3.select('.d3-tooltip');
 
         svg.selectAll('path.pref')
-          .data(features.features)
+          .data(prefectures)
           .enter().append('path')
           .attr('class', 'pref')
-          .attr('d', path2)
+          .attr('d', path)
           .attr('fill', function(d) {
-            var id = d.properties.id || d.id;
-            var name = prefNames[id] || '';
-            var val = PREF_VISITORS[name] || 5;
-            return colorScale(val);
+            var name = d.properties.nam_ja || d.properties.name_ja || d.properties.name || '';
+            var idx = PREF_NAMES.indexOf(name);
+            if (idx >= 0) return colorScale(PREF_VISITORS[idx]);
+            return '#1a2744';
           })
           .attr('stroke', '#2d2f3e')
           .attr('stroke-width', 0.5)
-          .style('cursor', 'pointer')
           .on('mouseover', function(ev, d) {
-            var id = d.properties.id || d.id;
-            var name = prefNames[id] || '\u4E0D\u660E';
-            var val = PREF_VISITORS[name] || 0;
-            d3.select(this).attr('stroke', '#60a5fa').attr('stroke-width', 2);
-            ttip.style('display', 'block')
-              .html(name + '<br>' + val + ' \u4E07\u4EBA');
-          })
-          .on('mousemove', function(ev) {
-            ttip.style('left', (ev.pageX + 12) + 'px').style('top', (ev.pageY - 10) + 'px');
+            var name = d.properties.nam_ja || d.properties.name_ja || d.properties.name || '';
+            var idx = PREF_NAMES.indexOf(name);
+            var val = idx >= 0 ? PREF_VISITORS[idx] : 0;
+            tooltip.style('opacity', 1)
+              .html(name + '<br>' + val + '万人/年')
+              .style('left', (ev.pageX + 10) + 'px')
+              .style('top', (ev.pageY - 10) + 'px');
           })
           .on('mouseout', function() {
-            d3.select(this).attr('stroke', '#2d2f3e').attr('stroke-width', 0.5);
-            ttip.style('display', 'none');
-          })
-          .on('click', function(ev, d) {
-            try {
-              var id = d.properties.id || d.id;
-              var name = prefNames[id] || '';
-              var sel = document.getElementById('selPref');
-              for (var i = 0; i < sel.options.length; i++) {
-                if (sel.options[i].value === name) {
-                  sel.value = name;
-                  renderPrefTable();
-                  break;
-                }
-              }
-            } catch(e) { console.error('\u90FD\u9053\u5E9C\u770C\u30AF\u30EA\u30C3\u30AF\u30A8\u30E9\u30FC:', e); }
+            tooltip.style('opacity', 0);
           });
-      } catch(e) { console.error('\u65E5\u672C\u5730\u56F3\u63CF\u753B\u30A8\u30E9\u30FC(inner):', e); }
-    }).catch(function(e) {
-      console.error('\u65E5\u672C\u5730\u56F3TopoJSON\u8AAD\u307F\u8FBC\u307F\u30A8\u30E9\u30FC:', e);
-      svg.append('text').attr('x', width/2).attr('y', height/2)
-        .attr('text-anchor','middle').attr('fill','#6b7280').attr('font-size','13px')
-        .text('\u5730\u56F3\u30C7\u30FC\u30BF\u8AAD\u307F\u8FBC\u307F\u306B\u5931\u6557\u3057\u307E\u3057\u305F');
+      } catch(e2) { console.error('日本地図描画:', e2); }
+    }).catch(function(err) {
+      console.warn('日本地図取得失敗:', err);
+      /* フォールバック: テキスト表示 */
+      svg.append('text').attr('x', 20).attr('y', 140).attr('fill', '#6b7280').text('地図データ読み込み失敗');
     });
-  } catch(e) { console.error('\u65E5\u672C\u5730\u56F3\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+  } catch(e) { console.error('drawJapanMap:', e); }
 }
 
-/* ============================================================
+/* ===================================================================
    統合描画
-   ============================================================ */
-function renderAll(months, base, p10, p90, byCountry, mode) {
+   =================================================================== */
+function renderAll(months, baseMan, p10Man, p90Man, pessMan, optMan, byCountryMan, statusLabel) {
   try {
-    renderScenarioCards(base, p10, p90);
-    renderForecastChart(months, base, p10, p90);
-    renderCountryTable(byCountry);
-    renderPrefTable();
+    gMonths = months;
+    gBase = baseMan;
+    gP10 = p10Man;
+    gP90 = p90Man;
+    gPessimistic = pessMan;
+    gOptimistic = optMan;
+    gByCountry = byCountryMan;
+
+    /* ステータスバッジ */
     var badge = document.getElementById('statusBadge');
-    badge.textContent = mode;
-    if (mode === 'LIVE') {
+    badge.textContent = statusLabel;
+    if (statusLabel === 'LIVE' || statusLabel === 'full_mc_29vars') {
       badge.className = 'status-badge status-live';
+      badge.textContent = 'LIVE';
     } else {
       badge.className = 'status-badge status-static';
     }
-    document.getElementById('footerText').textContent = 'SCRI Platform v1.5.0 | 29\u5909\u6570\u76F8\u95A2\u884C\u5217\u30E2\u30F3\u30C6\u30AB\u30EB\u30ED | ' + mode;
-  } catch(e) { console.error('\u7D71\u5408\u63CF\u753B\u30A8\u30E9\u30FC:', e); }
+
+    /* カード */
+    updateCards(baseMan, pessMan, optMan);
+
+    /* チャート */
+    updateChart(months, baseMan, p10Man, p90Man, pessMan, optMan);
+
+    /* 国別テーブル */
+    updateCountryTable(byCountryMan);
+
+    /* 世界地図バブル */
+    drawWorldMap(byCountryMan);
+
+    /* 都道府県テーブル */
+    updatePrefTable();
+
+    /* 非対称性テキスト */
+    updateAsymText(byCountryMan);
+  } catch(e) { console.error('renderAll:', e); }
 }
 
-function transformByCountry(bc, div) {
+/* ===================================================================
+   初期描画（フォールバック即時）
+   =================================================================== */
+(function(){
   try {
-    var out = {};
-    for (var c in bc) {
-      var entry = bc[c];
-      var med = (entry.median || []).map(function(v) { return Math.round(v / div); });
-      var lo = (entry.p10 || []).map(function(v) { return Math.round(v / div); });
-      var hi = (entry.p90 || []).map(function(v) { return Math.round(v / div); });
-      out[c] = { median: med, p10: lo, p90: hi };
-    }
-    return out;
-  } catch(e) { console.error('\u56FD\u5225\u5909\u63DB\u30A8\u30E9\u30FC:', e); return {}; }
-}
+    var fbBase = toMan(FALLBACK.base);
+    var fbP10 = toMan(FALLBACK.p10);
+    var fbP90 = toMan(FALLBACK.p90);
+    var fbPess = toMan(FALLBACK.pessimistic);
+    var fbOpt = toMan(FALLBACK.optimistic);
+    var fbBC = toManByCountry(FALLBACK.by_country);
+    renderAll(FALLBACK_MONTHS, fbBase, fbP10, fbP90, fbPess, fbOpt, fbBC, 'STATIC');
+    drawJapanMap();
+  } catch(e) { console.error('初期描画:', e); }
+})();
 
-/* ============================================================
-   データ読み込み
-   ============================================================ */
+/* ===================================================================
+   API非同期呼び出し
+   =================================================================== */
 function loadData() {
   try {
-    renderAll(FALLBACK_MONTHS, FALLBACK.base, FALLBACK.p10, FALLBACK.p90, FALLBACK.by_country, 'STATIC');
-
     var country = document.getElementById('selCountry').value || 'ALL';
     var ctrl = new AbortController();
-    var timer = setTimeout(function() { ctrl.abort(); }, 8000);
+    var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
 
-    fetch('/api/v1/tourism/three-scenarios?source_country=' + country, { signal: ctrl.signal })
-      .then(function(resp) {
+    fetch('/api/v1/tourism/three-scenarios?source_country=' + country, {signal: ctrl.signal})
+      .then(function(r) {
         clearTimeout(timer);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        return resp.json();
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
       })
       .then(function(json) {
         try {
           var d = json.data || json;
           var s = d.scenarios || {};
           var base = (s.base || {}).median || [];
-          var p10 = (s.pessimistic || {}).median || (s.base || {}).p10 || [];
-          var p90 = (s.optimistic || {}).median || (s.base || {}).p90 || [];
+          var p10 = (s.base || {}).p10 || [];
+          var p90 = (s.base || {}).p90 || [];
+          var pessMedian = (s.pessimistic || {}).median || p10;
+          var optMedian = (s.optimistic || {}).median || p90;
           var bc = d.by_country || {};
           if (base.length > 0) {
-            var div = base[0] > 100000 ? 1000 : 1;
             renderAll(
               d.months || FALLBACK_MONTHS,
-              base.map(function(v) { return Math.round(v / div); }),
-              p10.map(function(v) { return Math.round(v / div); }),
-              p90.map(function(v) { return Math.round(v / div); }),
-              transformByCountry(bc, div),
+              toMan(base),
+              toMan(p10),
+              toMan(p90),
+              toMan(pessMedian),
+              toMan(optMedian),
+              toManByCountry(bc),
               d.model || 'LIVE'
             );
           }
-        } catch(e) { console.warn('API\u30C7\u30FC\u30BF\u51E6\u7406\u30A8\u30E9\u30FC:', e.message); }
+        } catch(e2) { console.error('API parse:', e2); }
       })
-      .catch(function(e) { console.warn('API\u63A5\u7D9A\u30A8\u30E9\u30FC:', e.message); });
-  } catch(e) { console.error('\u30C7\u30FC\u30BF\u8AAD\u307F\u8FBC\u307F\u30A8\u30E9\u30FC:', e); }
+      .catch(function(e) { console.warn('API:', e.message); });
+  } catch(e) { console.error('loadData:', e); }
 }
 
-/* ============================================================
-   初期化
-   ============================================================ */
-(function() {
+/* ページ読み込み後にAPI呼び出し */
+loadData();
+
+/* ----- イベントリスナー ----- */
+document.getElementById('selCountry').addEventListener('change', function() {
   try {
-    renderWorldMap();
-    renderCountryPanel();
-    renderJapanMap();
     loadData();
-
-    document.getElementById('selCountry').onchange = function() {
-      try { loadData(); } catch(e) { console.error('\u56FD\u5207\u66FF\u30A8\u30E9\u30FC:', e); }
-    };
-    document.getElementById('selPref').onchange = function() {
-      try { renderPrefTable(); } catch(e) { console.error('\u90FD\u9053\u5E9C\u770C\u5207\u66FF\u30A8\u30E9\u30FC:', e); }
-    };
-  } catch(e) { console.error('\u521D\u671F\u5316\u30A8\u30E9\u30FC:', e); }
-})();
+    updatePrefTable();
+  } catch(e) { console.error('selCountry change:', e); }
+});
+document.getElementById('selPref').addEventListener('change', function() {
+  try {
+    updatePrefTable();
+  } catch(e) { console.error('selPref change:', e); }
+});
 </script>
-
 </body>
 </html>
