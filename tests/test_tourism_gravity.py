@@ -1046,72 +1046,65 @@ class TestBilateralFXClient:
 # TestScenarioEngine — 国別シナリオエンジン
 # =====================================================================
 class TestScenarioEngine:
-    """features/tourism/scenario_engine.py のテスト"""
+    """features/tourism/scenario_engine.py のテスト (v1.5.0 THREE_SCENARIOS API)"""
 
     def _get_engine(self):
         from features.tourism.scenario_engine import ScenarioEngine
         return ScenarioEngine()
 
+    def _base_visitors(self):
+        return {"KR":8600000,"CN":5200000,"TW":4800000,"US":3600000,
+                "AU":620000,"TH":420000,"HK":1310000,"SG":380000}
+
     def test_base_no_change(self):
         """ベースシナリオは全国0%変化"""
         engine = self._get_engine()
-        impacts = engine.calculate_country_impacts("base")
-        for cc, impact in impacts.items():
-            assert abs(impact.total_demand_change_pct) < 0.01, \
-                f"ベースで{cc}の変化率が0でない: {impact.total_demand_change_pct}"
+        results = engine.calculate_all_three(self._base_visitors())
+        base = results["base"]
+        assert abs(base["total_change_pct"]) < 0.01
 
-    def test_china_tension_cn_down(self):
-        """日中悪化シナリオでCNが大幅マイナス"""
+    def test_pessimistic_cn_down(self):
+        """悲観シナリオでCNが大幅マイナス（日中関係-30pt）"""
         engine = self._get_engine()
-        impacts = engine.calculate_country_impacts("japan_china_tension")
-        cn_impact = impacts["CN"]
-        assert cn_impact.total_demand_change_pct < -30.0, \
-            f"日中悪化でCN変化率が-30%未満であるべき: {cn_impact.total_demand_change_pct}"
+        results = engine.calculate_all_three(self._base_visitors())
+        cn_pct = results["pessimistic"]["country_impacts"]["CN"]["change_pct"]
+        assert cn_pct < -20, f"悲観CNは-20%以下のはず: {cn_pct}"
 
-    def test_stagflation_mixed_directions(self):
-        """スタグフレーションでUSとCNが逆方向"""
+    def test_three_scenarios_exist(self):
+        """base/optimistic/pessimistic の3シナリオが返る"""
         engine = self._get_engine()
-        impacts = engine.calculate_country_impacts("stagflation_mixed")
-        us_change = impacts["US"].total_demand_change_pct
-        cn_change = impacts["CN"].total_demand_change_pct
-        # USは大幅マイナス（インフレ＋景気後退）、CNは円安効果でプラス寄り
-        assert us_change < 0, f"USはマイナスであるべき: {us_change}"
-        assert cn_change > us_change, f"CNはUSより良いはず: CN={cn_change}, US={us_change}"
+        results = engine.calculate_all_three(self._base_visitors())
+        assert set(results.keys()) == {"base", "optimistic", "pessimistic"}
 
-    def test_all_scenarios_defined(self):
-        """7シナリオ以上が定義されている"""
-        from features.tourism.scenario_engine import SCENARIOS
-        assert len(SCENARIOS) >= 7, f"シナリオ数不足: {len(SCENARIOS)}"
-
-    def test_japan_total_impact(self):
-        """日本全体影響サマリーが正しい構造"""
+    def test_optimistic_positive(self):
+        """楽観シナリオの日本全体はプラス"""
         engine = self._get_engine()
-        result = engine.calculate_japan_total_impact("jpy_weak_10")
-        assert "total_base_visitors_k" in result
-        assert "total_scenario_visitors_k" in result
-        assert "total_change_pct" in result
-        assert "country_impacts" in result
-        assert result["total_change_pct"] > 0, "円安シナリオで全体は増加すべき"
+        results = engine.calculate_all_three(self._base_visitors())
+        assert results["optimistic"]["total_change_pct"] > 0
 
-    def test_list_scenarios(self):
-        """シナリオ一覧が返る"""
+    def test_pessimistic_negative(self):
+        """悲観シナリオの日本全体はマイナス"""
         engine = self._get_engine()
-        scenarios = engine.list_scenarios()
-        assert len(scenarios) >= 7
-        for s in scenarios:
-            assert "name" in s
-            assert "label" in s
+        results = engine.calculate_all_three(self._base_visitors())
+        assert results["pessimistic"]["total_change_pct"] < 0
 
-    def test_unknown_scenario_raises(self):
-        """未定義シナリオでValueError"""
+    def test_cn_wider_than_kr(self):
+        """CNの楽観-悲観幅がKRより大きい（政治リスク）"""
         engine = self._get_engine()
-        with pytest.raises(ValueError):
-            engine.calculate_country_impacts("nonexistent_scenario")
+        results = engine.calculate_all_three(self._base_visitors())
+        cn_span = results["optimistic"]["country_impacts"]["CN"]["change_pct"] - results["pessimistic"]["country_impacts"]["CN"]["change_pct"]
+        kr_span = results["optimistic"]["country_impacts"]["KR"]["change_pct"] - results["pessimistic"]["country_impacts"]["KR"]["change_pct"]
+        assert cn_span > kr_span, f"CN幅({cn_span:.1f}) > KR幅({kr_span:.1f})であるべき"
 
-    def test_taiwan_strait_tw_severe(self):
-        """台湾海峡リスクでTWが大幅減"""
+    def test_apply_to_forecast(self):
+        """apply_to_forecastが3シナリオの月別値を返す"""
         engine = self._get_engine()
-        impacts = engine.calculate_country_impacts("taiwan_strait_risk")
-        tw_impact = impacts["TW"]
-        assert tw_impact.total_demand_change_pct < -40.0, \
-            f"台湾海峡リスクでTWは-40%以下であるべき: {tw_impact.total_demand_change_pct}"
+        baseline = [100000] * 12
+        result = engine.apply_to_forecast(baseline, "KR")
+        assert set(result.keys()) == {"base", "optimistic", "pessimistic"}
+        base_vals = result["base"].get("values", result["base"]) if isinstance(result["base"], dict) else result["base"]
+        opt_vals = result["optimistic"].get("values", result["optimistic"]) if isinstance(result["optimistic"], dict) else result["optimistic"]
+        pes_vals = result["pessimistic"].get("values", result["pessimistic"]) if isinstance(result["pessimistic"], dict) else result["pessimistic"]
+        assert len(base_vals) == 12
+        assert opt_vals[0] > base_vals[0]
+        assert pes_vals[0] < base_vals[0]
