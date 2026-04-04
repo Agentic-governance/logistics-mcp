@@ -9,97 +9,441 @@
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#0f1117;color:#e0e0e0;font-family:system-ui,-apple-system,sans-serif;padding:20px;overflow-y:auto;}
-a{color:#60a5fa;}
+
+/* ベース */
+body {
+  background: #0a0a0f;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  padding: 0;
+  margin: 0;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-y: auto;
+}
+a { color: #60a5fa; }
+
+/* コンテナ */
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
 
 /* ヘッダー */
-.header{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:16px 24px;margin-bottom:16px;}
-.header-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.header-logo{font-size:22px;font-weight:700;color:#60a5fa;}
-.header-title{font-size:18px;font-weight:600;color:#e0e0e0;}
-.header-sub{font-size:13px;color:#8b8fa3;margin-top:4px;}
-.status-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:600;margin-left:8px;}
-.status-static{background:#374151;color:#9ca3af;}
-.status-live{background:#065f46;color:#34d399;}
-.controls{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;align-items:center;padding:8px 0;border-top:1px solid #2d2f3e;}
-.controls label{font-size:13px;color:#8b8fa3;}
-.controls select{background:#0f1117;color:#e0e0e0;border:1px solid #2d2f3e;border-radius:6px;padding:6px 12px;font-size:14px;cursor:pointer;}
-.controls select:hover{border-color:#60a5fa;}
+.header {
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 24px;
+}
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header-left {
+  display: flex;
+  flex-direction: column;
+}
+.header-logo {
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.header-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+  margin-top: 4px;
+}
+.header-sub {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 4px;
+}
 
-/* 地図行 */
-.map-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
-.map-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:16px;min-height:340px;position:relative;}
-.map-card h3{font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:8px;}
-.country-panel{position:absolute;bottom:12px;right:12px;background:rgba(15,17,23,0.92);border:1px solid #2d2f3e;border-radius:6px;padding:8px 10px;font-size:11px;max-height:180px;overflow-y:auto;z-index:5;}
-.country-panel-row{display:flex;align-items:center;gap:6px;padding:2px 0;white-space:nowrap;}
-.country-panel-row .chg-pos{color:#34d399;}
-.country-panel-row .chg-neg{color:#f87171;}
+/* ステータスバッジ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+.badge-static, .status-badge.status-static {
+  background: rgba(234,179,8,0.12);
+  color: #eab308;
+  border: 1px solid rgba(234,179,8,0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+.badge-live, .status-badge.status-live {
+  background: rgba(34,197,94,0.12);
+  color: #22c55e;
+  border: 1px solid rgba(34,197,94,0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+.badge-live::before, .status-badge.status-live::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 
-/* カード行 */
-.scenario-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;}
-.scenario-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:20px;text-align:center;}
-.scenario-card.pessimistic{border-left:4px solid #f87171;}
-.scenario-card.base{border-left:4px solid #60a5fa;}
-.scenario-card.optimistic{border-left:4px solid #34d399;}
-.scenario-label{font-size:13px;font-weight:600;margin-bottom:6px;}
-.scenario-card.pessimistic .scenario-label{color:#f87171;}
-.scenario-card.base .scenario-label{color:#60a5fa;}
-.scenario-card.optimistic .scenario-label{color:#34d399;}
-.scenario-value{font-size:28px;font-weight:700;margin-bottom:4px;}
-.scenario-card.pessimistic .scenario-value{color:#f87171;}
-.scenario-card.base .scenario-value{color:#60a5fa;}
-.scenario-card.optimistic .scenario-value{color:#34d399;}
-.scenario-diff{font-size:14px;font-weight:600;margin-bottom:8px;}
-.scenario-desc{font-size:12px;color:#8b8fa3;line-height:1.5;}
+/* コントロール */
+.controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.controls label {
+  font-size: 13px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.controls select {
+  background: #111318;
+  color: #f8fafc;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M1.646 4.646a.5.5 0 01.708 0L8 10.293l5.646-5.647a.5.5 0 01.708.708l-6 6a.5.5 0 01-.708 0l-6-6a.5.5 0 010-.708z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+.controls select:hover {
+  border-color: rgba(255,255,255,0.16);
+}
+.controls select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
 
-/* チャート */
-.chart-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:20px;margin-bottom:16px;}
-.chart-card h3{font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:12px;}
-.chart-wrap{position:relative;height:400px;}
+/* グリッド */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+/* 地図カード */
+.map-card {
+  background: #111318;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  min-height: 340px;
+}
+.map-card h3 {
+  font-size: 13px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+/* 世界地図パネル */
+.country-panel {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  background: rgba(10,10,15,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 5;
+  backdrop-filter: blur(8px);
+}
+.country-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  white-space: nowrap;
+  color: #94a3b8;
+}
+.country-panel-row .chg-pos { color: #22c55e; }
+.country-panel-row .chg-neg { color: #ef4444; }
+
+/* 凡例 */
+.legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+.legend-grad {
+  width: 120px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* シナリオカード */
+.scenario-card {
+  background: #111318;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 20px 24px;
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  transition: border-color 0.15s;
+}
+.scenario-card:hover {
+  border-color: rgba(255,255,255,0.12);
+}
+.scenario-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+.scenario-card.pessimistic::before { background: #ef4444; }
+.scenario-card.base::before { background: #3b82f6; }
+.scenario-card.optimistic::before { background: #22c55e; }
+
+.scenario-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.scenario-card.pessimistic .scenario-label { color: #ef4444; }
+.scenario-card.base .scenario-label { color: #3b82f6; }
+.scenario-card.optimistic .scenario-label { color: #22c55e; }
+
+.scenario-value {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+.scenario-card.pessimistic .scenario-value { color: #ef4444; }
+.scenario-card.base .scenario-value { color: #3b82f6; }
+.scenario-card.optimistic .scenario-value { color: #22c55e; }
+
+.scenario-diff {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.scenario-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* チャートカード */
+.chart-card {
+  background: #111318;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  transition: border-color 0.15s;
+}
+.chart-card:hover {
+  border-color: rgba(255,255,255,0.12);
+}
+.chart-card h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 4px;
+}
+.chart-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 16px;
+}
+.chart-wrap {
+  position: relative;
+  height: 400px;
+}
+
+/* カード（汎用） */
+.card, .table-card {
+  background: #111318;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  transition: border-color 0.15s;
+}
+.card:hover, .table-card:hover {
+  border-color: rgba(255,255,255,0.12);
+}
+
+/* セクションタイトル */
+.section-title, .table-card h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f8fafc;
+  margin-bottom: 12px;
+}
 
 /* テーブル */
-.table-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:20px;margin-bottom:16px;}
-.table-card h3{font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:12px;}
-table{width:100%;border-collapse:collapse;font-size:13px;}
-th{text-align:left;padding:8px 12px;border-bottom:1px solid #2d2f3e;color:#8b8fa3;font-weight:600;}
-td{padding:8px 12px;border-bottom:1px solid #1e2130;}
-tr:hover{background:#1e2130;}
-.num-r{text-align:right;font-variant-numeric:tabular-nums;}
-.flag-name{display:flex;align-items:center;gap:6px;}
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+th {
+  text-align: left;
+  padding: 10px 12px;
+  color: #64748b;
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: #e2e8f0;
+}
+tr:hover {
+  background: rgba(255,255,255,0.03);
+}
+tr:last-child td {
+  border-bottom: none;
+}
+.num-r {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.flag-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
-/* 非対称性 */
-.asym-card{background:#1a1d27;border:1px solid #2d2f3e;border-radius:8px;padding:20px;margin-bottom:16px;}
-.asym-card h3{font-size:14px;font-weight:600;color:#60a5fa;margin-bottom:8px;}
-.asym-card p{font-size:13px;color:#c0c4d0;line-height:1.7;}
+/* 非対称性カード */
+.asym-card {
+  background: rgba(59,130,246,0.06);
+  border: 1px solid rgba(59,130,246,0.12);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.asym-card h3 {
+  font-size: 12px;
+  font-weight: 500;
+  color: #60a5fa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.asym-card p {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.7;
+}
 
 /* フッター */
-.footer{text-align:center;padding:16px;font-size:12px;color:#6b7280;border-top:1px solid #2d2f3e;margin-top:8px;}
-
-/* レスポンシブ */
-@media(max-width:900px){
-  .map-row,.scenario-row{grid-template-columns:1fr;}
+.footer {
+  margin-top: 32px;
+  padding: 16px 0;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px;
+  color: #475569;
+  text-align: center;
 }
 
 /* ツールチップ (D3) */
-.d3-tooltip{position:absolute;background:rgba(15,17,23,0.95);border:1px solid #2d2f3e;border-radius:6px;padding:8px 12px;font-size:12px;color:#e0e0e0;pointer-events:none;z-index:100;white-space:nowrap;}
+.d3-tooltip {
+  position: absolute;
+  background: rgba(10,10,15,0.95);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #e2e8f0;
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
 
-/* 日本地図の凡例 */
-.legend-bar{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:#8b8fa3;}
-.legend-grad{width:120px;height:10px;border-radius:3px;}
+/* レスポンシブ */
+@media (max-width: 768px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .container { padding: 16px; }
+  .scenario-value { font-size: 24px; }
+}
 </style>
 </head>
 <body>
 
+<div class="container">
+
 <!-- ヘッダー -->
 <div class="header">
   <div class="header-top">
-    <span class="header-logo">SCRI</span>
-    <span class="header-title">インバウンド観光リスクダッシュボード</span>
+    <div class="header-left">
+      <div class="header-logo">SCRI</div>
+      <div class="header-title">インバウンド観光リスクダッシュボード</div>
+      <div class="header-sub">29変数モンテカルロ予測 &middot; 8市場 &middot; 47都道府県</div>
+    </div>
     <span class="status-badge status-static" id="statusBadge">STATIC</span>
   </div>
-  <div class="header-sub">29変数モンテカルロ予測 | 8市場 | 47都道府県</div>
   <div class="controls">
-    <label>ソース国:
+    <label>ソース国
       <select id="selCountry">
         <option value="ALL">全市場</option>
         <option value="KR">&#x1F1F0;&#x1F1F7; 韓国</option>
@@ -112,7 +456,7 @@ tr:hover{background:#1e2130;}
         <option value="SG">&#x1F1F8;&#x1F1EC; シンガポール</option>
       </select>
     </label>
-    <label>都道府県:
+    <label>都道府県
       <select id="selPref">
         <option value="ALL">全国</option>
       </select>
@@ -120,15 +464,15 @@ tr:hover{background:#1e2130;}
   </div>
 </div>
 
-<!-- 地図行 -->
-<div class="map-row">
+<!-- 地図 -->
+<div class="grid-2">
   <div class="map-card">
-    <h3>世界地図 ― ソースマーケットバブルチャート</h3>
+    <h3>ソースマーケット</h3>
     <div id="worldMap" style="width:100%;height:280px;"></div>
     <div class="country-panel" id="countryPanel"></div>
   </div>
   <div class="map-card">
-    <h3>日本地図 ― 47都道府県別来訪者予測</h3>
+    <h3>都道府県別来訪者</h3>
     <div id="japanMap" style="width:100%;height:280px;"></div>
     <div class="legend-bar">
       <span>5万人</span>
@@ -138,31 +482,32 @@ tr:hover{background:#1e2130;}
   </div>
 </div>
 
-<!-- 3シナリオカード -->
-<div class="scenario-row">
+<!-- シナリオ -->
+<div class="grid-3">
   <div class="scenario-card pessimistic">
     <div class="scenario-label">悲観 (p10)</div>
     <div class="scenario-value" id="valPess">---</div>
     <div class="scenario-diff" id="diffPess"></div>
-    <div class="scenario-desc">地政学リスク・入国制限強化等のダウンサイドシナリオ</div>
+    <div class="scenario-desc">円高 + 日中悪化 + 景気後退</div>
   </div>
   <div class="scenario-card base">
     <div class="scenario-label">ベース (p50)</div>
     <div class="scenario-value" id="valBase">---</div>
     <div class="scenario-diff" id="diffBase"></div>
-    <div class="scenario-desc">現行政策継続・為替安定の中央シナリオ</div>
+    <div class="scenario-desc">現状の為替・経済・地政学が継続</div>
   </div>
   <div class="scenario-card optimistic">
     <div class="scenario-label">楽観 (p90)</div>
     <div class="scenario-value" id="valOpt">---</div>
     <div class="scenario-diff" id="diffOpt"></div>
-    <div class="scenario-desc">ビザ緩和・円安進行・万博効果等のアップサイド</div>
+    <div class="scenario-desc">円安 + 中国回復 + 増便</div>
   </div>
 </div>
 
-<!-- 予測チャート -->
+<!-- チャート -->
 <div class="chart-card">
   <h3>3シナリオ予測 ― 全市場合計 (万人/月)</h3>
+  <div class="chart-sub">2026/04〜2027/12 &middot; ベース(青) / 楽観(緑) / 悲観(赤) / 信頼区間(帯)</div>
   <div class="chart-wrap">
     <canvas id="chartForecast"></canvas>
   </div>
@@ -172,7 +517,7 @@ tr:hover{background:#1e2130;}
 <div class="table-card">
   <h3>ソースマーケット別予測 (直近月・万人)</h3>
   <table id="tblCountry">
-    <thead><tr><th>市場</th><th class="num-r">悲観</th><th class="num-r">ベース</th><th class="num-r">楽観</th><th class="num-r">帯幅</th></tr></thead>
+    <thead><tr><th>市場</th><th class="num-r" style="color:#ef4444">悲観</th><th class="num-r" style="color:#3b82f6">ベース</th><th class="num-r" style="color:#22c55e">楽観</th><th class="num-r">帯幅</th></tr></thead>
     <tbody id="tbodyCountry"></tbody>
   </table>
 </div>
@@ -186,7 +531,7 @@ tr:hover{background:#1e2130;}
   </table>
 </div>
 
-<!-- 非対称性説明 -->
+<!-- 非対称性 -->
 <div class="asym-card">
   <h3>予測の非対称性について</h3>
   <p id="asymText">
@@ -201,6 +546,8 @@ tr:hover{background:#1e2130;}
 <div class="footer">
   SCRI Supply Chain Risk Intelligence &copy; 2026 | データソース: JNTO, 各国統計局, モンテカルロシミュレーション
 </div>
+
+</div><!-- /.container -->
 
 <script>
 /* ===================================================================
@@ -406,7 +753,7 @@ function updateChart(months, baseArr, p10Arr, p90Arr, pessArr, optArr) {
             label: '信頼区間(上)',
             data: p90Arr,
             fill: '+1',
-            backgroundColor: 'rgba(96,165,250,0.12)',
+            backgroundColor: 'rgba(59,130,246,0.08)',
             borderColor: 'transparent',
             pointRadius: 0,
             order: 5
@@ -422,7 +769,7 @@ function updateChart(months, baseArr, p10Arr, p90Arr, pessArr, optArr) {
           {
             label: '悲観 (p10)',
             data: pessArr,
-            borderColor: '#f87171',
+            borderColor: '#ef4444',
             borderWidth: 1.5,
             borderDash: [6, 3],
             pointRadius: 0,
@@ -432,17 +779,17 @@ function updateChart(months, baseArr, p10Arr, p90Arr, pessArr, optArr) {
           {
             label: 'ベース (p50)',
             data: baseArr,
-            borderColor: '#60a5fa',
+            borderColor: '#3b82f6',
             borderWidth: 2.5,
             pointRadius: 2,
-            pointBackgroundColor: '#60a5fa',
+            pointBackgroundColor: '#3b82f6',
             fill: false,
             order: 1
           },
           {
             label: '楽観 (p90)',
             data: optArr,
-            borderColor: '#34d399',
+            borderColor: '#22c55e',
             borderWidth: 1.5,
             borderDash: [6, 3],
             pointRadius: 0,
@@ -457,12 +804,29 @@ function updateChart(months, baseArr, p10Arr, p90Arr, pessArr, optArr) {
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
+            position: 'top',
+            align: 'end',
             labels: {
-              color: '#8b8fa3',
-              filter: function(item) { return item.text.indexOf('信頼区間') === -1; }
+              color: '#94a3b8',
+              font: { size: 12, family: '-apple-system, sans-serif' },
+              usePointStyle: true,
+              pointStyle: 'line',
+              padding: 16,
+              filter: function(item) { return item.text.indexOf('信頼区間') < 0; }
             }
           },
           tooltip: {
+            backgroundColor: '#1e293b',
+            titleColor: '#f8fafc',
+            bodyColor: '#e2e8f0',
+            borderColor: 'rgba(255,255,255,0.08)',
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 8,
+            titleFont: { size: 13, weight: '600' },
+            bodyFont: { size: 13 },
+            displayColors: true,
+            boxPadding: 4,
             callbacks: {
               label: function(ctx2) {
                 if (ctx2.datasetIndex <= 1) return null;
@@ -472,14 +836,19 @@ function updateChart(months, baseArr, p10Arr, p90Arr, pessArr, optArr) {
           }
         },
         scales: {
-          x: { ticks: { color: '#6b7280', maxRotation: 45 }, grid: { color: '#1e2130' } },
+          x: {
+            grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
+            ticks: { color: '#64748b', font: { size: 11 }, maxTicksLimit: 12, padding: 8, maxRotation: 45 }
+          },
           y: {
+            grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
             ticks: {
-              color: '#6b7280',
+              color: '#64748b',
+              font: { size: 11 },
+              padding: 8,
               callback: function(v) { return v.toFixed(0) + '万'; }
             },
-            grid: { color: '#1e2130' },
-            title: { display: true, text: '万人/月', color: '#8b8fa3' }
+            title: { display: true, text: '万人/月', color: '#64748b', font: { size: 11 } }
           }
         }
       }
@@ -614,7 +983,7 @@ function drawWorldMap(byCountry) {
           .attr('class', 'land')
           .attr('d', path)
           .attr('fill', '#1a2744')
-          .attr('stroke', '#2d2f3e')
+          .attr('stroke', 'rgba(255,255,255,0.06)')
           .attr('stroke-width', 0.5);
         drawBubbles(svg, projection, byCountry);
       } catch(e2) { console.error('世界地図描画:', e2); }
@@ -654,8 +1023,8 @@ function drawBubbles(svg, projection, byCountry) {
       .attr('cx', function(d){ return projection(d.coords)[0]; })
       .attr('cy', function(d){ return projection(d.coords)[1]; })
       .attr('r', function(d){ return rScale(d.val); })
-      .attr('fill', 'rgba(96,165,250,0.5)')
-      .attr('stroke', '#60a5fa')
+      .attr('fill', 'rgba(59,130,246,0.4)')
+      .attr('stroke', '#3b82f6')
       .attr('stroke-width', 1)
       .on('mouseover', function(ev, d) {
         var meta = COUNTRY_META[d.code] || {};
@@ -733,7 +1102,7 @@ function drawJapanMap() {
             if (idx >= 0) return colorScale(PREF_VISITORS[idx]);
             return '#1a2744';
           })
-          .attr('stroke', '#2d2f3e')
+          .attr('stroke', 'rgba(255,255,255,0.06)')
           .attr('stroke-width', 0.5)
           .on('mouseover', function(ev, d) {
             var name = d.properties.nam_ja || d.properties.name_ja || d.properties.name || '';
@@ -751,7 +1120,7 @@ function drawJapanMap() {
     }).catch(function(err) {
       console.warn('日本地図取得失敗:', err);
       /* フォールバック: テキスト表示 */
-      svg.append('text').attr('x', 20).attr('y', 140).attr('fill', '#6b7280').text('地図データ読み込み失敗');
+      svg.append('text').attr('x', 20).attr('y', 140).attr('fill', '#64748b').text('地図データ読み込み失敗');
     });
   } catch(e) { console.error('drawJapanMap:', e); }
 }
