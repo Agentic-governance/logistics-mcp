@@ -926,22 +926,32 @@ function renderAsymmetryNote() {
 // LOAD THREE SCENARIOS (API1回呼び出し)
 // ===================================================================
 async function loadThreeScenarios() {
-  try {
-    const resp = await fetch('/api/v1/tourism/three-scenarios?source_country=' + currentCountry + '&prefecture=' + encodeURIComponent(currentPref));
-    if (!resp.ok) throw new Error('API error ' + resp.status);
-    const json = await resp.json();
-    // APIミドルウェアの data ラッパーを解除
-    threeScenarioData = json.data || json;
-    console.log('Three-scenarios API loaded, model=' + (threeScenarioData.model || 'unknown'));
-  } catch(e) {
-    console.warn('Three-scenarios API fallback:', e.message);
-    threeScenarioData = SCENARIO_FALLBACK;
-  }
-
+  // 即座にフォールバックで描画（APIが遅くても画面が空にならない）
+  threeScenarioData = SCENARIO_FALLBACK;
   renderThreeScenarioChart();
   renderScenarioSummaryCards();
   renderCountryImpactTable();
   renderAsymmetryNote();
+
+  // APIを非同期で試行（成功したら上書き再描画）
+  try {
+    var ctrl = new AbortController();
+    var tid = setTimeout(function() { ctrl.abort(); }, 6000);
+    var resp = await fetch('/api/v1/tourism/three-scenarios?source_country=' + currentCountry + '&prefecture=' + encodeURIComponent(currentPref), {signal: ctrl.signal});
+    clearTimeout(tid);
+    if (!resp.ok) throw new Error('API ' + resp.status);
+    var json = await resp.json();
+    threeScenarioData = json.data || json;
+    if (threeScenarioData.scenarios) {
+      console.log('API loaded: ' + (threeScenarioData.model || 'live'));
+      renderThreeScenarioChart();
+      renderScenarioSummaryCards();
+      renderCountryImpactTable();
+      renderAsymmetryNote();
+    }
+  } catch(e) {
+    console.warn('API fallback:', e.message);
+  }
 }
 
 // ===================================================================
