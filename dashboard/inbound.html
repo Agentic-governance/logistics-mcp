@@ -201,6 +201,9 @@ svg.map{width:100%;height:100%}
   <div style="position:relative;height:25vh;min-height:180px">
     <canvas id="forecastChart"></canvas>
   </div>
+
+  <!-- 非対称性ノート (MC集計時に表示) -->
+  <div id="asymmetryNote" style="margin-top:8px;padding:8px 12px;background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.2);border-radius:6px;font-size:11px;color:#8b8fa8;line-height:1.6;display:none"></div>
 </div>
 
 <!-- ===== Section 3: 国別影響テーブル (3列横並び) ===== -->
@@ -731,6 +734,23 @@ function renderThreeScenarioChart() {
               const v = ctx.raw;
               if (v >= 1000) return name + ': ' + (v / 1000).toFixed(1) + 'M人';
               return name + ': ' + v.toFixed(0) + '千人';
+            },
+            afterBody: function(tooltipItems) {
+              // MC集計時: 不確実性が高い月を表示
+              if (!threeScenarioData || !threeScenarioData.distribution_stats) return '';
+              const idx = tooltipItems[0] ? tooltipItems[0].dataIndex : -1;
+              if (idx < 0) return '';
+              var lines = [];
+              ['base', 'optimistic', 'pessimistic'].forEach(function(key) {
+                var s = threeScenarioData.distribution_stats[key];
+                if (!s || !s.band_widths || idx >= s.band_widths.length) return;
+                var bw = s.band_widths[idx];
+                var label = key === 'base' ? 'B' : key === 'optimistic' ? 'O' : 'P';
+                if (bw > (s.mean_band_width || 0) * 1.2) {
+                  lines.push(label + ' 不確実性高 (帯幅' + bw.toFixed(0) + '千人)');
+                }
+              });
+              return lines.length > 0 ? '\n' + lines.join('\n') : '';
             }
           }
         }
@@ -859,6 +879,50 @@ function onCardClick(scenario) {
 }
 
 // ===================================================================
+// 非対称性ノート表示 (MC集計時)
+// ===================================================================
+function renderAsymmetryNote() {
+  const el = document.getElementById('asymmetryNote');
+  if (!el) return;
+
+  const data = threeScenarioData;
+  if (!data || !data.distribution_stats) {
+    el.style.display = 'none';
+    return;
+  }
+
+  const stats = data.distribution_stats;
+  const parts = [];
+
+  // モデル情報
+  if (data.model === 'montecarlo') {
+    parts.push('<strong>Monte Carlo集計</strong> (' + (data.n_samples || 5000) + 'サンプル)');
+  }
+
+  // 各シナリオの非対称性
+  ['pessimistic', 'base', 'optimistic'].forEach(function(key) {
+    const s = stats[key];
+    if (!s) return;
+    const label = key === 'base' ? 'ベース' : key === 'optimistic' ? '楽観' : '悲観';
+    const meanAsym = s.asymmetry_mean || 0;
+    const skewDir = meanAsym > 0 ? '上振れ方向に厚い(右裾)' : meanAsym < 0 ? '下振れ方向に厚い(左裾)' : '対称';
+    const maxMonth = s.max_uncertainty_month || '-';
+    const maxBW = s.max_band_width || 0;
+    parts.push(
+      '<span style="color:' + (key === 'base' ? '#4a9eff' : key === 'optimistic' ? '#51cf66' : '#ff4d4d') + '">' + label + '</span>: ' +
+      skewDir + ' (非対称度=' + meanAsym.toFixed(1) + '千人) / 不確実性最大月=' + maxMonth + ' (帯幅' + maxBW.toFixed(0) + '千人)'
+    );
+  });
+
+  if (parts.length > 0) {
+    el.innerHTML = parts.join('<br>');
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+// ===================================================================
 // LOAD THREE SCENARIOS (API1回呼び出し)
 // ===================================================================
 async function loadThreeScenarios() {
@@ -877,6 +941,7 @@ async function loadThreeScenarios() {
   renderThreeScenarioChart();
   renderScenarioSummaryCards();
   renderCountryImpactTable();
+  renderAsymmetryNote();
 }
 
 // ===================================================================

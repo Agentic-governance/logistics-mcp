@@ -1068,9 +1068,17 @@ def post_scenario_analysis(req: ScenarioAnalysisRequest):
     )
 
 
-# ── v1.5.0 3シナリオ同時表示 ──
+# ── v1.5.0 3シナリオ同時表示 (MonteCarloAggregator版) ──
 
-# 月別ベースライン（千人）— GP失敗時フォールバック
+# MC集計器（遅延初期化）
+_mc_aggregator = None
+try:
+    from features.tourism.country_distribution_model import MonteCarloAggregator
+    _mc_aggregator = MonteCarloAggregator(n_samples=5000, seed=42)
+except (ImportError, Exception) as _e:
+    logger.warning("MonteCarloAggregator 初期化失敗: %s", _e)
+
+# 月別ベースライン（千人）— MC失敗時フォールバック用
 BASE_MONTHLY = {
     "KR": [672, 598, 746, 724, 662, 588, 756, 693, 640, 798, 682, 756,
            699, 622, 776, 753, 688, 612, 786, 721, 666],
@@ -1093,24 +1101,67 @@ for _y in (2026, 2027):
 
 
 @router.get("/three-scenarios")
-def get_three_scenarios(
+async def get_three_scenarios(
     source_country: str = Query(default="ALL", description="国コード (ALL=全市場)"),
     prefecture: str = Query(default="JAPAN", description="都道府県 (JAPAN=全国)"),
 ):
-    """3シナリオ (base/optimistic/pessimistic) を同時計算して返す
+    """3シナリオ (base/optimistic/pessimistic) をモンテカルロ集計で同時計算
 
-    常に3本分のmedian/p10/p90を返す。GPモデルでベース予測を生成し、
-    ScenarioEngine.apply_to_forecastで乗数適用。GP失敗時はBASE_MONTHLYを使用。
+    真のMC集計: 共通FXショック + 国別政治ショック + 固有ボラティリティ
+    → サンプルレベルで合算 → 非対称なp10/p50/p90
+    MC失敗時は従来のScenarioEngine乗数方式にフォールバック
     """
+    import asyncio
+
     months = list(_THREE_SCENARIO_MONTHS)
 
-    # ── ベースライン予測を取得 ──
+    # ── MonteCarloAggregator で3シナリオ並列計算 ──
+    if _mc_aggregator is not None:
+        try:
+            loop = asyncio.get_event_loop()
+            mc_result = await loop.run_in_executor(
+                None, _mc_aggregator.compute_all_three, months
+            )
+
+            # ScenarioEngineからcountry_impactsを取得（国別影響テーブル用）
+            country_impacts = {}
+            try:
+                from features.tourism.scenario_engine import ScenarioEngine as _SE
+                engine = _SE()
+                all_three = engine.calculate_all_three()
+                base_impacts = all_three.get("base", {}).get("country_impacts", {})
+                opt_impacts = all_three.get("optimistic", {}).get("country_impacts", {})
+                pess_impacts = all_three.get("pessimistic", {}).get("country_impacts", {})
+                for cc in set(list(base_impacts.keys()) + list(opt_impacts.keys()) + list(pess_impacts.keys())):
+                    country_impacts[cc] = {
+                        "base": base_impacts.get(cc, {"change_pct": 0, "direction": "FLAT", "breakdown": {}}),
+                        "optimistic": opt_impacts.get(cc, {"change_pct": 0, "direction": "FLAT", "breakdown": {}}),
+                        "pessimistic": pess_impacts.get(cc, {"change_pct": 0, "direction": "FLAT", "breakdown": {}}),
+                    }
+            except Exception as e:
+                logger.warning("ScenarioEngine country_impacts取得失敗: %s", e)
+
+            return {
+                "status": "ok",
+                "model": "montecarlo",
+                "n_samples": _mc_aggregator.n_samples,
+                "months": mc_result["months"],
+                "scenarios": mc_result["scenarios"],
+                "country_impacts": country_impacts,
+                "distribution_stats": mc_result.get("distribution_stats", {}),
+            }
+        except Exception as e:
+            logger.warning("MonteCarloAggregator 計算失敗、フォールバック: %s", e)
+
+    # ── フォールバック: 従来方式（ScenarioEngine乗数） ──
+    logger.info("three-scenarios: フォールバックモード (ScenarioEngine乗数方式)")
+
+    # ベースライン予測を取得
     baseline_median = None
     baseline_p10 = None
     baseline_p90 = None
     gp_model_used = False
 
-    # GPモデルで予測
     if _gp_aggregator is not None:
         try:
             gp_result = _gp_aggregator.predict_japan_total_gp(months=months)
@@ -1124,7 +1175,6 @@ def get_three_scenarios(
         except Exception as e:
             logger.warning("three-scenarios GP予測失敗: %s", e)
 
-    # フォールバック: BASE_MONTHLYから集計
     if baseline_median is None:
         baseline_median = []
         for i in range(len(months)):
@@ -1132,14 +1182,12 @@ def get_three_scenarios(
             for cdata in BASE_MONTHLY.values():
                 if i < len(cdata):
                     total += cdata[i]
-            # 非掲載市場分 (HK, TH, SG等) 25%加算
             total = int(total * 1.25)
             baseline_median.append(total)
-        # p10/p90はmedianから±12%
         baseline_p10 = [round(v * 0.88) for v in baseline_median]
         baseline_p90 = [round(v * 1.12) for v in baseline_median]
 
-    # ── ScenarioEngine で3シナリオ計算 ──
+    # ScenarioEngine で乗数計算
     engine = None
     try:
         from features.tourism.scenario_engine import ScenarioEngine as _SE
@@ -1148,7 +1196,6 @@ def get_three_scenarios(
         logger.warning("ScenarioEngine初期化失敗: %s", e)
 
     if engine is None:
-        # ScenarioEngine失敗時は楽観+18%/悲観-18%の固定乗数
         opt_mult = 1.18
         pess_mult = 0.82
         country_impacts = {}
@@ -1159,7 +1206,6 @@ def get_three_scenarios(
         opt_mult = 1.0 + opt_data.get("total_change_pct", 18.0) / 100.0
         pess_mult = 1.0 + pess_data.get("total_change_pct", -18.0) / 100.0
 
-        # 国別影響テーブル
         country_impacts = {}
         base_impacts = all_three.get("base", {}).get("country_impacts", {})
         opt_impacts = opt_data.get("country_impacts", {})
@@ -1171,21 +1217,15 @@ def get_three_scenarios(
                 "pessimistic": pess_impacts.get(cc, {"change_pct": 0, "direction": "FLAT", "breakdown": {}}),
             }
 
-    # ── 3シナリオの月別予測値 ──
     base_med = baseline_median
     opt_med = [round(v * opt_mult) for v in baseline_median]
     pess_med = [round(v * pess_mult) for v in baseline_median]
-
     base_p10 = baseline_p10
     base_p90 = baseline_p90
     opt_p10 = [round(v * opt_mult) for v in baseline_p10]
     opt_p90 = [round(v * opt_mult) for v in baseline_p90]
     pess_p10 = [round(v * pess_mult) for v in baseline_p10]
     pess_p90 = [round(v * pess_mult) for v in baseline_p90]
-
-    base_total_change = 0.0
-    opt_total_change = round((opt_mult - 1.0) * 100.0, 1)
-    pess_total_change = round((pess_mult - 1.0) * 100.0, 1)
 
     return {
         "status": "ok",
@@ -1198,7 +1238,7 @@ def get_three_scenarios(
                 "median": base_med,
                 "p10": base_p10,
                 "p90": base_p90,
-                "total_change_pct": base_total_change,
+                "total_change_pct": 0.0,
             },
             "optimistic": {
                 "label": "楽観",
@@ -1206,7 +1246,7 @@ def get_three_scenarios(
                 "median": opt_med,
                 "p10": opt_p10,
                 "p90": opt_p90,
-                "total_change_pct": opt_total_change,
+                "total_change_pct": round((opt_mult - 1.0) * 100.0, 1),
             },
             "pessimistic": {
                 "label": "悲観",
@@ -1214,7 +1254,7 @@ def get_three_scenarios(
                 "median": pess_med,
                 "p10": pess_p10,
                 "p90": pess_p90,
-                "total_change_pct": pess_total_change,
+                "total_change_pct": round((pess_mult - 1.0) * 100.0, 1),
             },
         },
         "country_impacts": country_impacts,

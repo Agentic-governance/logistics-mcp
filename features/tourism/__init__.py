@@ -94,6 +94,17 @@ except (ImportError, ModuleNotFoundError):
     SCENARIOS = None
     CountryScenarioImpact = None
 
+try:
+    from .country_distribution_model import (
+        CountryDistributionModel, MonteCarloAggregator,
+        COUNTRY_RISK_PARAMS, SCENARIO_DRIVERS,
+    )
+except (ImportError, ModuleNotFoundError):
+    CountryDistributionModel = None
+    MonteCarloAggregator = None
+    COUNTRY_RISK_PARAMS = None
+    SCENARIO_DRIVERS = None
+
 __all__ = [
     "TourismGravityModel",
     "SeasonalExtractor",
@@ -121,4 +132,8 @@ __all__ = [
     "ScenarioEngine",
     "SCENARIOS",
     "CountryScenarioImpact",
+    "CountryDistributionModel",
+    "MonteCarloAggregator",
+    "COUNTRY_RISK_PARAMS",
+    "SCENARIO_DRIVERS",
 ]
