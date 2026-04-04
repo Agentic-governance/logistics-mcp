@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <title>SCRI Inbound Tourism Risk</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0f1117;color:#e8e6e0;font-family:system-ui,sans-serif;padding:20px}
@@ -33,6 +35,18 @@ td{padding:6px;border-bottom:1px solid #1e2030}
 
 <h1>SCRI | Inbound Tourism Risk Dashboard</h1>
 <div class="sub">29変数相関行列モンテカルロ予測 | 8市場 | 21ヶ月 (2026/04〜2027/12)</div>
+
+<!-- 地図 -->
+<div class="grid" style="margin-bottom:16px">
+  <div class="card" style="position:relative;height:280px;overflow:hidden">
+    <h3>ソースマーケット リスク</h3>
+    <svg id="worldMap" style="width:100%;height:240px"></svg>
+  </div>
+  <div class="card" style="position:relative;height:280px;overflow:hidden">
+    <h3>日本 — 都道府県別来訪者</h3>
+    <svg id="japanMap" style="width:100%;height:240px"></svg>
+  </div>
+</div>
 
 <!-- KPI -->
 <div class="grid">
@@ -270,6 +284,93 @@ document.getElementById('dataSource').textContent = 'STATIC';
     console.warn('API fallback:', e.message);
   }
 })();
+
+// ============ 世界地図（バブルチャート） ============
+var MARKETS = [
+  {code:'CN',name:'中国',flag:'🇨🇳',lat:35,lon:105,share:24.8,loss:21.2,visitors:5200000,change:-8},
+  {code:'KR',name:'韓国',flag:'🇰🇷',lat:37,lon:127.5,share:19.3,loss:7.6,visitors:8600000,change:5},
+  {code:'TW',name:'台湾',flag:'🇹🇼',lat:23.5,lon:121,share:17.2,loss:9.8,visitors:4800000,change:3},
+  {code:'US',name:'米国',flag:'🇺🇸',lat:39,lon:-98,share:8.5,loss:4.2,visitors:3600000,change:12},
+  {code:'AU',name:'豪州',flag:'🇦🇺',lat:-25,lon:133,share:4.8,loss:5.5,visitors:620000,change:9},
+  {code:'TH',name:'タイ',flag:'🇹🇭',lat:15,lon:100,share:3.2,loss:14.5,visitors:420000,change:-3},
+  {code:'HK',name:'香港',flag:'🇭🇰',lat:22.3,lon:114.2,share:6.2,loss:11.2,visitors:1310000,change:2},
+  {code:'SG',name:'シンガポール',flag:'🇸🇬',lat:1.35,lon:103.8,share:2.8,loss:3.8,visitors:380000,change:6},
+];
+
+function drawWorldMap() {
+  var el = document.getElementById('worldMap');
+  var W = el.clientWidth || 400, H = 240;
+  var svg = d3.select('#worldMap').attr('viewBox', '0 0 '+W+' '+H);
+  svg.selectAll('*').remove();
+
+  var proj = d3.geoNaturalEarth1().scale(W/5.5).translate([W/2, H/2]);
+  var path = d3.geoPath().projection(proj);
+
+  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(function(world) {
+    svg.append('g').selectAll('path')
+      .data(topojson.feature(world, world.objects.countries).features)
+      .join('path').attr('d', path)
+      .attr('fill', '#1e2030').attr('stroke', '#2d2f3e').attr('stroke-width', 0.3);
+
+    MARKETS.forEach(function(m) {
+      var xy = proj([m.lon, m.lat]);
+      if (!xy) return;
+      var r = 4 + m.share * 1.5;
+      var col = m.loss >= 15 ? '#ff4d4d' : m.loss >= 10 ? '#ffa94d' : m.loss >= 5 ? '#ffd43b' : '#51cf66';
+
+      var g = svg.append('g').attr('transform', 'translate('+xy[0]+','+xy[1]+')');
+      g.append('circle').attr('r', r).attr('fill', col).attr('fill-opacity', 0.6).attr('stroke', col).attr('stroke-width', 1);
+      g.append('text').attr('y', -r-4).attr('text-anchor', 'middle').attr('font-size', '9px').attr('fill', '#e8e6e0').text(m.flag+' '+m.share+'%');
+    });
+  });
+}
+
+// ============ 日本地図 ============
+var PREF_VISITORS = {
+  '北海道':390,'青森':8,'岩手':5,'宮城':28,'秋田':5,'山形':6,'福島':12,
+  '茨城':18,'栃木':22,'群馬':12,'埼玉':35,'千葉':85,'東京':1800,'神奈川':170,
+  '新潟':45,'富山':15,'石川':72,'福井':10,'山梨':48,'長野':67,
+  '岐阜':32,'静岡':56,'愛知':220,'三重':42,'滋賀':35,
+  '京都':500,'大阪':1000,'兵庫':110,'奈良':140,'和歌山':18,
+  '鳥取':8,'島根':5,'岡山':28,'広島':85,'山口':15,
+  '徳島':6,'香川':22,'愛媛':12,'高知':5,
+  '福岡':335,'佐賀':8,'長崎':100,'熊本':32,'大分':25,
+  '宮崎':12,'鹿児島':18,'沖縄':280
+};
+
+function drawJapanMap() {
+  var el = document.getElementById('japanMap');
+  var W = el.clientWidth || 400, H = 240;
+  var svg = d3.select('#japanMap').attr('viewBox', '0 0 '+W+' '+H);
+  svg.selectAll('*').remove();
+
+  var proj = d3.geoMercator().center([136.5,35.5]).scale(W*1.6).translate([W/2, H/2]);
+  var path = d3.geoPath().projection(proj);
+  var colorScale = d3.scaleLog().domain([5, 1800]).range([0.15, 1.0]).clamp(true);
+
+  d3.json('https://raw.githubusercontent.com/dataofjapan/land/master/japan.topojson').then(function(japan) {
+    svg.append('g').selectAll('path')
+      .data(topojson.feature(japan, japan.objects.japan).features)
+      .join('path').attr('d', path)
+      .attr('fill', function(d) {
+        var name = d.properties.nam_ja || '';
+        for (var k in PREF_VISITORS) {
+          if (name.indexOf(k) >= 0) {
+            var op = colorScale(PREF_VISITORS[k]);
+            return 'rgba(74,158,255,' + (0.15 + op * 0.85) + ')';
+          }
+        }
+        return '#1e2030';
+      })
+      .attr('stroke', '#2d2f3e').attr('stroke-width', 0.5);
+  }).catch(function() {
+    svg.append('text').attr('x',W/2).attr('y',H/2).attr('text-anchor','middle').attr('fill','#8b8fa8').text('地図読込中...');
+  });
+}
+
+// 地図描画
+drawWorldMap();
+drawJapanMap();
 </script>
 </body>
 </html>
