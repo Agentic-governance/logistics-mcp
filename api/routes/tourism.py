@@ -1068,9 +1068,18 @@ def post_scenario_analysis(req: ScenarioAnalysisRequest):
     )
 
 
-# ── v1.5.0 3シナリオ同時表示 (MonteCarloAggregator版) ──
+# ── v1.5.0 3シナリオ同時表示 ──
 
-# MC集計器（遅延初期化）
+# FullMCEngine（真の確率的予測、優先使用）
+_full_mc_engine = None
+try:
+    from features.tourism.full_mc_engine import FullMCEngine
+    _full_mc_engine = FullMCEngine(n_samples=3000)
+    logger.info("FullMCEngine 初期化成功 (29変数, 相関行列付き)")
+except (ImportError, Exception) as _e:
+    logger.warning("FullMCEngine 初期化失敗: %s", _e)
+
+# MC集計器（フォールバック）
 _mc_aggregator = None
 try:
     from features.tourism.country_distribution_model import MonteCarloAggregator
@@ -1115,7 +1124,36 @@ async def get_three_scenarios(
 
     months = list(_THREE_SCENARIO_MONTHS)
 
-    # ── MonteCarloAggregator で3シナリオ並列計算 ──
+    # ── FullMCEngine (真の確率的予測) を最優先 ──
+    if _full_mc_engine is not None:
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            mc_result = await loop.run_in_executor(
+                None, lambda: _full_mc_engine.run(months, source_country)
+            )
+            return {
+                "status": "ok",
+                "model": "full_mc_29vars",
+                "n_samples": _full_mc_engine.n_samples,
+                "months": mc_result["months"],
+                "scenarios": {
+                    "pessimistic": {"label":"悲観(p10)","color":"#ff4d4d","line_style":"dashed","median":mc_result["p10"]},
+                    "base": {"label":"ベース(p50)","color":"#4a9eff","line_style":"solid",
+                             "median":mc_result["median"],"p10":mc_result["p10"],"p25":mc_result["p25"],
+                             "p75":mc_result["p75"],"p90":mc_result["p90"]},
+                    "optimistic": {"label":"楽観(p90)","color":"#51cf66","line_style":"dashed","median":mc_result["p90"]},
+                },
+                "by_country": mc_result.get("by_country", {}),
+                "country_impacts": mc_result.get("by_country", {}),
+                "asymmetry_by_month": mc_result.get("asymmetry_by_month", []),
+                "uncertainty_by_month": mc_result.get("uncertainty_by_month", []),
+                "model_note": f"29変数相関行列, N={_full_mc_engine.n_samples}",
+            }
+        except Exception as e:
+            logger.warning("FullMCEngine計算失敗: %s", e)
+
+    # ── MonteCarloAggregator フォールバック ──
     if _mc_aggregator is not None:
         try:
             loop = asyncio.get_event_loop()
