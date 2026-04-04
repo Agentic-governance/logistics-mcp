@@ -1,128 +1,121 @@
 """
-全変数の同時分布からモンテカルロで予測を生成する。
-p10=悲観, p50=ベース, p90=楽観 は分布から自然に出る。
+Full Monte Carlo Engine — 29変数相関サンプリングで来訪者数を生成。
+p10=悲観, p50=ベース, p90=楽観（分布から自然生成、人間が設定しない）
 """
 import numpy as np
-from .variable_distributions import (
-    VARIABLE_SPECS, VAR_NAMES, N_VARS, CORRELATION_MATRIX,
-)
+import sqlite3
+from .variable_distributions import sample_all_vars, VAR_IDX, SPECS
 
-ELASTICITIES = {
-    "fx": {"KR":-1.05,"CN":-0.95,"TW":-1.08,"US":-1.18,"AU":-1.22,"TH":-1.10,"HK":-1.00,"SG":-1.08},
-    "gdp": 1.24, "flight": 0.60, "political_coef": -0.008,
-    "consumer_confidence": 0.15, "stock_return": 0.08,
-    "cultural_interest": 0.12,
+FX_ELA = {"KR":-1.05,"CN":-0.95,"TW":-1.08,"US":-1.18,"AU":-1.22,"TH":-1.10,"HK":-1.00,"SG":-1.08}
+GDP_ELA  = 1.24
+FLT_ELA  = 0.60
+GEO_COEF = -0.038  # 地政学1pt悪化→需要3.8%減（日中関係12ptσで46%の変動幅）
+CCI_COEF = 0.012
+STK_COEF = 0.08
+CLT_COEF = 0.010
+
+PARAMS = {
+    "KR": dict(base=716000,fx="fx_krw",gdp="gdp_kr",geo="geo_kr",flt="flt_kr",cci="cci_kr",stk="stk_kr",clt="clt_kr",
+               idio=0.08,peaks={7:1.35,8:1.40,4:1.15,3:1.10,10:1.10},troughs={2:0.75,9:0.80}),
+    "CN": dict(base=433000,fx="fx_cny",gdp="gdp_cn",geo="geo_cn",flt="flt_cn",cci="cci_cn",stk="stk_cn",clt="clt_cn",
+               idio=0.22,peaks={10:2.20,5:1.60,9:1.20},troughs={2:0.45,1:0.55}),
+    "TW": dict(base=400000,fx="fx_twd",gdp="gdp_tw",geo="geo_tw",flt="flt_tw",cci=None,stk=None,clt=None,
+               idio=0.12,peaks={4:1.20,7:1.15,8:1.10},troughs={2:0.55}),
+    "US": dict(base=300000,fx="fx_usd",gdp="gdp_us",geo=None,flt="flt_us",cci="cci_us",stk="stk_us",clt="clt_us",
+               idio=0.15,peaks={7:1.45,8:1.50,4:1.15},troughs={11:0.75,12:0.80}),
+    "AU": dict(base=53000,fx="fx_aud",gdp="gdp_au",geo=None,flt="flt_au",cci=None,stk=None,clt=None,
+               idio=0.18,peaks={7:2.50,8:2.80,1:1.80,2:1.60},troughs={5:0.85,6:0.90}),
+    "TH": dict(base=35000,fx="fx_thb",gdp=None,geo="geo_th",flt=None,cci=None,stk=None,clt=None,
+               idio=0.20,peaks={4:1.20,10:1.15},troughs={}),
+    "HK": dict(base=109000,fx="fx_usd",gdp=None,geo="geo_cn",flt=None,cci=None,stk=None,clt=None,
+               idio=0.18,peaks={4:1.15,10:1.20},troughs={2:0.50}),
+    "SG": dict(base=45000,fx="fx_usd",gdp=None,geo=None,flt=None,cci=None,stk=None,clt=None,
+               idio=0.12,peaks={4:1.15,12:1.20},troughs={}),
 }
+ALL_COUNTRIES = list(PARAMS.keys())
 
-COUNTRY_VAR_MAP = {
-    "KR": {"fx":"fx_krw_jpy","gdp":"gdp_shock_kr","geo":"geo_kr","flight":"flight_kr",
-           "conf":"consumer_confidence_kr","stock":"stock_return_kr","culture":"japan_interest_kr"},
-    "CN": {"fx":"fx_cny_jpy","gdp":"gdp_shock_cn","geo":"geo_cn","flight":"flight_cn",
-           "conf":"consumer_confidence_cn","stock":"stock_return_cn","culture":"japan_interest_cn"},
-    "TW": {"fx":"fx_twd_jpy","gdp":"gdp_shock_tw","geo":"geo_tw","flight":"flight_tw"},
-    "US": {"fx":"fx_usd_jpy","gdp":"gdp_shock_us","flight":"flight_us",
-           "conf":"consumer_confidence_us","stock":"stock_return_us","culture":"japan_interest_us"},
-    "AU": {"fx":"fx_aud_jpy","gdp":"gdp_shock_au","flight":"flight_au"},
-    "TH": {"fx":"fx_thb_jpy","geo":"geo_th"},
-    "HK": {"fx":"fx_usd_jpy","geo":"geo_cn"},
-    "SG": {"fx":"fx_usd_jpy"},
-}
-
-BASE_VISITORS = {"KR":716000,"CN":433000,"TW":400000,"US":300000,"AU":53000,"TH":35000,"HK":109000,"SG":45000}
-
-CALENDAR = {
-    "KR":{7:1.35,8:1.40,4:1.15,3:1.10,2:0.75,9:0.70},
-    "CN":{10:2.20,5:1.60,2:0.45,1:0.50,9:1.10},
-    "TW":{4:1.20,7:1.15,8:1.10,2:0.55},
-    "US":{7:1.45,8:1.50,4:1.15,11:0.75,12:0.80},
-    "AU":{7:2.50,8:2.80,1:1.80,2:1.60,5:0.85,6:0.90},
-    "TH":{4:1.20,10:1.15},
-    "HK":{4:1.15,10:1.20,2:0.50},
-    "SG":{4:1.15,12:1.20},
-}
-
-IDIO_VOL = {"KR":0.08,"CN":0.22,"TW":0.12,"US":0.15,"AU":0.18,"TH":0.20,"HK":0.18,"SG":0.12}
+def _load_db_actuals():
+    cache = {}
+    try:
+        conn = sqlite3.connect('data/tourism_stats.db')
+        for r in conn.execute("SELECT source_country,year,month,fx_rate_jpy,stock_return,consumer_confidence,japan_travel_trend FROM monthly_indicators").fetchall():
+            cache[(r[0],r[1],r[2])] = {'fx':r[3],'stock':r[4],'cci':r[5],'trend':r[6]}
+        for r in conn.execute("SELECT source_country,year,gdp_growth_rate,leave_utilization_rate,remote_work_rate,unemployment_rate,travel_momentum_index,exchange_rate FROM gravity_variables_v2 WHERE month=0").fetchall():
+            cache[(r[0],r[1],'a')] = {'gdp_growth':r[2],'leave_util':r[3],'remote_work':r[4],'unemployment':r[5],'tmi':r[6],'fx_annual':r[7]}
+        conn.close()
+    except:
+        pass
+    return cache
 
 
 class FullMCEngine:
-    def __init__(self, n_samples=5000):
+    def __init__(self, n_samples=3000):
         self.n_samples = n_samples
-        self.var_idx = {v: i for i, v in enumerate(VAR_NAMES)}
-        self.L = np.linalg.cholesky(CORRELATION_MATRIX)
+        self._db = _load_db_actuals()
 
-    def _sample_all(self):
-        z = np.random.standard_normal((self.n_samples, N_VARS))
-        return z @ self.L.T
+    def _get_db_fx_shock(self, iso2, year, month):
+        current = self._db.get((iso2,year,month),{}).get('fx')
+        if current is None: return 0.0
+        prev = [self._db.get((iso2,year if month-dy>0 else year-1,(month-dy-1)%12+1),{}).get('fx') for dy in range(1,13)]
+        prev = [p for p in prev if p]
+        if not prev: return 0.0
+        base = np.mean(prev)
+        return (current - base) / base if base > 0 else 0.0
 
-    def _z_to_val(self, z_arr, var_name):
-        spec = VARIABLE_SPECS[var_name]
-        raw = spec.mu + spec.sigma * z_arr
-        return np.clip(raw, spec.min_val, spec.max_val)
+    def _compute_country(self, iso2, month, year, all_vars):
+        p = PARAMS[iso2]
+        base = p['base']
+        cal = p['peaks'].get(month, p['troughs'].get(month, 1.0))
 
-    def _get_var(self, all_z, var_map, key):
-        vname = var_map.get(key)
-        if vname is None or vname not in self.var_idx:
-            return np.zeros(self.n_samples)
-        return self._z_to_val(all_z[:, self.var_idx[vname]], vname)
+        def get(var_name):
+            if var_name is None or var_name not in VAR_IDX:
+                return np.zeros(self.n_samples)
+            return all_vars[:, VAR_IDX[var_name]]
 
-    def compute_country(self, country, month, all_z):
-        vm = COUNTRY_VAR_MAP.get(country, {})
-        base = BASE_VISITORS.get(country, 50000)
-        cal = CALENDAR.get(country, {}).get(month, 1.0)
+        fx  = get(p['fx']) + self._get_db_fx_shock(iso2, year, month)
+        gdp = get(p['gdp'])
+        geo = get(p['geo'])
+        flt = get(p['flt'])
+        cci = get(p['cci'])
+        stk = get(p['stk'])
+        clt = get(p['clt'])
 
-        fx = self._get_var(all_z, vm, "fx")
-        gdp = self._get_var(all_z, vm, "gdp")
-        geo = self._get_var(all_z, vm, "geo")
-        flt = self._get_var(all_z, vm, "flight")
-        conf = self._get_var(all_z, vm, "conf")
-        stk = self._get_var(all_z, vm, "stock")
-        cul = self._get_var(all_z, vm, "culture")
-
-        fx_e = ELASTICITIES["fx"].get(country, -1.12)
+        fx_ela = FX_ELA.get(iso2, -1.12)
         log_impact = (
-            -fx_e * np.log1p(fx)
-            + ELASTICITIES["gdp"] * np.log1p(gdp)
-            + ELASTICITIES["flight"] * np.log1p(flt)
-            + ELASTICITIES["political_coef"] * geo
-            + ELASTICITIES["consumer_confidence"] * conf / 10
-            + ELASTICITIES["stock_return"] * stk
-            + ELASTICITIES["cultural_interest"] * cul / 10
+            -fx_ela * np.log1p(np.clip(fx, -0.5, 1.0))
+            + GDP_ELA * np.log1p(np.clip(gdp, -0.1, 0.1))
+            + FLT_ELA * np.log1p(np.clip(flt, -0.5, 1.0))
+            + GEO_COEF * geo
+            + CCI_COEF * cci
+            + STK_COEF * stk
+            + CLT_COEF * clt
         )
-        idio = np.random.normal(0, IDIO_VOL.get(country, 0.15) / np.sqrt(12), self.n_samples)
-        return np.maximum(base * cal * np.exp(log_impact + idio), 0)
+        log_impact += np.random.normal(0, p['idio']/np.sqrt(12), self.n_samples)
+        return np.maximum(base * cal * np.exp(log_impact), 0)
 
     def run(self, months, source_country="ALL"):
-        countries = list(BASE_VISITORS.keys()) if source_country == "ALL" else [source_country]
-        n_m = len(months)
-        all_samples = np.zeros((n_m, self.n_samples))
-        by_country = {c: {"median":[],"p10":[],"p90":[]} for c in countries}
+        countries = ALL_COUNTRIES if source_country == "ALL" else [source_country]
+        nm = len(months)
+        total = np.zeros((nm, self.n_samples))
+        by_c = {c: np.zeros((nm, self.n_samples)) for c in countries}
 
         for mi, ms in enumerate(months):
-            year, month = int(ms.split("/")[0]), int(ms.split("/")[1])
-            all_z = self._sample_all()
-            month_total = np.zeros(self.n_samples)
-            for c in countries:
-                cs = self.compute_country(c, month, all_z)
-                month_total += cs
-                by_country[c]["median"].append(int(np.median(cs)))
-                by_country[c]["p10"].append(int(np.percentile(cs, 10)))
-                by_country[c]["p90"].append(int(np.percentile(cs, 90)))
-            all_samples[mi] = month_total
+            year, month = int(ms.split('/')[0]), int(ms.split('/')[1])
+            all_vars = sample_all_vars(self.n_samples)
+            for iso2 in countries:
+                s = self._compute_country(iso2, month, year, all_vars)
+                by_c[iso2][mi] = s
+                total[mi] += s
 
-        p10 = np.percentile(all_samples, 10, axis=1).astype(int)
-        p25 = np.percentile(all_samples, 25, axis=1).astype(int)
-        p50 = np.percentile(all_samples, 50, axis=1).astype(int)
-        p75 = np.percentile(all_samples, 75, axis=1).astype(int)
-        p90 = np.percentile(all_samples, 90, axis=1).astype(int)
-        lower = p50 - p10
-        upper = p90 - p50
-        asym = upper / np.maximum(lower, 1)
+        def pct(a, q): return [int(np.percentile(a[i], q)) for i in range(nm)]
+        p10a = np.array(pct(total,10)); p50a = np.array(pct(total,50)); p90a = np.array(pct(total,90))
+        lower = p50a - p10a; upper = p90a - p50a
 
         return {
-            "months": months, "source_country": source_country, "n_samples": self.n_samples,
-            "median": p50.tolist(), "p10": p10.tolist(), "p25": p25.tolist(),
-            "p75": p75.tolist(), "p90": p90.tolist(),
-            "by_country": by_country,
-            "asymmetry_by_month": asym.tolist(),
-            "uncertainty_by_month": ((p90 - p10) / np.maximum(p50, 1) * 100).tolist(),
+            "months":months, "source_country":source_country, "n_samples":self.n_samples,
+            "median":pct(total,50), "p10":pct(total,10), "p25":pct(total,25),
+            "p75":pct(total,75), "p90":pct(total,90),
+            "by_country":{c:{"median":pct(by_c[c],50),"p10":pct(by_c[c],10),"p90":pct(by_c[c],90)} for c in countries},
+            "asymmetry_by_month":[round(float(u/max(l,1)),3) for u,l in zip(upper,lower)],
+            "uncertainty_by_month":[round(float((p90a[i]-p10a[i])/max(p50a[i],1)*100),1) for i in range(nm)],
         }
