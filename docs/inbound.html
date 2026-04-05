@@ -505,6 +505,31 @@ body {
 .alert-critical { background: rgba(239,68,68,0.15); color: #f87171; border-bottom: 1px solid rgba(239,68,68,0.2); }
 .alert-warning { background: rgba(234,179,8,0.15); color: #facc15; border-bottom: 1px solid rgba(234,179,8,0.2); }
 .alert-info { background: rgba(59,130,246,0.15); color: #93c5fd; border-bottom: 1px solid rgba(59,130,246,0.2); }
+
+/* ===== ツールチップ ===== */
+.tooltip-wrap {
+  position: relative;
+  cursor: help;
+}
+.tooltip-wrap .tooltip-text {
+  visibility: hidden;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: sans-serif;
+  font-weight: 400;
+  white-space: nowrap;
+  z-index: 50;
+  border: 1px solid rgba(255,255,255,0.1);
+  pointer-events: none;
+}
+.tooltip-wrap:hover .tooltip-text { visibility: visible; }
 </style>
 </head>
 <body>
@@ -813,6 +838,11 @@ function toggleUnit() {
     renderPrefTable();
     renderChartStats();
   } catch(e) {}
+}
+
+/* ツールチップ付きラベル生成 */
+function withTooltip(label, tipText) {
+  return '<span class="tooltip-wrap">' + label + '<span class="tooltip-text">' + tipText + '</span></span>';
 }
 
 /* 数値フォーマット（単位モード対応） */
@@ -1431,11 +1461,11 @@ function renderCountryTable() {
 
     var thCols = [
       {key:'name', label:'国'},
-      {key:'base', label:'ベース'},
-      {key:'yoyPct', label:'前年比'},
-      {key:'downside', label:'下振れ'},
-      {key:'upside', label:'上振れ'},
-      {key:'bandPct', label:'帯幅%'},
+      {key:'base', label:withTooltip('ベース', 'モンテカルロ中央値 (3000回シミュレーション)')},
+      {key:'yoyPct', label:withTooltip('前年比', '前年同月との比較')},
+      {key:'downside', label:withTooltip('下振れ', '悲観シナリオとの差 (p50-p10)')},
+      {key:'upside', label:withTooltip('上振れ', '楽観シナリオとの差 (p90-p50)')},
+      {key:'bandPct', label:withTooltip('帯幅%', '予測の不確実性 (p90-p10)/p50')},
       {key:'_spark', label:'6M傾向'},
       {key:'_bar', label:'分布'},
       {key:'risk', label:'主要リスク'}
@@ -1533,10 +1563,10 @@ function renderPrefTable() {
 
     var thCols = [
       {key:'name', label:'都道府県'},
-      {key:'base', label:'ベース'},
-      {key:'downside', label:'下振れ'},
-      {key:'upside', label:'上振れ'},
-      {key:'bandPct', label:'帯幅%'},
+      {key:'base', label:withTooltip('ベース', 'モンテカルロ中央値 (3000回シミュレーション)')},
+      {key:'downside', label:withTooltip('下振れ', '悲観シナリオとの差 (p50-p10)')},
+      {key:'upside', label:withTooltip('上振れ', '楽観シナリオとの差 (p90-p50)')},
+      {key:'bandPct', label:withTooltip('帯幅%', '予測の不確実性 (p90-p10)/p50')},
       {key:'_bar', label:'分布'}
     ];
 
