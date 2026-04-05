@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SCRI Terminal - インバウンド観光需要予測</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -426,6 +428,127 @@ body {
 .status-item .status-label { color: #334155; }
 .status-item .status-value { color: #64748b; }
 
+/* ===== タブナビゲーション (commercial-grade) ===== */
+.tab-nav {
+  background: #0d1117;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 0 16px;
+  display: flex;
+  gap: 0;
+  position: sticky;
+  top: 34px;
+  z-index: 99;
+  overflow-x: auto;
+}
+.tab-nav-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.tab-nav-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.03); }
+.tab-nav-btn.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+}
+.tab-nav-btn .tab-icon { margin-right: 6px; font-size: 14px; }
+.tab-nav-btn .tab-badge {
+  display: inline-block;
+  margin-left: 6px;
+  background: rgba(59,130,246,0.15);
+  color: #3b82f6;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ===== Hero KPIカード ===== */
+.hero-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (max-width: 1024px) { .hero-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .hero-grid { grid-template-columns: 1fr; } }
+.hero-card {
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+.hero-card.primary {
+  background: linear-gradient(135deg, #0d1117 0%, #1a2332 100%);
+  border: 1px solid rgba(59,130,246,0.3);
+}
+.hero-label {
+  font-size: 10px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+.hero-value {
+  font-family: 'SF Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.2;
+}
+.hero-card.primary .hero-value { font-size: 36px; color: #3b82f6; }
+.hero-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+.hero-delta { font-family: 'SF Mono', monospace; font-size: 12px; margin-top: 4px; }
+.hero-delta.up { color: #22c55e; }
+.hero-delta.down { color: #ef4444; }
+
+/* ===== 折りたたみセクション ===== */
+.collapsible-section {
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.collapsible-header {
+  padding: 12px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  user-select: none;
+  transition: background 0.15s;
+}
+.collapsible-header:hover { background: rgba(255,255,255,0.02); }
+.collapsible-header .toggle-icon {
+  font-size: 10px;
+  color: #475569;
+  transition: transform 0.2s;
+}
+.collapsible-section.expanded .toggle-icon { transform: rotate(90deg); }
+.collapsible-body {
+  padding: 0 16px 16px 16px;
+  display: none;
+}
+.collapsible-section.expanded .collapsible-body { display: block; }
+
 /* ===== エクスポート・ツールバー ===== */
 .toolbar {
   display: flex;
@@ -552,6 +675,15 @@ body {
   </span>
 </div>
 
+<div class="tab-nav">
+  <button class="tab-nav-btn active" data-tab="overview" onclick="switchTab('overview')"><span class="tab-icon">◎</span>概要</button>
+  <button class="tab-nav-btn" data-tab="forecast" onclick="switchTab('forecast')"><span class="tab-icon">◯</span>予測</button>
+  <button class="tab-nav-btn" data-tab="operations" onclick="switchTab('operations')"><span class="tab-icon">◈</span>業務</button>
+  <button class="tab-nav-btn" data-tab="finance" onclick="switchTab('finance')"><span class="tab-icon">¥</span>財務/ヘッジ</button>
+  <button class="tab-nav-btn" data-tab="quant" onclick="switchTab('quant')"><span class="tab-icon">σ</span>クオンツ</button>
+  <button class="tab-nav-btn" data-tab="model" onclick="switchTab('model')"><span class="tab-icon">?</span>モデル</button>
+</div>
+
 <div id="risk-alerts" style="display:none;"></div>
 
 <div class="page-content">
@@ -559,9 +691,9 @@ body {
   <div class="national-summary" id="national-summary"></div>
 
   <!-- 世界地図バブルチャート -->
-  <div class="chart-section">
+  <div class="chart-section" id="world-map-section">
     <div class="chart-section-title">国別来訪者予測マップ</div>
-    <div id="worldMap" style="position:relative; width:100%; height:320px; overflow:hidden;"></div>
+    <div id="worldMap" style="position:relative; width:100%; height:400px; overflow:hidden;"></div>
   </div>
 
   <!-- 下振れ・上振れ要因 -->
@@ -574,7 +706,7 @@ body {
   </div>
 
   <!-- 21ヶ月チャート -->
-  <div class="chart-section">
+  <div class="chart-section" id="forecast-chart-section">
     <div class="chart-section-title">21ヶ月予測 (p10 / p50 / p90)</div>
     <div class="chart-stats-row" id="chart-stats"></div>
     <div class="chart-container">
@@ -583,13 +715,13 @@ body {
   </div>
 
   <!-- 日本地図ヒートマップ -->
-  <div class="chart-section">
+  <div class="chart-section" id="japan-map-section">
     <div class="chart-section-title">都道府県別インバウンド集中度</div>
-    <div id="japanMap" style="position:relative; width:100%; height:300px; overflow:hidden;"></div>
+    <div id="japanMap" style="position:relative; width:100%; height:420px; overflow:hidden;"></div>
   </div>
 
   <!-- 国別リスクテーブル -->
-  <div class="table-section">
+  <div class="table-section" id="country-table-section">
     <div class="table-section-title">国別リスク</div>
     <div class="toolbar">
       <button class="toolbar-btn" onclick="exportCountryCSV()">CSV</button>
@@ -599,7 +731,7 @@ body {
   </div>
 
   <!-- 都道府県別リスクテーブル -->
-  <div class="table-section">
+  <div class="table-section" id="pref-table-section">
     <div class="table-section-title">都道府県別リスク</div>
     <div class="toolbar">
       <button class="toolbar-btn" onclick="exportPrefCSV()">CSV</button>
@@ -1514,59 +1646,112 @@ function renderWorldMap() {
     var W = container.offsetWidth;
     var H = container.offsetHeight;
     if (W < 50 || H < 50) return;
+    container.innerHTML = '';
 
-    /* 簡易メルカトル変換 */
-    function toXY(lat, lon) {
-      var x = (lon + 180) / 360 * W;
-      var y = (1 - (Math.log(Math.tan(Math.PI/4 + lat * Math.PI/360)) / Math.PI)) / 2 * H;
-      return {x: x, y: y};
+    /* D3 + world-atlas で正規地図描画 */
+    if (typeof d3 === 'undefined' || typeof topojson === 'undefined') {
+      /* フォールバック: シンプルテキスト */
+      container.innerHTML = '<div style="padding:40px;text-align:center;color:#64748b;">地図ライブラリ読込中...</div>';
+      return;
     }
 
-    /* 日本の位置 */
-    var jpXY = toXY(JP_COORDS.lat, JP_COORDS.lon);
+    var svg = d3.select(container).append('svg')
+      .attr('width', W).attr('height', H)
+      .style('background', '#0a0f1a').style('border-radius', '8px');
 
-    /* 全国ベース合計で最大バブルサイズ算出 */
-    var maxBase = 0;
-    var cKeys = Object.keys(COUNTRY_DATA);
-    var i;
-    for (i = 0; i < cKeys.length; i++) {
-      if (COUNTRY_DATA[cKeys[i]].base > maxBase) maxBase = COUNTRY_DATA[cKeys[i]].base;
-    }
+    /* アジア太平洋中心のメルカトル投影 */
+    var projection = d3.geoMercator()
+      .center([130, 25]).scale(W * 0.28)
+      .translate([W / 2, H / 2]);
+    var path = d3.geoPath().projection(projection);
 
-    var svg = '<svg width="' + W + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">';
-    /* 背景グリッド */
-    svg += '<rect width="' + W + '" height="' + H + '" fill="#080810" rx="6"/>';
-    var gx, gy;
-    for (gx = 0; gx < W; gx += W/12) {
-      svg += '<line x1="' + gx + '" y1="0" x2="' + gx + '" y2="' + H + '" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>';
-    }
-    for (gy = 0; gy < H; gy += H/6) {
-      svg += '<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy + '" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>';
-    }
+    /* world-atlas TopoJSON読込 */
+    d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(function(world) {
+      var countries = topojson.feature(world, world.objects.countries);
+      svg.append('g').selectAll('path')
+        .data(countries.features).enter().append('path')
+        .attr('d', path)
+        .attr('fill', '#1a2332')
+        .attr('stroke', '#2d3f52').attr('stroke-width', 0.5)
+        .attr('opacity', 0.8);
 
-    /* 日本マーカー */
-    svg += '<circle cx="' + jpXY.x + '" cy="' + jpXY.y + '" r="5" fill="#ef4444" opacity="0.9"/>';
-    svg += '<text x="' + (jpXY.x+8) + '" y="' + (jpXY.y+4) + '" fill="#ef4444" font-size="10" font-family="SF Mono,monospace">JP</text>';
+      /* 日本を強調 */
+      svg.selectAll('path').filter(function(d){ return d && d.properties && d.properties.name === 'Japan'; })
+        .attr('fill', '#ef4444').attr('opacity', 1);
 
-    /* 各国バブル + 接続線 */
-    for (i = 0; i < cKeys.length; i++) {
-      var cc = cKeys[i];
-      var cd = COUNTRY_DATA[cc];
-      var coords = COUNTRY_COORDS[cc];
-      if (!coords) continue;
-
-      var pt = toXY(coords.lat, coords.lon);
-      var r = Math.max(6, Math.sqrt(cd.base / maxBase) * 28);
-      var bandPct = (cd.p90 - cd.p10) / cd.base * 100;
-      var color = bandPct >= 45 ? '#ef4444' : (bandPct >= 30 ? '#eab308' : '#22c55e');
+      /* バブル+接続線 */
+      var maxBase = 0;
+      var cKeys = Object.keys(COUNTRY_DATA);
+      for (var mi = 0; mi < cKeys.length; mi++) {
+        if (COUNTRY_DATA[cKeys[mi]].base > maxBase) maxBase = COUNTRY_DATA[cKeys[mi]].base;
+      }
+      var jpCoord = projection([138.3, 36.2]);
+      var bubbleData = [];
+      for (var i = 0; i < cKeys.length; i++) {
+        var cc = cKeys[i];
+        var cd = COUNTRY_DATA[cc];
+        var coords = COUNTRY_COORDS[cc];
+        if (!coords) continue;
+        var pt = projection([coords.lon, coords.lat]);
+        if (!pt) continue;
+        var r = Math.max(5, Math.sqrt(cd.base / maxBase) * 22);
+        var bandPct = (cd.p90 - cd.p10) / cd.base * 100;
+        var color = bandPct >= 45 ? '#ef4444' : (bandPct >= 30 ? '#eab308' : '#22c55e');
+        bubbleData.push({cc:cc, cd:cd, pt:pt, r:r, color:color, bandPct:bandPct});
+      }
 
       /* 接続線 */
-      svg += '<line x1="' + pt.x + '" y1="' + pt.y + '" x2="' + jpXY.x + '" y2="' + jpXY.y + '" stroke="' + color + '" stroke-width="0.5" opacity="0.25"/>';
+      svg.append('g').selectAll('line').data(bubbleData).enter().append('line')
+        .attr('x1', function(d){ return d.pt[0]; })
+        .attr('y1', function(d){ return d.pt[1]; })
+        .attr('x2', jpCoord[0]).attr('y2', jpCoord[1])
+        .attr('stroke', function(d){ return d.color; })
+        .attr('stroke-width', 0.8).attr('opacity', 0.3);
+
       /* バブル */
-      svg += '<circle cx="' + pt.x + '" cy="' + pt.y + '" r="' + r + '" fill="' + color + '" opacity="0.25" stroke="' + color + '" stroke-width="1" stroke-opacity="0.5"/>';
-      /* ラベル */
-      svg += '<text x="' + pt.x + '" y="' + (pt.y - r - 3) + '" fill="#e2e8f0" font-size="9" font-family="SF Mono,monospace" text-anchor="middle">' + cd.flag + ' ' + cd.name + '</text>';
-      svg += '<text x="' + pt.x + '" y="' + (pt.y + 3) + '" fill="#ffffff" font-size="10" font-weight="600" font-family="SF Mono,monospace" text-anchor="middle">' + cd.base.toFixed(1) + '</text>';
+      var bubbleG = svg.append('g').selectAll('g').data(bubbleData).enter().append('g')
+        .style('cursor', 'pointer')
+        .on('mouseover', function(event, d){
+          d3.select(this).select('circle').attr('opacity', 0.6);
+          /* ツールチップ */
+          var tip = svg.append('g').attr('id', 'map-tooltip');
+          tip.append('rect').attr('x', d.pt[0]+d.r+4).attr('y', d.pt[1]-22)
+            .attr('width', 130).attr('height', 44).attr('rx', 4)
+            .attr('fill', '#0d1117').attr('stroke', d.color).attr('stroke-width', 1);
+          tip.append('text').attr('x', d.pt[0]+d.r+10).attr('y', d.pt[1]-6)
+            .attr('fill', '#e2e8f0').attr('font-size', 11).attr('font-weight', 600)
+            .text(d.cd.name+' ('+d.cc+')');
+          tip.append('text').attr('x', d.pt[0]+d.r+10).attr('y', d.pt[1]+10)
+            .attr('fill', '#94a3b8').attr('font-size', 10)
+            .text('Base: '+d.cd.base.toFixed(1)+'万人');
+        })
+        .on('mouseout', function(){
+          d3.select(this).select('circle').attr('opacity', 0.35);
+          svg.select('#map-tooltip').remove();
+        });
+      bubbleG.append('circle')
+        .attr('cx', function(d){ return d.pt[0]; })
+        .attr('cy', function(d){ return d.pt[1]; })
+        .attr('r', function(d){ return d.r; })
+        .attr('fill', function(d){ return d.color; })
+        .attr('opacity', 0.35)
+        .attr('stroke', function(d){ return d.color; })
+        .attr('stroke-width', 1.5);
+      bubbleG.append('text')
+        .attr('x', function(d){ return d.pt[0]; })
+        .attr('y', function(d){ return d.pt[1]+3; })
+        .attr('fill', '#fff').attr('font-size', 9).attr('font-weight', 700)
+        .attr('text-anchor', 'middle')
+        .text(function(d){ return d.cc; });
+    }).catch(function(e){
+      container.innerHTML = '<div style="padding:40px;text-align:center;color:#ef4444;">地図データ読込失敗: ' + e.message + '</div>';
+    });
+    return;
+    /* 以下レガシーコード(未到達) */
+    var jpXY = {x:0,y:0};
+    var maxBase = 1, cKeys = [], i;
+    var svg = '';
+    if (false) { var gx,gy,cc,cd,coords,pt,r,bandPct,color;
     }
 
     svg += '</svg>';
@@ -1799,29 +1984,72 @@ function renderJapanMap() {
     var W = container.offsetWidth;
     var H = container.offsetHeight;
     if (W < 50 || H < 50) return;
+    container.innerHTML = '';
 
-    /* 日本の範囲 */
-    var minLat = 25.0, maxLat = 46.0;
-    var minLon = 127.0, maxLon = 146.0;
-
-    function toXY(lat, lon) {
-      var x = (lon - minLon) / (maxLon - minLon) * W * 0.85 + W * 0.08;
-      var y = (1 - (lat - minLat) / (maxLat - minLat)) * H * 0.85 + H * 0.08;
-      return {x: x, y: y};
+    if (typeof d3 === 'undefined' || typeof topojson === 'undefined') {
+      container.innerHTML = '<div style="padding:40px;text-align:center;color:#64748b;">地図ライブラリ読込中...</div>';
+      return;
     }
+
+    var svg = d3.select(container).append('svg')
+      .attr('width', W).attr('height', H)
+      .style('background', '#0a0f1a').style('border-radius', '8px');
+
+    /* 日本中心メルカトル投影 */
+    var projection = d3.geoMercator()
+      .center([137, 37]).scale(W * 2.2)
+      .translate([W / 2, H / 2]);
+    var path = d3.geoPath().projection(projection);
 
     /* 都道府県別の予測データ */
     var prefData = [];
     var maxBase = 0;
-    var pi;
-    for (pi = 0; pi < PREF_LIST.length; pi++) {
+    for (var pi = 0; pi < PREF_LIST.length; pi++) {
       var pf = calcPrefForecast(PREF_LIST[pi]);
       prefData.push(pf);
       if (pf.base > maxBase) maxBase = pf.base;
     }
 
-    var svg = '<svg width="' + W + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">';
-    svg += '<rect width="' + W + '" height="' + H + '" fill="#080810" rx="6"/>';
+    /* 日本都道府県 TopoJSON読込 */
+    d3.json('https://cdn.jsdelivr.net/npm/japan-atlas@3/prefectures-10m.json').then(function(japan) {
+      var prefs = topojson.feature(japan, japan.objects.prefectures);
+      svg.append('g').selectAll('path')
+        .data(prefs.features).enter().append('path')
+        .attr('d', path)
+        .attr('fill', '#1a2332')
+        .attr('stroke', '#2d3f52').attr('stroke-width', 0.5);
+
+      /* 都道府県バブル */
+      var bubbleG = svg.append('g').selectAll('g')
+        .data(prefData.filter(function(p){ return PREF_COORDS[p.name]; }))
+        .enter().append('g').style('cursor', 'pointer');
+      bubbleG.append('circle')
+        .attr('cx', function(d){ return projection([PREF_COORDS[d.name].lon, PREF_COORDS[d.name].lat])[0]; })
+        .attr('cy', function(d){ return projection([PREF_COORDS[d.name].lon, PREF_COORDS[d.name].lat])[1]; })
+        .attr('r', function(d){ return Math.max(6, Math.sqrt(d.base/maxBase) * 24); })
+        .attr('fill', function(d){ return d.bandPct >= 35 ? '#ef4444' : (d.bandPct >= 28 ? '#eab308' : '#3b82f6'); })
+        .attr('opacity', 0.5)
+        .attr('stroke', function(d){ return d.bandPct >= 35 ? '#ef4444' : (d.bandPct >= 28 ? '#eab308' : '#3b82f6'); })
+        .attr('stroke-width', 1.5);
+      bubbleG.append('text')
+        .attr('x', function(d){ return projection([PREF_COORDS[d.name].lon, PREF_COORDS[d.name].lat])[0]; })
+        .attr('y', function(d){ return projection([PREF_COORDS[d.name].lon, PREF_COORDS[d.name].lat])[1]+3; })
+        .attr('fill', '#fff').attr('font-size', 9).attr('font-weight', 700)
+        .attr('text-anchor', 'middle')
+        .text(function(d){ return fmtUnitShort(d.base); });
+      bubbleG.append('text')
+        .attr('x', function(d){ return projection([PREF_COORDS[d.name].lon, PREF_COORDS[d.name].lat])[0]; })
+        .attr('y', function(d){ return projection([PREF_COORDS[d.name].lon, PREF_COORDS[d.name].lat])[1] - Math.max(6, Math.sqrt(d.base/maxBase) * 24) - 3; })
+        .attr('fill', '#94a3b8').attr('font-size', 9)
+        .attr('text-anchor', 'middle')
+        .text(function(d){ return d.name; });
+    }).catch(function(e){
+      container.innerHTML = '<div style="padding:40px;text-align:center;color:#ef4444;">日本地図データ読込失敗: ' + e.message + '</div>';
+    });
+    return;
+    /* 未到達レガシーコード */
+    var legacySvg = '';
+    if (false) { legacySvg += '<rect width="' + W + '" height="' + H + '" fill="#080810" rx="6"/>';
 
     /* 日本列島の簡略アウトライン（ポリライン） */
     var outline = [
@@ -1860,11 +2088,8 @@ function renderJapanMap() {
 
       svg += '<circle cx="' + pt.x + '" cy="' + pt.y + '" r="' + r + '" fill="' + riskColor + '" opacity="' + intensity.toFixed(2) + '" stroke="' + riskColor + '" stroke-width="1" stroke-opacity="0.4"/>';
       svg += '<text x="' + pt.x + '" y="' + (pt.y + 3) + '" fill="#ffffff" font-size="9" font-weight="600" font-family="SF Mono,monospace" text-anchor="middle">' + fmtUnitShort(pd.base) + '</text>';
-      svg += '<text x="' + pt.x + '" y="' + (pt.y - r - 2) + '" fill="#94a3b8" font-size="8" font-family="sans-serif" text-anchor="middle">' + pd.name + '</text>';
-    }
-
-    svg += '</svg>';
-    container.innerHTML = svg;
+      legacySvg += '<text>legacy</text>';
+    } }
   } catch(e) { console.error('renderJapanMap:', e); }
 }
 
@@ -4168,6 +4393,82 @@ function renderHFPanel() {
 }
 
 /* =============================================================
+   タブ切替 + セクション分類
+   ============================================================= */
+/* セクションID→タブの対応 */
+var TAB_MAP = {
+  'national-summary': 'overview',
+  'risk-alerts': 'overview',
+  'factors-grid': 'overview',
+
+  'scenario-compare': 'forecast',
+  'forecast-chart-section': 'forecast',
+  'world-map-section': 'forecast',
+  'japan-map-section': 'forecast',
+  'country-table-section': 'forecast',
+  'pref-table-section': 'forecast',
+
+  'facility-sim-section': 'operations',
+  'revpar-forecast-section': 'operations',
+  'dynamic-pricing-section': 'operations',
+  'supply-section': 'operations',
+  'spending-section': 'operations',
+
+  'fx-cost-section': 'finance',
+  'cfo-section': 'finance',
+  'ripple-section': 'finance',
+
+  'hf-section': 'quant',
+  'accuracy-section': 'quant',
+
+  'model-info-section': 'model',
+  'export-section': 'model',
+};
+
+var currentTab = 'overview';
+
+function applyTabClassification() {
+  try {
+    /* 既存の全てのchart-section, table-section, collapsible, factors-gridにタブ属性を付与 */
+    var sections = document.querySelectorAll('.chart-section, .table-section, .collapsible-section, .national-summary, .factors-grid, #risk-alerts, #export-section, #cfo-section, #hf-section');
+    for (var i = 0; i < sections.length; i++) {
+      var s = sections[i];
+      var id = s.id;
+      /* IDがない場合は親か子のIDを使う */
+      if (!id) {
+        var child = s.querySelector('[id]');
+        if (child) id = child.id;
+      }
+      var tab = TAB_MAP[id] || 'overview';
+      s.setAttribute('data-tab-group', tab);
+    }
+    switchTab(currentTab);
+  } catch(e) { console.error('applyTabClassification:', e); }
+}
+
+function switchTab(tabName) {
+  try {
+    currentTab = tabName;
+    /* タブボタン更新 */
+    var btns = document.querySelectorAll('.tab-nav-btn');
+    for (var i = 0; i < btns.length; i++) {
+      if (btns[i].getAttribute('data-tab') === tabName) btns[i].classList.add('active');
+      else btns[i].classList.remove('active');
+    }
+    /* セクション表示切替 */
+    var sections = document.querySelectorAll('[data-tab-group]');
+    for (var j = 0; j < sections.length; j++) {
+      var group = sections[j].getAttribute('data-tab-group');
+      if (group === tabName) sections[j].style.display = '';
+      else sections[j].style.display = 'none';
+    }
+    /* スクロールトップ */
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  } catch(e) { console.error('switchTab:', e); }
+}
+
+
+/* =============================================================
    初期化
    ============================================================= */
 function init() {
@@ -4196,6 +4497,7 @@ function init() {
     renderHFPanel();
     renderStatusBar();
     renderAlerts();
+    applyTabClassification();
   } catch(e) { console.error('init:', e); }
 }
 
