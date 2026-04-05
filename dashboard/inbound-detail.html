@@ -1032,41 +1032,58 @@ function updateWhatIf() {
 }
 
 /* 人員配置シミュレーター */
+var STAFFING_AVG_LOS = 4.5;
+var STAFFING_GUESTS_PER_ROOM = 1.8;
+var STAFFING_AVG_HOURLY_RATE = 1200; /* 円 */
+var STAFFING_HOURS_PER_DAY = 8;
+
+function calcStaff(visitors, rooms) {
+  var roomNights = visitors * STAFFING_AVG_LOS / STAFFING_GUESTS_PER_ROOM / 30;
+  var occ = Math.min(roomNights / rooms, 1.0);
+  var occupiedRooms = Math.round(rooms * occ);
+  var guests = Math.round(occupiedRooms * STAFFING_GUESTS_PER_ROOM);
+  var front = Math.max(2, Math.ceil(guests / 15));
+  var clean = Math.max(1, Math.ceil(occupiedRooms / 10));
+  var cook = Math.max(1, Math.ceil(guests * 0.7 / 20));
+  var lang = Math.max(1, Math.ceil(guests * 0.6 / 25));
+  var total = front + clean + cook + lang;
+  var laborCost = total * STAFFING_AVG_HOURLY_RATE * STAFFING_HOURS_PER_DAY * 30;
+  return {
+    occ: (occ * 100).toFixed(0),
+    rooms: occupiedRooms,
+    guests: guests,
+    front: front,
+    clean: clean,
+    cook: cook,
+    lang: lang,
+    total: total,
+    laborCost: laborCost
+  };
+}
+
 function renderStaffingPanel(profile) {
   try {
     var container = document.getElementById('staffing-panel');
+    var roomsVal = 30;
+    var slider = document.getElementById('staffing-rooms-slider');
+    if (slider) { roomsVal = parseInt(slider.value, 10) || 30; }
+
     var base = profile.base;
     var band = profile.band;
     var baseP10 = base * (1 - band/2);
     var baseP90 = base * (1 + band/2);
 
-    /* 来訪者数から必要人員を逆算 */
-    /* 30室旅館の場合: フロント2名/シフト、清掃は10室/人、調理は20食/人 */
-    var roomsDefault = 30;
-    var avgLOS = 4.5;
-    var guestsPerRoom = 1.8;
+    var sBase = calcStaff(base / 10000, roomsVal);
+    var sP10 = calcStaff(baseP10 / 10000, roomsVal);
+    var sP90 = calcStaff(baseP90 / 10000, roomsVal);
 
-    function calcStaff(visitors, rooms) {
-      var roomNights = visitors * avgLOS / guestsPerRoom / 30;
-      var occ = Math.min(roomNights / rooms, 1.0);
-      var occupiedRooms = Math.round(rooms * occ);
-      var guests = Math.round(occupiedRooms * guestsPerRoom);
-      return {
-        occ: (occ * 100).toFixed(0),
-        rooms: occupiedRooms,
-        guests: guests,
-        front: Math.max(2, Math.ceil(guests / 15)),
-        clean: Math.max(1, Math.ceil(occupiedRooms / 10)),
-        cook: Math.max(1, Math.ceil(guests * 0.7 / 20)),
-        lang: Math.max(1, Math.ceil(guests * 0.6 / 25))
-      };
-    }
+    var html = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">';
+    html += '<span style="font-size:11px;color:#94a3b8;flex-shrink:0;">客室数:</span>';
+    html += '<input type="range" id="staffing-rooms-slider" min="10" max="200" step="1" value="' + roomsVal + '" style="flex:1;max-width:240px;accent-color:#3b82f6;" oninput="onRoomsChange()">';
+    html += '<span id="staffing-rooms-val" style="font-family:SF Mono,monospace;font-size:13px;color:#e2e8f0;font-weight:600;width:50px;">' + roomsVal + '室</span>';
+    html += '</div>';
 
-    var sBase = calcStaff(base / 10000, roomsDefault);
-    var sP10 = calcStaff(baseP10 / 10000, roomsDefault);
-    var sP90 = calcStaff(baseP90 / 10000, roomsDefault);
-
-    var html = '<div style="font-size:11px;color:#64748b;margin-bottom:8px;">前提: 客室30室 | LOS=' + avgLOS.toFixed(1) + '泊 | 1室' + guestsPerRoom + '名</div>';
+    html += '<div style="font-size:11px;color:#64748b;margin-bottom:8px;">前提: 客室' + roomsVal + '室 | LOS=' + STAFFING_AVG_LOS.toFixed(1) + '泊 | 1室' + STAFFING_GUESTS_PER_ROOM + '名 | 時給' + STAFFING_AVG_HOURLY_RATE + '円</div>';
     html += '<table class="data-table" style="font-size:12px;"><thead><tr>';
     html += '<th style="width:140px;">職種</th><th style="text-align:right;">悲観</th><th style="text-align:right;">ベース</th><th style="text-align:right;">楽観</th><th style="text-align:right;">基準</th>';
     html += '</tr></thead><tbody>';
@@ -1091,12 +1108,9 @@ function renderStaffingPanel(profile) {
 
     html += '<tr style="border-top:1px solid rgba(255,255,255,0.08);">';
     html += '<td style="color:#e2e8f0;font-weight:700;">合計人員</td>';
-    var totalP10 = sP10.front + sP10.clean + sP10.cook + sP10.lang;
-    var totalBase = sBase.front + sBase.clean + sBase.cook + sBase.lang;
-    var totalP90 = sP90.front + sP90.clean + sP90.cook + sP90.lang;
-    html += '<td style="text-align:right;" class="td-mono td-neg">' + totalP10 + '名</td>';
-    html += '<td style="text-align:right;" class="td-mono" style="color:#3b82f6;font-weight:700;">' + totalBase + '名</td>';
-    html += '<td style="text-align:right;" class="td-mono td-pos">' + totalP90 + '名</td>';
+    html += '<td style="text-align:right;" class="td-mono td-neg">' + sP10.total + '名</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#3b82f6;font-weight:700;">' + sBase.total + '名</td>';
+    html += '<td style="text-align:right;" class="td-mono td-pos">' + sP90.total + '名</td>';
     html += '<td></td></tr>';
 
     html += '<tr>';
@@ -1106,10 +1120,133 @@ function renderStaffingPanel(profile) {
     html += '<td style="text-align:right;" class="td-mono td-pos">' + sP90.occ + '%</td>';
     html += '<td></td></tr>';
 
+    html += '<tr>';
+    html += '<td style="color:#94a3b8;font-weight:600;">月間人件費</td>';
+    html += '<td style="text-align:right;" class="td-mono td-neg">' + (sP10.laborCost / 10000).toFixed(0) + '万円</td>';
+    html += '<td style="text-align:right;" class="td-mono">' + (sBase.laborCost / 10000).toFixed(0) + '万円</td>';
+    html += '<td style="text-align:right;" class="td-mono td-pos">' + (sP90.laborCost / 10000).toFixed(0) + '万円</td>';
+    html += '<td style="text-align:right;color:#475569;font-size:10px;">' + sBase.total + '名 x ' + STAFFING_AVG_HOURLY_RATE + '円 x ' + STAFFING_HOURS_PER_DAY + 'h x 30日</td>';
+    html += '</tr>';
+
     html += '</tbody></table>';
 
     container.innerHTML = html;
   } catch(e) { console.error('renderStaffingPanel:', e); }
+}
+
+function onRoomsChange() {
+  try {
+    var slider = document.getElementById('staffing-rooms-slider');
+    var val = parseInt(slider.value, 10) || 30;
+    document.getElementById('staffing-rooms-val').textContent = val + '室';
+    var code = getCountryCode();
+    var profile = COUNTRY_PROFILES[code] || COUNTRY_PROFILES['CN'];
+    renderStaffingPanel(profile);
+    renderPLPanel(profile);
+  } catch(e) {}
+}
+
+/* ===== 簡易P/L概算 ===== */
+function renderPLPanel(profile) {
+  try {
+    var container = document.getElementById('pl-panel');
+    var roomsVal = 30;
+    var slider = document.getElementById('staffing-rooms-slider');
+    if (slider) { roomsVal = parseInt(slider.value, 10) || 30; }
+
+    var base = profile.base;
+    var band = profile.band;
+    var baseP10 = base * (1 - band/2);
+    var baseP90 = base * (1 + band/2);
+
+    /* ADR (平均客室単価) とLOS */
+    var adr = 15000; /* 円 */
+    var los = STAFFING_AVG_LOS;
+    var gpRoom = STAFFING_GUESTS_PER_ROOM;
+
+    function calcPL(visitors, rooms) {
+      var roomNights = visitors * los / gpRoom / 30;
+      var occ = Math.min(roomNights / rooms, 1.0);
+      var occupiedRoomNights = rooms * occ * 30;
+      var revenue = occupiedRoomNights * adr;
+
+      var staff = calcStaff(visitors, rooms);
+      var staffCost = staff.laborCost;
+      var utilitiesPct = 0.10;
+      var suppliesPct = 0.08;
+      var utilitiesCost = revenue * utilitiesPct;
+      var suppliesCost = revenue * suppliesPct;
+      var totalCost = staffCost + utilitiesCost + suppliesCost;
+      var gop = revenue - totalCost;
+      var gopMargin = revenue > 0 ? (gop / revenue * 100) : 0;
+      return {
+        revenue: revenue,
+        staffCost: staffCost,
+        utilitiesCost: utilitiesCost,
+        suppliesCost: suppliesCost,
+        totalCost: totalCost,
+        gop: gop,
+        gopMargin: gopMargin
+      };
+    }
+
+    var plBase = calcPL(base / 10000, roomsVal);
+    var plP10 = calcPL(baseP10 / 10000, roomsVal);
+    var plP90 = calcPL(baseP90 / 10000, roomsVal);
+
+    function fmtYen(v) { return (v / 10000).toFixed(0) + '万円'; }
+
+    var html = '<div style="font-size:11px;color:#64748b;margin-bottom:8px;">前提: ADR=' + (adr).toLocaleString() + '円 | 水光熱10% | 消耗品8% (対売上比)</div>';
+    html += '<table class="data-table" style="font-size:12px;"><thead><tr>';
+    html += '<th style="width:160px;">項目</th><th style="text-align:right;">悲観(p10)</th><th style="text-align:right;">ベース(p50)</th><th style="text-align:right;">楽観(p90)</th>';
+    html += '</tr></thead><tbody>';
+
+    html += '<tr><td style="color:#22c55e;font-weight:600;">売上</td>';
+    html += '<td style="text-align:right;" class="td-mono td-neg">' + fmtYen(plP10.revenue) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono">' + fmtYen(plBase.revenue) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono td-pos">' + fmtYen(plP90.revenue) + '</td></tr>';
+
+    html += '<tr><td style="color:#94a3b8;padding-left:12px;">- 人件費</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plP10.staffCost) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plBase.staffCost) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plP90.staffCost) + '</td></tr>';
+
+    html += '<tr><td style="color:#94a3b8;padding-left:12px;">- 水光熱費</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plP10.utilitiesCost) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plBase.utilitiesCost) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plP90.utilitiesCost) + '</td></tr>';
+
+    html += '<tr><td style="color:#94a3b8;padding-left:12px;">- 消耗品費</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plP10.suppliesCost) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plBase.suppliesCost) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#64748b;">' + fmtYen(plP90.suppliesCost) + '</td></tr>';
+
+    html += '<tr style="border-top:1px solid rgba(255,255,255,0.08);">';
+    html += '<td style="color:#ef4444;font-weight:600;">総コスト</td>';
+    html += '<td style="text-align:right;" class="td-mono td-neg">' + fmtYen(plP10.totalCost) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono">' + fmtYen(plBase.totalCost) + '</td>';
+    html += '<td style="text-align:right;" class="td-mono td-pos">' + fmtYen(plP90.totalCost) + '</td></tr>';
+
+    var gopColorP10 = plP10.gop >= 0 ? '#22c55e' : '#ef4444';
+    var gopColorBase = plBase.gop >= 0 ? '#22c55e' : '#ef4444';
+    var gopColorP90 = plP90.gop >= 0 ? '#22c55e' : '#ef4444';
+
+    html += '<tr style="border-top:2px solid rgba(255,255,255,0.12);">';
+    html += '<td style="color:#3b82f6;font-weight:700;font-size:13px;">GOP</td>';
+    html += '<td style="text-align:right;font-weight:700;color:' + gopColorP10 + ';" class="td-mono">' + fmtYen(plP10.gop) + '</td>';
+    html += '<td style="text-align:right;font-weight:700;color:' + gopColorBase + ';" class="td-mono">' + fmtYen(plBase.gop) + '</td>';
+    html += '<td style="text-align:right;font-weight:700;color:' + gopColorP90 + ';" class="td-mono">' + fmtYen(plP90.gop) + '</td></tr>';
+
+    html += '<tr>';
+    html += '<td style="color:#64748b;font-weight:600;">GOPマージン</td>';
+    html += '<td style="text-align:right;color:' + gopColorP10 + ';" class="td-mono">' + plP10.gopMargin.toFixed(1) + '%</td>';
+    html += '<td style="text-align:right;color:' + gopColorBase + ';" class="td-mono">' + plBase.gopMargin.toFixed(1) + '%</td>';
+    html += '<td style="text-align:right;color:' + gopColorP90 + ';" class="td-mono">' + plP90.gopMargin.toFixed(1) + '%</td></tr>';
+
+    html += '</tbody></table>';
+
+    container.innerHTML = html;
+  } catch(e) { console.error('renderPLPanel:', e); }
 }
 
 /* ===== 曜日別需要パターン ===== */
@@ -1314,6 +1451,7 @@ function init() {
     renderActionPanel(profile);
     renderWhatIf(profile);
     renderStaffingPanel(profile);
+    renderPLPanel(profile);
     renderPrefBars(profile);
     renderStatusBar(profile);
   } catch(e) { console.error('init:', e); }
