@@ -11,12 +11,11 @@ body {
   background: #0a0a0f;
   color: #e2e8f0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  height: 100vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  min-height: 100vh;
+  overflow-y: auto;
 }
 
+/* ===== ヘッダー ===== */
 .terminal-header {
   background: #0d1117;
   border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -25,7 +24,9 @@ body {
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 .terminal-header .logo {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
@@ -52,116 +53,228 @@ body {
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-.main-layout {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
+/* ===== メインコンテナ ===== */
+.page-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
 }
 
-.left-panel {
-  width: 280px;
-  border-right: 1px solid rgba(255,255,255,0.06);
-  overflow-y: auto;
-  padding: 8px;
+/* ===== 全国サマリーカード ===== */
+.national-summary {
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.national-headline {
+  font-size: 13px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+.national-value {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 36px;
+  font-weight: 700;
+  color: #3b82f6;
+  letter-spacing: -0.02em;
+}
+.national-value .unit {
+  font-size: 16px;
+  font-weight: 400;
+  color: #64748b;
+  margin-left: 4px;
+}
+
+/* 非対称バー */
+.asymmetric-bar-container {
+  margin-top: 20px;
+  padding: 0 10px;
+}
+.asymmetric-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.bar-label-left {
+  color: #ef4444;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 600;
+}
+.bar-label-center {
+  color: #3b82f6;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 600;
+}
+.bar-label-right {
+  color: #22c55e;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 600;
+}
+.asymmetric-bar-track {
+  position: relative;
+  height: 32px;
+  background: #1e293b;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+}
+.bar-downside {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(239,68,68,0.15), rgba(239,68,68,0.35));
+  border-right: 2px solid #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: #f87171;
+  font-weight: 500;
+}
+.bar-upside {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(34,197,94,0.35), rgba(34,197,94,0.15));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: #4ade80;
+  font-weight: 500;
+}
+.bar-center-marker {
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background: #3b82f6;
+  z-index: 2;
+}
+.asymmetric-bar-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* ===== 下振れ・上振れ要因 ===== */
+.factors-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+@media (max-width: 768px) {
+  .factors-grid { grid-template-columns: 1fr; }
+}
+.factor-panel {
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+.factor-panel.downside { border-left: 3px solid #ef4444; }
+.factor-panel.upside { border-left: 3px solid #22c55e; }
+.factor-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.factor-title.down-title { color: #f87171; }
+.factor-title.up-title { color: #4ade80; }
+.factor-total {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  font-weight: 400;
+  color: #94a3b8;
+  margin-left: auto;
+}
+.factor-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  font-size: 12px;
+}
+.factor-row:last-child { border-bottom: none; }
+.factor-var {
+  width: 160px;
+  color: #e2e8f0;
+  font-weight: 500;
   flex-shrink: 0;
 }
-.left-panel::-webkit-scrollbar { width: 4px; }
-.left-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-.left-panel::-webkit-scrollbar-track { background: transparent; }
+.factor-change {
+  width: 100px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.factor-arrow {
+  color: #475569;
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+.factor-target {
+  width: 60px;
+  font-size: 11px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+.factor-impact {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.factor-impact.neg { color: #f87171; }
+.factor-impact.pos { color: #4ade80; }
+.factor-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: #1e293b;
+  border-radius: 2px;
+  margin-left: 8px;
+  min-width: 40px;
+  overflow: hidden;
+}
+.factor-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+.factor-bar-fill.neg { background: #ef4444; }
+.factor-bar-fill.pos { background: #22c55e; }
 
-.panel-title {
-  font-size: 10px;
+/* ===== チャートセクション ===== */
+.chart-section {
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+.chart-section-title {
+  font-size: 13px;
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 8px 8px 4px;
-}
-
-.var-card {
-  background: #0d1117;
-  border: 1px solid rgba(255,255,255,0.04);
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 6px;
-  transition: border-color 0.15s;
-  cursor: default;
-}
-.var-card:hover {
-  border-color: rgba(255,255,255,0.12);
-}
-.var-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-.var-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: #94a3b8;
-}
-.var-badge {
-  font-size: 9px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-.var-badge.cat-fx { background: rgba(59,130,246,0.15); color: #60a5fa; }
-.var-badge.cat-econ { background: rgba(168,85,247,0.15); color: #a78bfa; }
-.var-badge.cat-geo { background: rgba(239,68,68,0.15); color: #f87171; }
-.var-badge.cat-supply { background: rgba(34,197,94,0.15); color: #4ade80; }
-.var-badge.cat-consumer { background: rgba(234,179,8,0.15); color: #facc15; }
-.var-badge.cat-finance { background: rgba(6,182,212,0.15); color: #22d3ee; }
-.var-badge.cat-culture { background: rgba(236,72,153,0.15); color: #f472b6; }
-
-.var-value {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 18px;
-  font-weight: 600;
-  color: #f8fafc;
-  letter-spacing: -0.02em;
-}
-.var-change {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 11px;
-  font-weight: 500;
-  margin-top: 2px;
-}
-.up { color: #22c55e; }
-.down { color: #ef4444; }
-.flat { color: #64748b; }
-
-.var-impacts {
-  margin-top: 6px;
-  border-top: 1px solid rgba(255,255,255,0.04);
-  padding-top: 4px;
-}
-.impact-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  padding: 1px 0;
-  color: #64748b;
-}
-.impact-row span:last-child {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-weight: 500;
-}
-
-.center-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 16px;
-}
-.chart-stats {
-  display: flex;
-  gap: 24px;
   margin-bottom: 12px;
-  font-size: 12px;
+}
+.chart-stats-row {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 .chart-stat {
@@ -176,7 +289,7 @@ body {
 }
 .chart-stat-value {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -184,138 +297,130 @@ body {
 .chart-stat-value.pessimistic-val { color: #ef4444; }
 .chart-stat-value.optimistic-val { color: #22c55e; }
 .chart-stat-value.band-val { color: #eab308; }
-
 .chart-container {
-  flex: 1;
   position: relative;
-  min-height: 0;
+  height: 350px;
 }
 .chart-container canvas {
   width: 100% !important;
   height: 100% !important;
 }
 
-.right-panel {
-  width: 300px;
-  border-left: 1px solid rgba(255,255,255,0.06);
-  overflow-y: auto;
-  padding: 8px;
-  flex-shrink: 0;
-}
-.right-panel::-webkit-scrollbar { width: 4px; }
-.right-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-.right-panel::-webkit-scrollbar-track { background: transparent; }
-
-.country-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  transition: background 0.15s;
-  cursor: pointer;
-  text-decoration: none;
-  color: inherit;
-}
-.country-row:hover {
-  background: rgba(255,255,255,0.03);
-}
-.country-flag {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-.country-info {
-  flex: 1;
-  min-width: 0;
-}
-.country-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-.country-visitors {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 11px;
-  color: #94a3b8;
-}
-.country-band {
-  width: 60px;
-  height: 4px;
-  background: #1e293b;
-  border-radius: 2px;
-  position: relative;
-  flex-shrink: 0;
-}
-.country-band-fill {
-  position: absolute;
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #ef4444 0%, #3b82f6 50%, #22c55e 100%);
-}
-.country-band-marker {
-  position: absolute;
-  top: -2px;
-  width: 2px;
-  height: 8px;
-  background: #f8fafc;
-  border-radius: 1px;
-  transform: translateX(-1px);
-}
-.country-change {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  width: 55px;
-  text-align: right;
-  flex-shrink: 0;
-}
-.detail-link {
-  font-size: 10px;
-  color: #3b82f6;
-  text-decoration: none;
-  flex-shrink: 0;
-}
-.detail-link:hover { text-decoration: underline; }
-
-.summary-section {
-  margin-top: 12px;
-  padding: 10px 12px;
+/* ===== ソート可能テーブル ===== */
+.table-section {
   background: #0d1117;
-  border: 1px solid rgba(255,255,255,0.04);
-  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
 }
-.summary-title {
-  font-size: 10px;
+.table-section-title {
+  font-size: 13px;
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
-.summary-row {
-  display: flex;
-  justify-content: space-between;
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.data-table th {
+  text-align: left;
+  padding: 8px 12px;
+  color: #64748b;
   font-size: 11px;
-  padding: 2px 0;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.15s;
 }
-.summary-row .label { color: #94a3b8; }
-.summary-row .value {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-weight: 500;
+.data-table th:hover { color: #94a3b8; }
+.data-table th.sorted { color: #3b82f6; }
+.sort-arrow {
+  font-size: 9px;
+  margin-left: 4px;
+  opacity: 0.5;
+}
+.data-table th.sorted .sort-arrow { opacity: 1; }
+.data-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  vertical-align: middle;
+}
+.data-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+.td-name {
+  font-weight: 600;
   color: #e2e8f0;
 }
+.td-name a {
+  color: #e2e8f0;
+  text-decoration: none;
+}
+.td-name a:hover {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+.td-mono {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 500;
+}
+.td-neg { color: #f87171; }
+.td-pos { color: #4ade80; }
+.td-muted { color: #94a3b8; }
+.td-risk-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.risk-high { background: rgba(239,68,68,0.15); color: #f87171; }
+.risk-med  { background: rgba(234,179,8,0.15); color: #facc15; }
+.risk-low  { background: rgba(34,197,94,0.15); color: #4ade80; }
 
+/* ミニバー */
+.mini-asym-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 12px;
+}
+.mini-bar-down {
+  height: 8px;
+  background: rgba(239,68,68,0.4);
+  border-radius: 2px 0 0 2px;
+}
+.mini-bar-up {
+  height: 8px;
+  background: rgba(34,197,94,0.4);
+  border-radius: 0 2px 2px 0;
+}
+.mini-bar-center {
+  width: 2px;
+  height: 12px;
+  background: #3b82f6;
+  flex-shrink: 0;
+}
+
+/* ===== ステータスバー ===== */
 .status-bar {
   background: #0d1117;
   border-top: 1px solid rgba(255,255,255,0.06);
-  padding: 4px 16px;
+  padding: 6px 16px;
   font-size: 10px;
   color: #475569;
   display: flex;
   gap: 16px;
-  flex-shrink: 0;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   flex-wrap: wrap;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
 }
 .status-item { white-space: nowrap; }
 .status-item .status-label { color: #334155; }
@@ -333,68 +438,108 @@ body {
   </span>
 </div>
 
-<div class="main-layout">
-  <div class="left-panel">
-    <div class="panel-title">ドライバー変数</div>
-    <div id="driver-cards"></div>
-  </div>
+<div class="page-content">
+  <!-- 全国サマリー -->
+  <div class="national-summary" id="national-summary"></div>
 
-  <div class="center-panel">
-    <div class="chart-stats" id="chart-stats"></div>
+  <!-- 下振れ・上振れ要因 -->
+  <div class="factors-grid" id="factors-grid"></div>
+
+  <!-- 21ヶ月チャート -->
+  <div class="chart-section">
+    <div class="chart-section-title">21ヶ月予測 (p10 / p50 / p90)</div>
+    <div class="chart-stats-row" id="chart-stats"></div>
     <div class="chart-container">
       <canvas id="mainChart"></canvas>
     </div>
   </div>
 
-  <div class="right-panel">
-    <div class="panel-title">国別インパクト</div>
-    <div id="country-list"></div>
-    <div class="summary-section" id="summary-section"></div>
+  <!-- 国別リスクテーブル -->
+  <div class="table-section">
+    <div class="table-section-title">国別リスク</div>
+    <table class="data-table" id="country-table"></table>
+  </div>
+
+  <!-- 都道府県別リスクテーブル -->
+  <div class="table-section">
+    <div class="table-section-title">都道府県別リスク</div>
+    <table class="data-table" id="pref-table"></table>
   </div>
 </div>
 
 <div class="status-bar" id="status-bar"></div>
 
 <script>
-/* ===== フォールバックデータ ===== */
-var DRIVER_DATA = [
-  {id:'fx_usd', name:'USD/JPY', category:'\u70BA\u66FF', catClass:'cat-fx', value:'149.5', change:0.023, sigma:0.10,
-   impacts:[{country:'KR',ela:-1.05},{country:'CN',ela:-0.95},{country:'US',ela:-1.18},{country:'AU',ela:-1.22},{country:'TW',ela:-0.80}]},
-  {id:'fx_cny', name:'CNY/JPY', category:'\u70BA\u66FF', catClass:'cat-fx', value:'20.8', change:-0.012, sigma:0.05,
-   impacts:[{country:'CN',ela:-0.95}]},
-  {id:'fx_krw', name:'KRW/JPY', category:'\u70BA\u66FF', catClass:'cat-fx', value:'0.107', change:0.015, sigma:0.10,
-   impacts:[{country:'KR',ela:-1.05}]},
-  {id:'gdp_cn', name:'\u4E2D\u56FDGDP', category:'\u7D4C\u6E08', catClass:'cat-econ', value:'+4.8%', change:-0.005, sigma:0.020,
-   impacts:[{country:'CN',ela:1.24}]},
-  {id:'gdp_us', name:'\u7C73\u56FDGDP', category:'\u7D4C\u6E08', catClass:'cat-econ', value:'+2.1%', change:0.003, sigma:0.015,
-   impacts:[{country:'US',ela:1.24}]},
-  {id:'geo_cn', name:'\u65E5\u4E2D\u95A2\u4FC2', category:'\u5730\u653F\u5B66', catClass:'cat-geo', value:'55', change:-8, sigma:12.0,
-   impacts:[{country:'CN',coef:-0.038},{country:'HK',coef:-0.038}]},
-  {id:'geo_tw', name:'\u53F0\u6E7E\u6D77\u5CE1', category:'\u5730\u653F\u5B66', catClass:'cat-geo', value:'32', change:-5, sigma:8.0,
-   impacts:[{country:'TW',coef:-0.038}]},
-  {id:'flt_cn', name:'\u30D5\u30E9\u30A4\u30C8(\u65E5\u4E2D)', category:'\u4F9B\u7D66', catClass:'cat-supply', value:'75%', change:0.05, sigma:0.10,
-   impacts:[{country:'CN',ela:0.60}]},
-  {id:'flt_kr', name:'\u30D5\u30E9\u30A4\u30C8(\u65E5\u97D3)', category:'\u4F9B\u7D66', catClass:'cat-supply', value:'98%', change:0.03, sigma:0.06,
-   impacts:[{country:'KR',ela:0.60}]},
-  {id:'cci_kr', name:'\u97D3\u56FDCCI', category:'\u6D88\u8CBB\u8005', catClass:'cat-consumer', value:'100.2', change:2.5, sigma:5.0,
-   impacts:[{country:'KR',coef:0.012}]},
-  {id:'stk_cn', name:'\u4E2D\u56FD\u682A', category:'\u91D1\u878D', catClass:'cat-finance', value:'-5.2%', change:-0.052, sigma:0.28,
-   impacts:[{country:'CN',coef:0.08}]},
-  {id:'clt_cn', name:'\u65E5\u672C\u95A2\u5FC3(\u4E2D\u56FD)', category:'\u6587\u5316', catClass:'cat-culture', value:'72', change:-3, sigma:10.0,
-   impacts:[{country:'CN',coef:0.010}]}
+/* =============================================================
+   フォールバックデータ
+   ============================================================= */
+
+/* 国別データ: base/p10/p90は万人単位 */
+var COUNTRY_DATA = {
+  KR: {code:'KR', name:'韓国', flag:'\uD83C\uDDF0\uD83C\uDDF7', base:84.1, p10:65.5, p90:105.4, risk:'為替・韓国景気'},
+  CN: {code:'CN', name:'中国', flag:'\uD83C\uDDE8\uD83C\uDDF3', base:44.9, p10:34.6, p90:58.2, risk:'日中関係'},
+  TW: {code:'TW', name:'台湾', flag:'\uD83C\uDDF9\uD83C\uDDFC', base:48.9, p10:41.5, p90:57.2, risk:'台湾海峡'},
+  US: {code:'US', name:'米国', flag:'\uD83C\uDDFA\uD83C\uDDF8', base:35.3, p10:27.2, p90:45.1, risk:'米国景気'},
+  HK: {code:'HK', name:'香港', flag:'\uD83C\uDDED\uD83C\uDDF0', base:18.2, p10:12.8, p90:22.5, risk:'日中関係'},
+  TH: {code:'TH', name:'タイ', flag:'\uD83C\uDDF9\uD83C\uDDED', base:14.8, p10:11.5, p90:18.6, risk:'バーツ安'},
+  AU: {code:'AU', name:'豪州', flag:'\uD83C\uDDE6\uD83C\uDDFA', base:7.2, p10:5.5, p90:9.8, risk:'豪ドル・季節'},
+  SG: {code:'SG', name:'シンガポール', flag:'\uD83C\uDDF8\uD83C\uDDEC', base:5.2, p10:4.2, p90:6.5, risk:'アジア景気'},
+  PH: {code:'PH', name:'フィリピン', flag:'\uD83C\uDDF5\uD83C\uDDED', base:8.5, p10:6.8, p90:10.8, risk:'ペソ安'},
+  VN: {code:'VN', name:'ベトナム', flag:'\uD83C\uDDFB\uD83C\uDDF3', base:6.3, p10:4.8, p90:8.2, risk:'ビザ・為替'},
+  ID: {code:'ID', name:'インドネシア', flag:'\uD83C\uDDEE\uD83C\uDDE9', base:4.8, p10:3.5, p90:6.5, risk:'ルピア安'},
+  GB: {code:'GB', name:'英国', flag:'\uD83C\uDDEC\uD83C\uDDE7', base:3.8, p10:2.9, p90:5.0, risk:'欧州景気'},
+  FR: {code:'FR', name:'フランス', flag:'\uD83C\uDDEB\uD83C\uDDF7', base:3.5, p10:2.6, p90:4.6, risk:'欧州景気'},
+  DE: {code:'DE', name:'ドイツ', flag:'\uD83C\uDDE9\uD83C\uDDEA', base:2.8, p10:2.1, p90:3.7, risk:'欧州景気'},
+  CA: {code:'CA', name:'カナダ', flag:'\uD83C\uDDE8\uD83C\uDDE6', base:3.2, p10:2.4, p90:4.2, risk:'北米景気'},
+  MY: {code:'MY', name:'マレーシア', flag:'\uD83C\uDDF2\uD83C\uDDFE', base:4.2, p10:3.2, p90:5.5, risk:'リンギット'},
+  IN: {code:'IN', name:'インド', flag:'\uD83C\uDDEE\uD83C\uDDF3', base:3.0, p10:2.1, p90:4.2, risk:'ビザ・為替'}
+};
+
+/* 都道府県別の国別シェア */
+var PREF_SHARE = {
+  KR: {東京:0.22, 大阪:0.18, 福岡:0.20, 北海道:0.10, 沖縄:0.08, 京都:0.07, 千葉:0.04, 愛知:0.03, 神奈川:0.03, 広島:0.02, 長崎:0.01, 熊本:0.01, その他:0.01},
+  CN: {東京:0.32, 大阪:0.20, 京都:0.10, 北海道:0.08, 沖縄:0.06, 福岡:0.08, 千葉:0.04, 愛知:0.03, 神奈川:0.03, 広島:0.02, 長崎:0.01, 熊本:0.01, その他:0.02},
+  TW: {東京:0.25, 大阪:0.18, 北海道:0.12, 沖縄:0.10, 京都:0.08, 福岡:0.08, 千葉:0.04, 愛知:0.04, 神奈川:0.03, 広島:0.02, 長崎:0.02, 熊本:0.02, その他:0.02},
+  US: {東京:0.40, 京都:0.12, 大阪:0.10, 広島:0.06, 北海道:0.05, 神奈川:0.05, 千葉:0.04, 沖縄:0.04, 福岡:0.03, 愛知:0.03, 長崎:0.02, 熊本:0.02, その他:0.04},
+  HK: {東京:0.30, 大阪:0.18, 北海道:0.12, 沖縄:0.10, 京都:0.08, 福岡:0.06, 千葉:0.04, 愛知:0.03, 神奈川:0.03, 広島:0.02, 長崎:0.02, 熊本:0.01, その他:0.01},
+  TH: {東京:0.28, 大阪:0.16, 北海道:0.12, 京都:0.08, 福岡:0.07, 千葉:0.05, 沖縄:0.05, 愛知:0.04, 神奈川:0.04, 広島:0.03, 長崎:0.02, 熊本:0.02, その他:0.04},
+  AU: {東京:0.32, 京都:0.10, 北海道:0.15, 大阪:0.10, 広島:0.06, 神奈川:0.05, 千葉:0.04, 沖縄:0.04, 福岡:0.03, 愛知:0.03, 長崎:0.02, 熊本:0.02, その他:0.04},
+  SG: {東京:0.30, 大阪:0.15, 北海道:0.12, 京都:0.10, 沖縄:0.06, 福岡:0.06, 千葉:0.04, 愛知:0.04, 神奈川:0.03, 広島:0.03, 長崎:0.02, 熊本:0.02, その他:0.03},
+  PH: {東京:0.30, 大阪:0.15, 愛知:0.08, 千葉:0.07, 神奈川:0.06, 北海道:0.06, 福岡:0.06, 京都:0.05, 沖縄:0.04, 広島:0.03, 長崎:0.02, 熊本:0.02, その他:0.06},
+  VN: {東京:0.28, 大阪:0.14, 愛知:0.08, 千葉:0.07, 神奈川:0.06, 福岡:0.07, 北海道:0.06, 京都:0.05, 沖縄:0.04, 広島:0.03, 長崎:0.02, 熊本:0.02, その他:0.08},
+  ID: {東京:0.30, 大阪:0.14, 北海道:0.08, 千葉:0.06, 京都:0.06, 福岡:0.06, 愛知:0.05, 神奈川:0.05, 沖縄:0.04, 広島:0.03, 長崎:0.02, 熊本:0.02, その他:0.09},
+  GB: {東京:0.38, 京都:0.14, 大阪:0.10, 広島:0.06, 北海道:0.05, 神奈川:0.05, 千葉:0.04, 沖縄:0.03, 福岡:0.03, 愛知:0.03, 長崎:0.03, 熊本:0.02, その他:0.04},
+  FR: {東京:0.35, 京都:0.15, 大阪:0.10, 広島:0.06, 北海道:0.05, 神奈川:0.05, 千葉:0.04, 沖縄:0.03, 福岡:0.03, 愛知:0.03, 長崎:0.03, 熊本:0.02, その他:0.06},
+  DE: {東京:0.35, 京都:0.14, 大阪:0.10, 広島:0.06, 北海道:0.05, 神奈川:0.05, 千葉:0.04, 沖縄:0.03, 福岡:0.03, 愛知:0.03, 長崎:0.03, 熊本:0.02, その他:0.07},
+  CA: {東京:0.38, 京都:0.12, 大阪:0.10, 広島:0.05, 北海道:0.06, 神奈川:0.05, 千葉:0.04, 沖縄:0.04, 福岡:0.03, 愛知:0.03, 長崎:0.02, 熊本:0.02, その他:0.06},
+  MY: {東京:0.28, 大阪:0.15, 北海道:0.10, 京都:0.08, 福岡:0.07, 沖縄:0.06, 千葉:0.05, 愛知:0.04, 神奈川:0.04, 広島:0.03, 長崎:0.02, 熊本:0.02, その他:0.06},
+  IN: {東京:0.35, 大阪:0.12, 京都:0.08, 千葉:0.06, 愛知:0.06, 神奈川:0.05, 北海道:0.05, 福岡:0.04, 沖縄:0.03, 広島:0.03, 長崎:0.02, 熊本:0.02, その他:0.09}
+};
+
+/* 主要都道府県リスト */
+var PREF_LIST = ['東京','大阪','京都','北海道','沖縄','福岡','千葉','愛知','神奈川','広島','長崎','熊本'];
+
+/* 下振れ要因 (p10近辺の典型的サンプル) */
+var DOWNSIDE_FACTORS = [
+  {var_name:'日中関係', change:'-18pt悪化', country:'CN', impact:'-63%', contribution:5.2},
+  {var_name:'円高(USD/JPY)', change:'-8.2%', country:'全市場', impact:'-9.7%', contribution:3.8},
+  {var_name:'台湾海峡', change:'-12pt', country:'TW', impact:'-46%', contribution:1.5},
+  {var_name:'中国GDP', change:'-1.5%pt', country:'CN', impact:'-1.9%', contribution:0.8},
+  {var_name:'フライト(日中)', change:'-12%', country:'CN', impact:'-7.2%', contribution:0.6},
+  {var_name:'韓国CCI', change:'-5pt', country:'KR', impact:'-6.0%', contribution:0.5}
 ];
 
-var COUNTRY_DATA = [
-  {code:'KR', name:'\u97D3\u56FD', flag:'\uD83C\uDDF0\uD83C\uDDF7', base:716000, band:0.23, changePct:5.0},
-  {code:'CN', name:'\u4E2D\u56FD', flag:'\uD83C\uDDE8\uD83C\uDDF3', base:433000, band:0.55, changePct:-8.2},
-  {code:'TW', name:'\u53F0\u6E7E', flag:'\uD83C\uDDF9\uD83C\uDDFC', base:425000, band:0.28, changePct:3.1},
-  {code:'US', name:'\u7C73\u56FD', flag:'\uD83C\uDDFA\uD83C\uDDF8', base:195000, band:0.20, changePct:12.0},
-  {code:'HK', name:'\u9999\u6E2F', flag:'\uD83C\uDDED\uD83C\uDDF0', base:182000, band:0.40, changePct:-4.5},
-  {code:'TH', name:'\u30BF\u30A4', flag:'\uD83C\uDDF9\uD83C\uDDED', base:148000, band:0.30, changePct:6.8},
-  {code:'AU', name:'\u8C6A\u5DDE', flag:'\uD83C\uDDE6\uD83C\uDDFA', base:72000, band:0.22, changePct:9.0},
-  {code:'SG', name:'\u30B7\u30F3\u30AC\u30DD\u30FC\u30EB', flag:'\uD83C\uDDF8\uD83C\uDDEC', base:52000, band:0.18, changePct:7.5}
+/* 上振れ要因 (p90近辺の典型的サンプル) */
+var UPSIDE_FACTORS = [
+  {var_name:'円安(USD/JPY)', change:'+12.5%', country:'全市場', impact:'+14.8%', contribution:5.8},
+  {var_name:'フライト(日韓)', change:'+15%', country:'KR', impact:'+9%', contribution:2.1},
+  {var_name:'韓国CCI', change:'+8pt', country:'KR', impact:'+9.6%', contribution:0.8},
+  {var_name:'中国GDP', change:'+1.2%pt', country:'CN', impact:'+1.5%', contribution:0.6},
+  {var_name:'日本関心(中国)', change:'+15pt', country:'CN', impact:'+15%', contribution:0.5},
+  {var_name:'フライト(日中)', change:'+10%', country:'CN', impact:'+6%', contribution:0.4}
 ];
 
+/* 21ヶ月予測 (万人) */
 var FORECAST_LABELS = [
   '2026/04','2026/05','2026/06','2026/07','2026/08','2026/09',
   '2026/10','2026/11','2026/12','2027/01','2027/02','2027/03',
@@ -405,36 +550,96 @@ var FORECAST_BASE = [242,268,251,264,272,248,285,262,245,218,205,240,250,275,258
 var FORECAST_P10 =  [213,232,215,226,233,211,243,223,208,183,171,202,210,232,217,228,237,215,250,228,212];
 var FORECAST_P90 =  [275,308,291,306,316,288,332,305,286,257,243,282,294,322,303,318,328,299,345,316,296];
 
-/* ===== ユーティリティ ===== */
-function calcImpact(imp, change) {
+
+/* =============================================================
+   ユーティリティ関数
+   ============================================================= */
+
+function fmtMan(v) {
+  /* 万人単位でフォーマット */
   try {
-    if (typeof imp.ela !== 'undefined') {
-      return -imp.ela * change;
+    if (Math.abs(v) >= 100) return Math.round(v) + '万人';
+    if (Math.abs(v) >= 10) return v.toFixed(1) + '万人';
+    return v.toFixed(2) + '万人';
+  } catch(e) { return '-'; }
+}
+
+function fmtManShort(v) {
+  try {
+    if (Math.abs(v) >= 100) return Math.round(v) + '万';
+    if (Math.abs(v) >= 10) return v.toFixed(1) + '万';
+    return v.toFixed(2) + '万';
+  } catch(e) { return '-'; }
+}
+
+function fmtPct(v) {
+  try {
+    var sign = v >= 0 ? '+' : '';
+    return sign + v.toFixed(1) + '%';
+  } catch(e) { return '-'; }
+}
+
+function fmtSign(v) {
+  try {
+    if (Math.abs(v) >= 100) return (v >= 0 ? '+' : '') + Math.round(v) + '万人';
+    if (Math.abs(v) >= 10) return (v >= 0 ? '+' : '') + v.toFixed(1) + '万人';
+    return (v >= 0 ? '+' : '') + v.toFixed(2) + '万人';
+  } catch(e) { return '-'; }
+}
+
+/* 全国合計を計算 */
+function calcNational() {
+  try {
+    var base = 0, p10 = 0, p90 = 0;
+    var keys = Object.keys(COUNTRY_DATA);
+    for (var i = 0; i < keys.length; i++) {
+      var c = COUNTRY_DATA[keys[i]];
+      base += c.base;
+      p10 += c.p10;
+      p90 += c.p90;
     }
-    if (typeof imp.coef !== 'undefined') {
-      return imp.coef * change;
+    return {
+      base: base,
+      p10: p10,
+      p90: p90,
+      downside: base - p10,
+      upside: p90 - base,
+      downsidePct: (p10 - base) / base * 100,
+      upsidePct: (p90 - base) / base * 100,
+      bandPct: (p90 - p10) / base * 100
+    };
+  } catch(e) { return {base:242,p10:212,p90:275,downside:30,upside:33,downsidePct:-12.4,upsidePct:13.6,bandPct:26.0}; }
+}
+
+/* 都道府県別予測を計算 */
+function calcPrefForecast(pref) {
+  try {
+    var base = 0, p10 = 0, p90 = 0;
+    var keys = Object.keys(COUNTRY_DATA);
+    for (var i = 0; i < keys.length; i++) {
+      var cCode = keys[i];
+      var c = COUNTRY_DATA[cCode];
+      var share = (PREF_SHARE[cCode] || {})[pref] || 0.02;
+      base += c.base * share;
+      p10 += c.p10 * share;
+      p90 += c.p90 * share;
     }
-    return 0;
-  } catch(e) { return 0; }
+    return {
+      name: pref,
+      base: base,
+      p10: p10,
+      p90: p90,
+      downside: base - p10,
+      upside: p90 - base,
+      bandPct: (p90 - p10) / base * 100
+    };
+  } catch(e) { return {name:pref, base:0, p10:0, p90:0, downside:0, upside:0, bandPct:0}; }
 }
 
-function formatImpact(val) {
-  try {
-    var pct = val * 100;
-    var sign = pct >= 0 ? '+' : '';
-    return sign + pct.toFixed(1) + '%';
-  } catch(e) { return '0.0%'; }
-}
 
-function impactClass(val) {
-  try {
-    if (val > 0.001) return 'up';
-    if (val < -0.001) return 'down';
-    return 'flat';
-  } catch(e) { return 'flat'; }
-}
-
-/* ===== 時計 ===== */
+/* =============================================================
+   時計
+   ============================================================= */
 function updateClock() {
   try {
     var now = new Date();
@@ -449,128 +654,130 @@ function updateClock() {
   } catch(e) {}
 }
 
-/* ===== 左パネル: ドライバー変数カード ===== */
-function renderDriverCards() {
+
+/* =============================================================
+   全国サマリー (非対称バー)
+   ============================================================= */
+function renderNationalSummary() {
   try {
-    var container = document.getElementById('driver-cards');
+    var n = calcNational();
+    var totalWidth = n.downside + n.upside;
+    var downPct = n.downside / totalWidth * 100;
+    var upPct = n.upside / totalWidth * 100;
+
     var html = '';
-    var i, j, d, imp, impVal, impCls;
-    for (i = 0; i < DRIVER_DATA.length; i++) {
-      d = DRIVER_DATA[i];
-      var changeDir = d.change >= 0 ? 'up' : 'down';
-      var changeArrow = d.change >= 0 ? '\u25B2' : '\u25BC';
-      var changeStr;
-      if (d.id.indexOf('geo_') === 0 || d.id.indexOf('cci_') === 0 || d.id.indexOf('clt_') === 0) {
-        changeStr = changeArrow + ' ' + (d.change >= 0 ? '+' : '') + d.change + 'pt';
-      } else if (d.id.indexOf('stk_') === 0) {
-        changeStr = changeArrow + ' ' + (d.change * 100).toFixed(1) + '%';
-      } else {
-        changeStr = changeArrow + ' ' + (d.change >= 0 ? '+' : '') + (d.change * 100).toFixed(1) + '%';
-      }
+    html += '<div class="national-headline">全国月次予測 (ベースケース)</div>';
+    html += '<div class="national-value">' + n.base.toFixed(1) + '<span class="unit">万人/月</span></div>';
 
-      var impactsHtml = '';
-      for (j = 0; j < d.impacts.length; j++) {
-        imp = d.impacts[j];
-        impVal = calcImpact(imp, d.change);
-        impCls = impactClass(impVal);
-        impactsHtml += '<div class="impact-row">' +
-          '<span>\u2192 ' + imp.country + '</span>' +
-          '<span class="' + impCls + '">' + formatImpact(impVal) + '</span>' +
-          '</div>';
-      }
+    /* 非対称バー */
+    html += '<div class="asymmetric-bar-container">';
+    html += '<div class="asymmetric-bar-labels">';
+    html += '<span class="bar-label-left">p10: ' + n.p10.toFixed(1) + '万人</span>';
+    html += '<span class="bar-label-center">p50: ' + n.base.toFixed(1) + '万人</span>';
+    html += '<span class="bar-label-right">p90: ' + n.p90.toFixed(1) + '万人</span>';
+    html += '</div>';
 
-      html += '<div class="var-card">' +
-        '<div class="var-header">' +
-          '<span class="var-name">' + d.name + '</span>' +
-          '<span class="var-badge ' + d.catClass + '">' + d.category + '</span>' +
-        '</div>' +
-        '<div class="var-value">' + d.value + '</div>' +
-        '<div class="var-change ' + changeDir + '">' + changeStr + '</div>' +
-        '<div class="var-impacts">' + impactsHtml + '</div>' +
-      '</div>';
-    }
-    container.innerHTML = html;
-  } catch(e) { console.error('renderDriverCards:', e); }
+    html += '<div class="asymmetric-bar-track">';
+    html += '<div class="bar-downside" style="width:' + downPct.toFixed(1) + '%">';
+    html += '-' + n.downside.toFixed(1) + '万 (' + n.downsidePct.toFixed(1) + '%)';
+    html += '</div>';
+    html += '<div class="bar-upside" style="width:' + upPct.toFixed(1) + '%">';
+    html += '+' + n.upside.toFixed(1) + '万 (+' + n.upsidePct.toFixed(1) + '%)';
+    html += '</div>';
+    html += '</div>';
+
+    html += '<div class="asymmetric-bar-footer">';
+    html += '<span>下振れリスク</span>';
+    html += '<span>ベース</span>';
+    html += '<span>上振れ機会</span>';
+    html += '</div>';
+    html += '</div>';
+
+    document.getElementById('national-summary').innerHTML = html;
+  } catch(e) { console.error('renderNationalSummary:', e); }
 }
 
-/* ===== 右パネル: 国別リスト ===== */
-function renderCountryList() {
+
+/* =============================================================
+   下振れ・上振れ要因パネル
+   ============================================================= */
+function renderFactors() {
   try {
-    var container = document.getElementById('country-list');
-    var html = '';
-    var i, c;
-    for (i = 0; i < COUNTRY_DATA.length; i++) {
-      c = COUNTRY_DATA[i];
-      var visitors = (c.base / 10000).toFixed(1);
-      var changeDir = c.changePct >= 0 ? 'up' : 'down';
-      var changeStr = (c.changePct >= 0 ? '+' : '') + c.changePct.toFixed(1) + '%';
-      var bandWidth = Math.min(c.band * 100, 90);
-      var bandLeft = 50 - bandWidth / 2;
-
-      html += '<a class="country-row" href="inbound-detail.html?country=' + c.code + '">' +
-        '<div class="country-flag">' + c.flag + '</div>' +
-        '<div class="country-info">' +
-          '<div class="country-name">' + c.name + '</div>' +
-          '<div class="country-visitors">' + visitors + '\u4E07\u4EBA/\u6708</div>' +
-        '</div>' +
-        '<div class="country-band">' +
-          '<div class="country-band-fill" style="left:' + bandLeft + '%;width:' + bandWidth + '%"></div>' +
-          '<div class="country-band-marker" style="left:50%"></div>' +
-        '</div>' +
-        '<div class="country-change ' + changeDir + '">' + changeStr + '</div>' +
-        '<div class="detail-link">\u8A73\u7D30\u2192</div>' +
-      '</a>';
+    var n = calcNational();
+    var maxContrib = 0;
+    var i;
+    for (i = 0; i < DOWNSIDE_FACTORS.length; i++) {
+      if (DOWNSIDE_FACTORS[i].contribution > maxContrib) maxContrib = DOWNSIDE_FACTORS[i].contribution;
     }
-    container.innerHTML = html;
-
-    var totalBase = 0;
-    for (i = 0; i < COUNTRY_DATA.length; i++) {
-      totalBase += COUNTRY_DATA[i].base;
+    for (i = 0; i < UPSIDE_FACTORS.length; i++) {
+      if (UPSIDE_FACTORS[i].contribution > maxContrib) maxContrib = UPSIDE_FACTORS[i].contribution;
     }
-    var summaryHtml = '<div class="summary-title">\u65E5\u672C\u5168\u4F53</div>' +
-      '<div class="summary-row"><span class="label">\u6708\u9593\u6765\u8A2A\u8005\u6570</span><span class="value">' + (totalBase / 10000).toFixed(1) + '\u4E07\u4EBA/\u6708</span></div>' +
-      '<div class="summary-row"><span class="label">p10</span><span class="value">' + (totalBase * 0.878 / 10000).toFixed(1) + '\u4E07\u4EBA</span></div>' +
-      '<div class="summary-row"><span class="label">p90</span><span class="value">' + (totalBase * 1.136 / 10000).toFixed(1) + '\u4E07\u4EBA</span></div>';
-    document.getElementById('summary-section').innerHTML = summaryHtml;
-  } catch(e) { console.error('renderCountryList:', e); }
+
+    /* 下振れパネル */
+    var downHtml = '<div class="factor-panel downside">';
+    downHtml += '<div class="factor-title down-title">';
+    downHtml += '下振れ要因の内訳 (p10近辺の典型)';
+    downHtml += '<span class="factor-total">合計: ' + n.downsidePct.toFixed(1) + '%</span>';
+    downHtml += '</div>';
+    for (i = 0; i < DOWNSIDE_FACTORS.length; i++) {
+      var f = DOWNSIDE_FACTORS[i];
+      var barW = (f.contribution / maxContrib * 80).toFixed(1);
+      downHtml += '<div class="factor-row">';
+      downHtml += '<span class="factor-var">' + f.var_name + '</span>';
+      downHtml += '<span class="factor-change">' + f.change + '</span>';
+      downHtml += '<span class="factor-arrow">\u2192</span>';
+      downHtml += '<span class="factor-target">' + f.country + '</span>';
+      downHtml += '<span class="factor-impact neg">' + f.impact + '</span>';
+      downHtml += '<span class="factor-bar-wrap"><span class="factor-bar-fill neg" style="width:' + barW + '%"></span></span>';
+      downHtml += '</div>';
+    }
+    downHtml += '</div>';
+
+    /* 上振れパネル */
+    var upHtml = '<div class="factor-panel upside">';
+    upHtml += '<div class="factor-title up-title">';
+    upHtml += '上振れ要因の内訳 (p90近辺の典型)';
+    upHtml += '<span class="factor-total">合計: +' + n.upsidePct.toFixed(1) + '%</span>';
+    upHtml += '</div>';
+    for (i = 0; i < UPSIDE_FACTORS.length; i++) {
+      var f = UPSIDE_FACTORS[i];
+      var barW = (f.contribution / maxContrib * 80).toFixed(1);
+      upHtml += '<div class="factor-row">';
+      upHtml += '<span class="factor-var">' + f.var_name + '</span>';
+      upHtml += '<span class="factor-change">' + f.change + '</span>';
+      upHtml += '<span class="factor-arrow">\u2192</span>';
+      upHtml += '<span class="factor-target">' + f.country + '</span>';
+      upHtml += '<span class="factor-impact pos">' + f.impact + '</span>';
+      upHtml += '<span class="factor-bar-wrap"><span class="factor-bar-fill pos" style="width:' + barW + '%"></span></span>';
+      upHtml += '</div>';
+    }
+    upHtml += '</div>';
+
+    document.getElementById('factors-grid').innerHTML = downHtml + upHtml;
+  } catch(e) { console.error('renderFactors:', e); }
 }
 
-/* ===== チャート統計 ===== */
+
+/* =============================================================
+   チャート統計 + メインチャート
+   ============================================================= */
 function renderChartStats() {
   try {
-    var baseAvg = 0, p10Avg = 0, p90Avg = 0;
     var i;
-    for (i = 0; i < FORECAST_BASE.length; i++) {
-      baseAvg += FORECAST_BASE[i];
-      p10Avg += FORECAST_P10[i];
-      p90Avg += FORECAST_P90[i];
-    }
-    baseAvg = (baseAvg / FORECAST_BASE.length).toFixed(1);
-    p10Avg = (p10Avg / FORECAST_P10.length).toFixed(1);
-    p90Avg = (p90Avg / FORECAST_P90.length).toFixed(1);
-    var bandWidth = (((p90Avg - p10Avg) / baseAvg) * 100).toFixed(1);
+    var curBase = FORECAST_BASE[0];
+    var curP10 = FORECAST_P10[0];
+    var curP90 = FORECAST_P90[0];
+    var bandWidth = ((curP90 - curP10) / curBase * 100).toFixed(1);
 
-    var html = '<div class="chart-stat">' +
-        '<span class="chart-stat-label">\u30D9\u30FC\u30B9</span>' +
-        '<span class="chart-stat-value base-val">' + baseAvg + '\u4E07\u4EBA</span>' +
-      '</div>' +
-      '<div class="chart-stat">' +
-        '<span class="chart-stat-label">\u60B2\u89B3 (p10)</span>' +
-        '<span class="chart-stat-value pessimistic-val">' + p10Avg + '\u4E07\u4EBA</span>' +
-      '</div>' +
-      '<div class="chart-stat">' +
-        '<span class="chart-stat-label">\u697D\u89B3 (p90)</span>' +
-        '<span class="chart-stat-value optimistic-val">' + p90Avg + '\u4E07\u4EBA</span>' +
-      '</div>' +
-      '<div class="chart-stat">' +
-        '<span class="chart-stat-label">\u5E2F\u5E45</span>' +
-        '<span class="chart-stat-value band-val">' + bandWidth + '%</span>' +
-      '</div>';
+    var html = '';
+    html += '<div class="chart-stat"><span class="chart-stat-label">今月ベース</span><span class="chart-stat-value base-val">' + curBase + '万人</span></div>';
+    html += '<div class="chart-stat"><span class="chart-stat-label">悲観 (p10)</span><span class="chart-stat-value pessimistic-val">' + curP10 + '万人</span></div>';
+    html += '<div class="chart-stat"><span class="chart-stat-label">楽観 (p90)</span><span class="chart-stat-value optimistic-val">' + curP90 + '万人</span></div>';
+    html += '<div class="chart-stat"><span class="chart-stat-label">帯幅</span><span class="chart-stat-value band-val">' + bandWidth + '%</span></div>';
     document.getElementById('chart-stats').innerHTML = html;
   } catch(e) { console.error('renderChartStats:', e); }
 }
 
-/* ===== メインチャート ===== */
 var mainChartInstance = null;
 function renderMainChart() {
   try {
@@ -583,7 +790,7 @@ function renderMainChart() {
         labels: FORECAST_LABELS,
         datasets: [
           {
-            label: '\u697D\u89B3 (p90)',
+            label: '楽観 (p90)',
             data: FORECAST_P90,
             borderColor: 'rgba(34,197,94,0.5)',
             backgroundColor: 'transparent',
@@ -595,7 +802,7 @@ function renderMainChart() {
             order: 2
           },
           {
-            label: '\u30D9\u30FC\u30B9 (p50)',
+            label: 'ベース (p50)',
             data: FORECAST_BASE,
             borderColor: '#3b82f6',
             backgroundColor: 'transparent',
@@ -607,7 +814,7 @@ function renderMainChart() {
             order: 1
           },
           {
-            label: '\u60B2\u89B3 (p10)',
+            label: '悲観 (p10)',
             data: FORECAST_P10,
             borderColor: 'rgba(239,68,68,0.5)',
             backgroundColor: 'transparent',
@@ -619,7 +826,7 @@ function renderMainChart() {
             order: 3
           },
           {
-            label: '\u4FE1\u983C\u533A\u9593',
+            label: '信頼区間',
             data: FORECAST_P90,
             borderColor: 'transparent',
             backgroundColor: 'rgba(59,130,246,0.07)',
@@ -645,10 +852,7 @@ function renderMainChart() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false
-        },
+        interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
             display: true,
@@ -659,9 +863,7 @@ function renderMainChart() {
               usePointStyle: true,
               pointStyle: 'line',
               padding: 12,
-              filter: function(item) {
-                return item.text.indexOf('_') !== 0;
-              }
+              filter: function(item) { return item.text.indexOf('_') !== 0; }
             }
           },
           tooltip: {
@@ -676,8 +878,8 @@ function renderMainChart() {
               label: function(context) {
                 try {
                   if (context.dataset.label.indexOf('_') === 0) return null;
-                  if (context.dataset.label === '\u4FE1\u983C\u533A\u9593') return null;
-                  return context.dataset.label + ': ' + context.parsed.y + '\u4E07\u4EBA';
+                  if (context.dataset.label === '信頼区間') return null;
+                  return context.dataset.label + ': ' + context.parsed.y + '万人';
                 } catch(e) { return ''; }
               }
             }
@@ -686,25 +888,16 @@ function renderMainChart() {
         scales: {
           x: {
             grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
-            ticks: {
-              color: '#475569',
-              font: { size: 10, family: "'SF Mono', monospace" },
-              maxRotation: 45
-            }
+            ticks: { color: '#475569', font: { size: 10, family: "'SF Mono', monospace" }, maxRotation: 45 }
           },
           y: {
             grid: { color: 'rgba(255,255,255,0.04)', drawBorder: false },
             ticks: {
               color: '#475569',
               font: { size: 10, family: "'SF Mono', monospace" },
-              callback: function(value) { return value + '\u4E07'; }
+              callback: function(value) { return value + '万'; }
             },
-            title: {
-              display: true,
-              text: '\u4E07\u4EBA/\u6708',
-              color: '#475569',
-              font: { size: 10 }
-            }
+            title: { display: true, text: '万人/月', color: '#475569', font: { size: 10 } }
           }
         }
       }
@@ -712,40 +905,230 @@ function renderMainChart() {
   } catch(e) { console.error('renderMainChart:', e); }
 }
 
-/* ===== ステータスバー ===== */
+
+/* =============================================================
+   ソート可能テーブル: 国別
+   ============================================================= */
+var countrySortKey = 'base';
+var countrySortAsc = false;
+
+function sortCountryTable(key) {
+  try {
+    if (countrySortKey === key) {
+      countrySortAsc = !countrySortAsc;
+    } else {
+      countrySortKey = key;
+      countrySortAsc = false;
+    }
+    renderCountryTable();
+  } catch(e) {}
+}
+
+function renderCountryTable() {
+  try {
+    var keys = Object.keys(COUNTRY_DATA);
+    var rows = [];
+    for (var i = 0; i < keys.length; i++) {
+      var c = COUNTRY_DATA[keys[i]];
+      rows.push({
+        code: c.code,
+        name: c.name,
+        flag: c.flag,
+        base: c.base,
+        downside: c.base - c.p10,
+        upside: c.p90 - c.base,
+        bandPct: (c.p90 - c.p10) / c.base * 100,
+        risk: c.risk,
+        p10: c.p10,
+        p90: c.p90
+      });
+    }
+
+    rows.sort(function(a, b) {
+      var va = a[countrySortKey];
+      var vb = b[countrySortKey];
+      if (typeof va === 'string') {
+        return countrySortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+      }
+      return countrySortAsc ? va - vb : vb - va;
+    });
+
+    var thCols = [
+      {key:'name', label:'国'},
+      {key:'base', label:'ベース'},
+      {key:'downside', label:'下振れ'},
+      {key:'upside', label:'上振れ'},
+      {key:'bandPct', label:'帯幅%'},
+      {key:'_bar', label:'分布'},
+      {key:'risk', label:'主要リスク'}
+    ];
+
+    var html = '<thead><tr>';
+    for (var t = 0; t < thCols.length; t++) {
+      var col = thCols[t];
+      if (col.key === '_bar') {
+        html += '<th>' + col.label + '</th>';
+      } else {
+        var sorted = countrySortKey === col.key ? ' sorted' : '';
+        var arrow = countrySortKey === col.key ? (countrySortAsc ? '\u25B2' : '\u25BC') : '\u25BC';
+        html += '<th class="' + sorted + '" onclick="sortCountryTable(\'' + col.key + '\')">';
+        html += col.label + '<span class="sort-arrow">' + arrow + '</span></th>';
+      }
+    }
+    html += '</tr></thead><tbody>';
+
+    /* ミニバー最大幅の算出 */
+    var maxBand = 0;
+    for (var j = 0; j < rows.length; j++) {
+      var band = rows[j].downside + rows[j].upside;
+      if (band > maxBand) maxBand = band;
+    }
+
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      var riskClass = row.bandPct >= 45 ? 'risk-high' : (row.bandPct >= 30 ? 'risk-med' : 'risk-low');
+      var downW = maxBand > 0 ? (row.downside / maxBand * 60).toFixed(0) : 0;
+      var upW = maxBand > 0 ? (row.upside / maxBand * 60).toFixed(0) : 0;
+
+      html += '<tr>';
+      html += '<td class="td-name"><a href="inbound-detail.html?country=' + row.code + '">' + row.flag + ' ' + row.name + '</a></td>';
+      html += '<td class="td-mono">' + row.base.toFixed(1) + '万</td>';
+      html += '<td class="td-mono td-neg">-' + row.downside.toFixed(1) + '万</td>';
+      html += '<td class="td-mono td-pos">+' + row.upside.toFixed(1) + '万</td>';
+      html += '<td class="td-mono"><span class="td-risk-tag ' + riskClass + '">' + row.bandPct.toFixed(1) + '%</span></td>';
+      html += '<td><div class="mini-asym-bar">';
+      html += '<div class="mini-bar-down" style="width:' + downW + 'px"></div>';
+      html += '<div class="mini-bar-center"></div>';
+      html += '<div class="mini-bar-up" style="width:' + upW + 'px"></div>';
+      html += '</div></td>';
+      html += '<td class="td-muted">' + row.risk + '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody>';
+
+    document.getElementById('country-table').innerHTML = html;
+  } catch(e) { console.error('renderCountryTable:', e); }
+}
+
+
+/* =============================================================
+   ソート可能テーブル: 都道府県別
+   ============================================================= */
+var prefSortKey = 'base';
+var prefSortAsc = false;
+
+function sortPrefTable(key) {
+  try {
+    if (prefSortKey === key) {
+      prefSortAsc = !prefSortAsc;
+    } else {
+      prefSortKey = key;
+      prefSortAsc = false;
+    }
+    renderPrefTable();
+  } catch(e) {}
+}
+
+function renderPrefTable() {
+  try {
+    var rows = [];
+    for (var i = 0; i < PREF_LIST.length; i++) {
+      rows.push(calcPrefForecast(PREF_LIST[i]));
+    }
+
+    rows.sort(function(a, b) {
+      var va = a[prefSortKey];
+      var vb = b[prefSortKey];
+      if (typeof va === 'string') {
+        return prefSortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+      }
+      return prefSortAsc ? va - vb : vb - va;
+    });
+
+    var thCols = [
+      {key:'name', label:'都道府県'},
+      {key:'base', label:'ベース'},
+      {key:'downside', label:'下振れ'},
+      {key:'upside', label:'上振れ'},
+      {key:'bandPct', label:'帯幅%'},
+      {key:'_bar', label:'分布'}
+    ];
+
+    var html = '<thead><tr>';
+    for (var t = 0; t < thCols.length; t++) {
+      var col = thCols[t];
+      if (col.key === '_bar') {
+        html += '<th>' + col.label + '</th>';
+      } else {
+        var sorted = prefSortKey === col.key ? ' sorted' : '';
+        var arrow = prefSortKey === col.key ? (prefSortAsc ? '\u25B2' : '\u25BC') : '\u25BC';
+        html += '<th class="' + sorted + '" onclick="sortPrefTable(\'' + col.key + '\')">';
+        html += col.label + '<span class="sort-arrow">' + arrow + '</span></th>';
+      }
+    }
+    html += '</tr></thead><tbody>';
+
+    /* ミニバーの最大幅 */
+    var maxBand = 0;
+    for (var j = 0; j < rows.length; j++) {
+      var band = rows[j].downside + rows[j].upside;
+      if (band > maxBand) maxBand = band;
+    }
+
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      var riskClass = row.bandPct >= 35 ? 'risk-high' : (row.bandPct >= 28 ? 'risk-med' : 'risk-low');
+      var downW = maxBand > 0 ? (row.downside / maxBand * 60).toFixed(0) : 0;
+      var upW = maxBand > 0 ? (row.upside / maxBand * 60).toFixed(0) : 0;
+
+      html += '<tr>';
+      html += '<td class="td-name">' + row.name + '</td>';
+      html += '<td class="td-mono">' + row.base.toFixed(1) + '万</td>';
+      html += '<td class="td-mono td-neg">-' + row.downside.toFixed(1) + '万</td>';
+      html += '<td class="td-mono td-pos">+' + row.upside.toFixed(1) + '万</td>';
+      html += '<td class="td-mono"><span class="td-risk-tag ' + riskClass + '">' + row.bandPct.toFixed(1) + '%</span></td>';
+      html += '<td><div class="mini-asym-bar">';
+      html += '<div class="mini-bar-down" style="width:' + downW + 'px"></div>';
+      html += '<div class="mini-bar-center"></div>';
+      html += '<div class="mini-bar-up" style="width:' + upW + 'px"></div>';
+      html += '</div></td>';
+      html += '</tr>';
+    }
+    html += '</tbody>';
+
+    document.getElementById('pref-table').innerHTML = html;
+  } catch(e) { console.error('renderPrefTable:', e); }
+}
+
+
+/* =============================================================
+   ステータスバー
+   ============================================================= */
 function renderStatusBar() {
   try {
+    var n = calcNational();
+    var asymRatio = (n.upside / n.downside).toFixed(2);
     var items = [
       {label:'model', value:'full_mc_29vars'},
       {label:'N', value:'3,000'},
-      {label:'\u5909\u6570', value:'29'},
-      {label:'\u76F8\u95A2\u884C\u5217', value:'29\u00D729'},
-      {label:'\u975E\u5BFE\u79F0\u6BD4', value:'1.12'},
-      {label:'CN\u5E2F\u5E45', value:'131%'},
-      {label:'KR\u5E2F\u5E45', value:'46%'}
+      {label:'変数', value:'29'},
+      {label:'相関行列', value:'29\u00D729'},
+      {label:'非対称比', value: asymRatio},
+      {label:'帯幅', value: n.bandPct.toFixed(1) + '%'},
+      {label:'国数', value: Object.keys(COUNTRY_DATA).length + ''}
     ];
     var html = '';
-    var i;
-    for (i = 0; i < items.length; i++) {
+    for (var i = 0; i < items.length; i++) {
       html += '<span class="status-item"><span class="status-label">' + items[i].label + ': </span><span class="status-value">' + items[i].value + '</span></span>';
     }
     document.getElementById('status-bar').innerHTML = html;
   } catch(e) {}
 }
 
-/* ===== 初期化 ===== */
-function init() {
-  try {
-    updateClock();
-    setInterval(updateClock, 1000);
-    renderDriverCards();
-    renderCountryList();
-    renderChartStats();
-    renderMainChart();
-    renderStatusBar();
-  } catch(e) { console.error('init:', e); }
-}
 
+/* =============================================================
+   API読み込み (フォールバック上書き)
+   ============================================================= */
 function loadFromAPI() {
   try {
     var ctrl = new AbortController();
@@ -759,26 +1142,38 @@ function loadFromAPI() {
           var base = (s.base||{}).median || [];
           var p10 = (s.pessimistic||{}).median || (s.base||{}).p10 || [];
           var p90 = (s.optimistic||{}).median || (s.base||{}).p90 || [];
-          if (base.length > 0 && mainChart) {
-            var ds = mainChart.data.datasets;
-            for (var i=0; i<ds.length; i++) {
+          if (base.length > 0 && mainChartInstance) {
+            var ds = mainChartInstance.data.datasets;
+            for (var i = 0; i < ds.length; i++) {
               var lb = ds[i].label || '';
               if (lb.indexOf('p10') >= 0 || lb.indexOf('悲観') >= 0) ds[i].data = p10.map(function(v){return Math.round(v/10000*10)/10;});
               else if (lb.indexOf('p90') >= 0 || lb.indexOf('楽観') >= 0) ds[i].data = p90.map(function(v){return Math.round(v/10000*10)/10;});
               else if (lb.indexOf('p50') >= 0 || lb.indexOf('ベース') >= 0) ds[i].data = base.map(function(v){return Math.round(v/10000*10)/10;});
-              else if (lb.indexOf('上') >= 0) ds[i].data = (s.base.p90||p90).map(function(v){return Math.round(v/10000*10)/10;});
-              else if (lb.indexOf('下') >= 0) ds[i].data = (s.base.p10||p10).map(function(v){return Math.round(v/10000*10)/10;});
             }
-            mainChart.update();
-            var badge = document.getElementById('liveBadge');
-            if (badge) { badge.textContent = 'LIVE'; badge.style.color = '#22c55e'; }
-            var modelEl = document.getElementById('modelInfo');
-            if (modelEl) modelEl.textContent = 'model: ' + (d.model||'live');
+            mainChartInstance.update();
           }
         } catch(e) { console.warn('APIデータ処理:', e.message); }
       })
       .catch(function(e) { console.warn('API:', e.message); });
   } catch(e) { console.warn('API接続:', e.message); }
+}
+
+
+/* =============================================================
+   初期化
+   ============================================================= */
+function init() {
+  try {
+    updateClock();
+    setInterval(updateClock, 1000);
+    renderNationalSummary();
+    renderFactors();
+    renderChartStats();
+    renderMainChart();
+    renderCountryTable();
+    renderPrefTable();
+    renderStatusBar();
+  } catch(e) { console.error('init:', e); }
 }
 
 if (document.readyState === 'loading') {
