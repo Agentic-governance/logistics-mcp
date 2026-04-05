@@ -385,6 +385,12 @@ body {
     <div id="staffing-panel"></div>
   </div>
 
+  <!-- 簡易P/L概算 -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">簡易P/L概算</div>
+    <div id="pl-panel"></div>
+  </div>
+
   <!-- 下段全幅: 都道府県配分 -->
   <div class="panel pref-panel">
     <div class="panel-title">都道府県別配分</div>
@@ -395,6 +401,12 @@ body {
 <div class="status-bar" id="status-bar"></div>
 
 <script>
+/* ===== XSSエスケープ関数 ===== */
+function esc(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 /* ===== 国別プロファイルデータ ===== */
 var COUNTRY_PROFILES = {
   CN: {
@@ -839,11 +851,11 @@ function renderDriverBars(profile) {
     for (i = 0; i < profile.drivers.length; i++) {
       d = profile.drivers[i];
       html += '<div class="driver-bar-row">' +
-        '<div class="driver-bar-name">' + d.name + '</div>' +
+        '<div class="driver-bar-name">' + esc(d.name) + '</div>' +
         '<div class="driver-bar-track"><div class="driver-bar-fill" style="width:' + d.pct + '%;background:' + d.color + '"></div></div>' +
         '<div class="driver-bar-pct">' + d.pct + '%</div>' +
       '</div>' +
-      '<div class="driver-bar-desc">' + d.desc + '</div>';
+      '<div class="driver-bar-desc">' + esc(d.desc) + '</div>';
     }
     container.innerHTML = html;
   } catch(e) { console.error('renderDriverBars:', e); }
@@ -941,14 +953,14 @@ function renderRiskCards(profile) {
       r = profile.risks[i];
       html += '<div class="risk-card">' +
         '<div class="risk-header">' +
-          '<span class="risk-name">' + r.name + '</span>' +
+          '<span class="risk-name">' + esc(r.name) + '</span>' +
           '<span class="risk-prob">\u78BA\u7387 ' + (r.probability * 100).toFixed(0) + '%</span>' +
         '</div>' +
         '<div class="risk-detail">' +
           '\u2192 \u6765\u8A2A\u8005 <span class="risk-impact">' + (r.impact * 100).toFixed(0) + '%</span>' +
           ' (\u671F\u5F85\u640D\u5931 <span class="risk-el">' + (r.expected_loss * 100).toFixed(1) + '%</span>)' +
         '</div>' +
-        '<div class="risk-trigger">\u30C8\u30EA\u30AC\u30FC: ' + r.trigger + ' | \u56DE\u5FA9: ' + r.recovery_months + '\u30F6\u6708</div>' +
+        '<div class="risk-trigger">\u30C8\u30EA\u30AC\u30FC: ' + esc(r.trigger) + ' | \u56DE\u5FA9: ' + r.recovery_months + '\u30F6\u6708</div>' +
       '</div>';
     }
     container.innerHTML = html;
@@ -1238,7 +1250,7 @@ function renderPrefBars(profile) {
       h = Math.max(4, Math.round(item.share * 200));
       html += '<div class="pref-col">' +
         '<div class="pref-bar-outer"><div class="pref-bar-fill" style="height:' + h + 'px"></div></div>' +
-        '<div class="pref-label">' + item.name + '</div>' +
+        '<div class="pref-label">' + esc(item.name) + '</div>' +
         '<div class="pref-pct">' + (item.share * 100).toFixed(0) + '%</div>' +
       '</div>';
     }

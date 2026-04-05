@@ -273,6 +273,73 @@ async def get_spending_forecast(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/monthly-forecast-table")
+async def get_monthly_forecast_table(
+    source_country: str = Query(default="ALL"),
+    rooms: int = Query(default=30, ge=1, le=5000),
+    adr: int = Query(default=25000, ge=1000, le=500000),
+):
+    """12ヶ月P/L計画用テーブル (2026/04〜2027/03)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        months = [f"{2026 + (m+3)//12}/{(m+3)%12+1:02d}" for m in range(12)]
+        loop = asyncio.get_event_loop()
+        cache_key = f"forecast_table_{source_country}_{rooms}_{adr}"
+        result = await loop.run_in_executor(
+            None, lambda: _get_cached(cache_key, lambda: _build_forecast_table(months, source_country, rooms, adr))
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _build_forecast_table(months, source_country, rooms, adr):
+    """MC結果から12ヶ月P/Lテーブルを構築"""
+    result = _full_mc_engine.run(months, source_country)
+    table = []
+    total_rev = {"p10": 0, "p50": 0, "p90": 0}
+    for i, ms in enumerate(months):
+        visitors_p10 = result["p10"][i]
+        visitors_p50 = result["median"][i]
+        visitors_p90 = result["p90"][i]
+        # 稼働率推定: 来訪者数ベースで正規化 (全国月間250万人=稼働率80%想定)
+        occ_p10 = min(round(visitors_p10 / 2_500_000 * 0.80 * 100, 1), 100.0)
+        occ_p50 = min(round(visitors_p50 / 2_500_000 * 0.80 * 100, 1), 100.0)
+        occ_p90 = min(round(visitors_p90 / 2_500_000 * 0.80 * 100, 1), 100.0)
+        # RevPAR = ADR × 稼働率
+        revpar_p10 = round(adr * occ_p10 / 100)
+        revpar_p50 = round(adr * occ_p50 / 100)
+        revpar_p90 = round(adr * occ_p90 / 100)
+        # 月間売上 = RevPAR × 客室数 × 30日
+        rev_p10 = revpar_p10 * rooms * 30
+        rev_p50 = revpar_p50 * rooms * 30
+        rev_p90 = revpar_p90 * rooms * 30
+        total_rev["p10"] += rev_p10
+        total_rev["p50"] += rev_p50
+        total_rev["p90"] += rev_p90
+        table.append({
+            "month": ms,
+            "visitors": {"p10": visitors_p10, "p50": visitors_p50, "p90": visitors_p90},
+            "occupancy_pct": {"p10": occ_p10, "p50": occ_p50, "p90": occ_p90},
+            "revpar": {"p10": revpar_p10, "p50": revpar_p50, "p90": revpar_p90},
+            "revenue": {"p10": rev_p10, "p50": rev_p50, "p90": rev_p90},
+        })
+    return {
+        "months": months,
+        "source_country": source_country,
+        "rooms": rooms,
+        "adr": adr,
+        "table": table,
+        "annual_revenue": {
+            "p10": total_rev["p10"],
+            "p50": total_rev["p50"],
+            "p90": total_rev["p90"],
+        },
+    }
+
+
 @router.get("/market-ranking")
 async def get_market_ranking(
     top_n: int = Query(default=20, ge=1, le=50, description="評価市場数"),

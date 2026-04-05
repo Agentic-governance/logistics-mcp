@@ -97,7 +97,10 @@ class FullMCEngine:
         """変数別の感度分析: 各変数を±1σ動かした時の来訪者変化率"""
         from .variable_distributions import VAR_NAMES, SPECS
         p = PARAMS[iso2]
-        base_vars = sample_all_vars(500)
+        sens_n = min(self.n_samples, 500)
+        orig_n = self.n_samples
+        self.n_samples = sens_n
+        base_vars = sample_all_vars(sens_n)
         base_visitors = np.median(self._compute_country(iso2, month, year, base_vars))
         results = {}
         for vi, vname in enumerate(VAR_NAMES):
@@ -117,6 +120,7 @@ class FullMCEngine:
                 "down_pct": round(float((down - base_visitors) / max(base_visitors, 1) * 100), 2),
                 "total_range_pct": round(float(abs(up - down) / max(base_visitors, 1) * 100), 2),
             }
+        self.n_samples = orig_n
         return {"iso2": iso2, "base_visitors": int(base_visitors), "sensitivities": results}
 
     def market_opportunity_score(self, month=4, year=2026):
@@ -190,6 +194,14 @@ class FullMCEngine:
         }
 
     def run(self, months, source_country="ALL"):
+        if self.n_samples < 1:
+            raise ValueError(f"n_samples must be >= 1, got {self.n_samples}")
+        if source_country != "ALL" and source_country not in PARAMS:
+            raise ValueError(f"Unknown source_country '{source_country}'. Valid: {list(PARAMS.keys())} or 'ALL'")
+        for ms in months:
+            parts = ms.split('/')
+            if len(parts) != 2 or not all(p.isdigit() for p in parts):
+                raise ValueError(f"Invalid month format '{ms}'. Expected 'YYYY/MM'")
         countries = ALL_COUNTRIES if source_country == "ALL" else [source_country]
         nm = len(months)
         total = np.zeros((nm, self.n_samples))
