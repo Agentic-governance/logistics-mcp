@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCRI Terminal - 国別詳細分析</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0a0a0f;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-header {
+  background: #0d1117;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.terminal-header .logo {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-weight: 700;
+  color: #3b82f6;
+  letter-spacing: 0.05em;
+}
+.terminal-header .title {
+  color: #94a3b8;
+  font-weight: 400;
+}
+.terminal-header .back-link {
+  color: #3b82f6;
+  text-decoration: none;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+.terminal-header .back-link:hover { text-decoration: underline; }
+
+.main-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr auto;
+  gap: 1px;
+  background: rgba(255,255,255,0.03);
+  overflow: hidden;
+}
+
+.panel {
+  background: #0a0a0f;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.panel::-webkit-scrollbar { width: 4px; }
+.panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.panel::-webkit-scrollbar-track { background: transparent; }
+
+.panel-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+/* 予測チャートパネル */
+.forecast-panel {
+  grid-column: 1;
+  grid-row: 1;
+}
+.forecast-stats {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.forecast-stat {
+  display: flex;
+  flex-direction: column;
+}
+.forecast-stat-label {
+  font-size: 9px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.forecast-stat-value {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.forecast-stat-value.base-val { color: #3b82f6; }
+.forecast-stat-value.pessimistic-val { color: #ef4444; }
+.forecast-stat-value.optimistic-val { color: #22c55e; }
+.forecast-stat-value.band-val { color: #eab308; }
+
+.chart-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+.chart-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ドライバー影響度パネル */
+.driver-panel {
+  grid-column: 2;
+  grid-row: 1;
+}
+.driver-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.driver-bar-name {
+  font-size: 11px;
+  color: #94a3b8;
+  width: 140px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.driver-bar-track {
+  flex: 1;
+  height: 16px;
+  background: #1e293b;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.driver-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.driver-bar-pct {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  color: #e2e8f0;
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.driver-bar-desc {
+  font-size: 9px;
+  color: #475569;
+  margin-left: 148px;
+  margin-top: -4px;
+  margin-bottom: 6px;
+}
+
+/* カレンダー効果パネル */
+.calendar-panel {
+  grid-column: 1;
+  grid-row: 2;
+}
+.calendar-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+.calendar-wrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* リスクシナリオパネル */
+.risk-panel {
+  grid-column: 2;
+  grid-row: 2;
+}
+.risk-card {
+  background: #0d1117;
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.risk-card:hover {
+  border-color: rgba(255,255,255,0.08);
+}
+.risk-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.risk-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.risk-prob {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  color: #eab308;
+  background: rgba(234,179,8,0.1);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.risk-detail {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+.risk-detail .risk-impact { color: #ef4444; font-family: 'SF Mono', monospace; font-weight: 500; }
+.risk-detail .risk-el { color: #eab308; font-family: 'SF Mono', monospace; font-weight: 500; }
+.risk-trigger {
+  font-size: 9px;
+  color: #475569;
+  margin-top: 3px;
+}
+
+/* 都道府県配分パネル */
+.pref-panel {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  padding: 12px 16px;
+}
+.pref-bars {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.pref-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 50px;
+}
+.pref-bar-outer {
+  width: 32px;
+  height: 60px;
+  background: #1e293b;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+.pref-bar-fill {
+  width: 100%;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+}
+.pref-label {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 4px;
+  text-align: center;
+}
+.pref-pct {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 9px;
+  color: #64748b;
+  margin-top: 1px;
+}
+
+/* ステータスバー */
+.status-bar {
+  background: #0d1117;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding: 4px 16px;
+  font-size: 10px;
+  color: #475569;
+  display: flex;
+  gap: 16px;
+  flex-shrink: 0;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  flex-wrap: wrap;
+}
+
+.up { color: #22c55e; }
+.down { color: #ef4444; }
+</style>
+</head>
+<body>
+
+<div class="terminal-header">
+  <span class="logo">SCRI Terminal</span>
+  <span class="title" id="page-title">国別詳細分析</span>
+  <a class="back-link" href="inbound.html">&larr; 全体に戻る</a>
+</div>
+
+<div class="main-grid">
+  <!-- 左上: 予測チャート -->
+  <div class="panel forecast-panel">
+    <div class="panel-title">月次来訪者予測</div>
+    <div class="forecast-stats" id="forecast-stats"></div>
+    <div class="chart-wrap">
+      <canvas id="forecastChart"></canvas>
+    </div>
+  </div>
+
+  <!-- 右上: ドライバー影響度 -->
+  <div class="panel driver-panel">
+    <div class="panel-title">ドライバー影響度</div>
+    <div id="driver-bars"></div>
+  </div>
+
+  <!-- 左下: カレンダー効果 -->
+  <div class="panel calendar-panel">
+    <div class="panel-title">カレンダー効果（季節指数）</div>
+    <div class="calendar-wrap">
+      <canvas id="calendarChart"></canvas>
+    </div>
+  </div>
+
+  <!-- 右下: リスクシナリオ -->
+  <div class="panel risk-panel">
+    <div class="panel-title">リスクシナリオ</div>
+    <div id="risk-cards"></div>
+  </div>
+
+  <!-- 下段全幅: 都道府県配分 -->
+  <div class="panel pref-panel">
+    <div class="panel-title">都道府県別配分</div>
+    <div class="pref-bars" id="pref-bars"></div>
+  </div>
+</div>
+
+<div class="status-bar" id="status-bar"></div>
+
+<script>
+/* ===== 国別プロファイルデータ ===== */
+var COUNTRY_PROFILES = {
+  CN: {
+    name:'\u4E2D\u56FD', flag:'\uD83C\uDDE8\uD83C\uDDF3', base:433000, band:0.55, cic:0.540, tfi:22.4,
+    drivers: [
+      {name:'\u5730\u653F\u5B66(\u65E5\u4E2D\u95A2\u4FC2)', pct:42, color:'#ef4444', desc:'\u03C3=12pt \u00D7 coef=-0.038 \u2192 46%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u70BA\u66FF(CNY/JPY)', pct:25, color:'#3b82f6', desc:'\u03C3=5% \u00D7 ela=-0.95 \u2192 4.8%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u56FA\u6709\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3', pct:15, color:'#64748b', desc:'PPML\u6B8B\u5DEE\u03C3=0.22'},
+      {name:'GDP\u6210\u9577\u7387', pct:8, color:'#a78bfa', desc:'\u03C3=2%pt \u00D7 ela=1.24 \u2192 2.5%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u30D5\u30E9\u30A4\u30C8\u4F9B\u7D66', pct:5, color:'#4ade80', desc:'\u03C3=10% \u00D7 ela=0.60 \u2192 6%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u6587\u5316\u7684\u95A2\u5FC3', pct:3, color:'#f472b6', desc:'\u03C3=10pt \u00D7 coef=0.01 \u2192 10%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u6D88\u8CBB\u8005\u4FE1\u983C\u611F', pct:2, color:'#facc15', desc:'\u03C3=4pt \u00D7 coef=0.012 \u2192 4.8%\u306E\u5909\u52D5\u5E45'}
+    ],
+    calendar: {1:0.55, 2:0.45, 3:1.00, 4:1.00, 5:1.60, 6:1.00, 7:1.00, 8:1.00, 9:1.20, 10:2.20, 11:1.00, 12:1.00},
+    risks: [
+      {name:'\u65E5\u4E2D\u95A2\u4FC2\u6025\u60AA\u5316', probability:0.15, impact:-0.40, expected_loss:0.060,
+       trigger:'\u5916\u4EA4\u4E8B\u4EF6/\u8ECD\u4E8B\u7684\u7DCA\u5F35', recovery_months:18},
+      {name:'\u4E2D\u56FD\u666F\u6C17\u5F8C\u9000', probability:0.25, impact:-0.20, expected_loss:0.050,
+       trigger:'\u4E0D\u52D5\u7523\u5371\u6A5F/\u6D88\u8CBB\u4F4E\u8FF7', recovery_months:12},
+      {name:'\u5186\u9AD810%\u9032\u884C', probability:0.35, impact:-0.12, expected_loss:0.042,
+       trigger:'\u30EA\u30B9\u30AF\u30AA\u30D5/\u65E5\u9280\u5F15\u7DE0', recovery_months:6},
+      {name:'\u611F\u67D3\u75C7\u6D41\u884C', probability:0.10, impact:-0.60, expected_loss:0.060,
+       trigger:'\u65B0\u578B\u30A6\u30A4\u30EB\u30B9', recovery_months:24}
+    ],
+    pref_share: {'\u6771\u4EAC':0.32, '\u5927\u962A':0.20, '\u4EAC\u90FD':0.10, '\u5317\u6D77\u9053':0.08, '\u798F\u5CA1':0.08, '\u6C96\u7E04':0.06, '\u5343\u8449':0.04, '\u611B\u77E5':0.03, '\u795E\u5948\u5DDD':0.03, '\u305D\u306E\u4ED6':0.06}
+  },
+  KR: {
+    name:'\u97D3\u56FD', flag:'\uD83C\uDDF0\uD83C\uDDF7', base:716000, band:0.23, cic:0.875, tfi:12.5,
+    drivers: [
+      {name:'\u70BA\u66FF(KRW/JPY)', pct:45, color:'#3b82f6', desc:'\u03C3=10% \u00D7 ela=-1.05 \u2192 10.5%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u56FA\u6709\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3', pct:18, color:'#64748b', desc:'PPML\u6B8B\u5DEE\u03C3=0.15'},
+      {name:'\u5730\u653F\u5B66(\u65E5\u97D3)', pct:10, color:'#ef4444', desc:'\u03C3=8pt \u00D7 coef=-0.025 \u2192 20%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u6D88\u8CBB\u8005\u4FE1\u983C\u611F(CCI)', pct:10, color:'#facc15', desc:'\u03C3=5pt \u00D7 coef=0.012 \u2192 6%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u30D5\u30E9\u30A4\u30C8\u4F9B\u7D66', pct:8, color:'#4ade80', desc:'\u03C3=6% \u00D7 ela=0.60 \u2192 3.6%\u306E\u5909\u52D5\u5E45'},
+      {name:'GDP\u6210\u9577\u7387', pct:5, color:'#a78bfa', desc:'\u03C3=1.5%pt \u00D7 ela=1.10 \u2192 1.7%\u306E\u5909\u52D5\u5E45'},
+      {name:'SNS\u30C8\u30EC\u30F3\u30C9', pct:4, color:'#f472b6', desc:'\u03C3=8pt \u00D7 coef=0.008 \u2192 6.4%\u306E\u5909\u52D5\u5E45'}
+    ],
+    calendar: {1:0.90, 2:0.75, 3:1.05, 4:1.05, 5:1.00, 6:1.00, 7:1.35, 8:1.40, 9:0.80, 10:1.10, 11:1.00, 12:0.90},
+    risks: [
+      {name:'\u97D3\u56FD\u666F\u6C17\u505C\u6EDE', probability:0.20, impact:-0.10, expected_loss:0.020,
+       trigger:'\u8F38\u51FA\u6E1B\u901F/\u534A\u5C0E\u4F53\u4E0D\u6CC1', recovery_months:8},
+      {name:'\u65E5\u97D3\u95A2\u4FC2\u60AA\u5316', probability:0.10, impact:-0.25, expected_loss:0.025,
+       trigger:'\u6B74\u53F2\u554F\u984C\u518D\u71C3/\u8CBF\u6613\u6469\u64E6', recovery_months:12},
+      {name:'\u5186\u9AD810%\u9032\u884C', probability:0.35, impact:-0.12, expected_loss:0.042,
+       trigger:'\u30EA\u30B9\u30AF\u30AA\u30D5/\u65E5\u9280\u5F15\u7DE0', recovery_months:6}
+    ],
+    pref_share: {'\u6771\u4EAC':0.22, '\u5927\u962A':0.18, '\u798F\u5CA1':0.20, '\u5317\u6D77\u9053':0.10, '\u6C96\u7E04':0.08, '\u4EAC\u90FD':0.07, '\u5927\u5206':0.04, '\u5343\u8449':0.03, '\u795E\u5948\u5DDD':0.03, '\u305D\u306E\u4ED6':0.05}
+  },
+  TW: {
+    name:'\u53F0\u6E7E', flag:'\uD83C\uDDF9\uD83C\uDDFC', base:425000, band:0.28, cic:0.780, tfi:14.2,
+    drivers: [
+      {name:'\u70BA\u66FF(TWD/JPY)', pct:35, color:'#3b82f6', desc:'\u03C3=8% \u00D7 ela=-0.90 \u2192 7.2%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u53F0\u6E7E\u6D77\u5CE1\u30EA\u30B9\u30AF', pct:22, color:'#ef4444', desc:'\u03C3=8pt \u00D7 coef=-0.038 \u2192 30%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u56FA\u6709\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3', pct:18, color:'#64748b', desc:'PPML\u6B8B\u5DEE\u03C3=0.18'},
+      {name:'GDP\u6210\u9577\u7387', pct:10, color:'#a78bfa', desc:'\u03C3=1.5%pt \u00D7 ela=1.15 \u2192 1.7%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u30D5\u30E9\u30A4\u30C8\u4F9B\u7D66', pct:8, color:'#4ade80', desc:'\u03C3=8% \u00D7 ela=0.55 \u2192 4.4%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u6587\u5316\u7684\u95A2\u5FC3', pct:7, color:'#f472b6', desc:'\u03C3=8pt \u00D7 coef=0.009 \u2192 7.2%\u306E\u5909\u52D5\u5E45'}
+    ],
+    calendar: {1:0.85, 2:0.80, 3:1.10, 4:1.15, 5:1.05, 6:0.95, 7:1.10, 8:1.05, 9:1.00, 10:1.05, 11:1.00, 12:0.90},
+    risks: [
+      {name:'\u53F0\u6E7E\u6D77\u5CE1\u7DCA\u8FEB', probability:0.08, impact:-0.50, expected_loss:0.040,
+       trigger:'\u8ECD\u4E8B\u7DE0\u5F35\u6FC0\u5316', recovery_months:18},
+      {name:'\u5186\u9AD810%\u9032\u884C', probability:0.35, impact:-0.10, expected_loss:0.035,
+       trigger:'\u30EA\u30B9\u30AF\u30AA\u30D5/\u65E5\u9280\u5F15\u7DE0', recovery_months:6}
+    ],
+    pref_share: {'\u6771\u4EAC':0.28, '\u5927\u962A':0.18, '\u5317\u6D77\u9053':0.12, '\u4EAC\u90FD':0.09, '\u6C96\u7E04':0.08, '\u798F\u5CA1':0.06, '\u5343\u8449':0.04, '\u9759\u5CA1':0.03, '\u795E\u5948\u5DDD':0.03, '\u305D\u306E\u4ED6':0.09}
+  },
+  US: {
+    name:'\u7C73\u56FD', flag:'\uD83C\uDDFA\uD83C\uDDF8', base:195000, band:0.20, cic:0.650, tfi:28.5,
+    drivers: [
+      {name:'\u70BA\u66FF(USD/JPY)', pct:40, color:'#3b82f6', desc:'\u03C3=10% \u00D7 ela=-1.18 \u2192 11.8%\u306E\u5909\u52D5\u5E45'},
+      {name:'GDP\u6210\u9577\u7387', pct:20, color:'#a78bfa', desc:'\u03C3=1.5%pt \u00D7 ela=1.24 \u2192 1.9%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u56FA\u6709\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3', pct:18, color:'#64748b', desc:'PPML\u6B8B\u5DEE\u03C3=0.16'},
+      {name:'\u30D5\u30E9\u30A4\u30C8\u4F9B\u7D66', pct:10, color:'#4ade80', desc:'\u03C3=8% \u00D7 ela=0.50 \u2192 4%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u6587\u5316\u7684\u95A2\u5FC3', pct:8, color:'#f472b6', desc:'SNS/\u30A2\u30CB\u30E1\u30C8\u30EC\u30F3\u30C9'},
+      {name:'\u6D88\u8CBB\u8005\u4FE1\u983C\u611F', pct:4, color:'#facc15', desc:'\u03C3=5pt \u00D7 coef=0.010'}
+    ],
+    calendar: {1:0.80, 2:0.75, 3:1.15, 4:1.20, 5:1.05, 6:1.00, 7:1.10, 8:1.05, 9:0.95, 10:1.10, 11:0.95, 12:0.90},
+    risks: [
+      {name:'\u7C73\u56FD\u666F\u6C17\u5F8C\u9000', probability:0.20, impact:-0.15, expected_loss:0.030,
+       trigger:'\u91D1\u5229\u9AD8\u6B62\u307E\u308A/\u6D88\u8CBB\u6E1B\u901F', recovery_months:10},
+      {name:'\u5186\u9AD810%\u9032\u884C', probability:0.35, impact:-0.15, expected_loss:0.053,
+       trigger:'\u30EA\u30B9\u30AF\u30AA\u30D5/\u65E5\u9280\u5F15\u7DE0', recovery_months:6}
+    ],
+    pref_share: {'\u6771\u4EAC':0.35, '\u4EAC\u90FD':0.15, '\u5927\u962A':0.12, '\u5E83\u5CF6':0.06, '\u5317\u6D77\u9053':0.05, '\u6C96\u7E04':0.05, '\u798F\u5CA1':0.04, '\u5948\u826F':0.04, '\u795E\u5948\u5DDD':0.04, '\u305D\u306E\u4ED6':0.10}
+  },
+  HK: {
+    name:'\u9999\u6E2F', flag:'\uD83C\uDDED\uD83C\uDDF0', base:182000, band:0.40, cic:0.620, tfi:16.8,
+    drivers: [
+      {name:'\u5730\u653F\u5B66(\u65E5\u4E2D\u95A2\u4FC2)', pct:35, color:'#ef4444', desc:'\u03C3=12pt \u00D7 coef=-0.038 \u2192 46%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u70BA\u66FF(HKD/JPY)', pct:28, color:'#3b82f6', desc:'\u03C3=10% \u00D7 ela=-1.00 \u2192 10%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u56FA\u6709\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3', pct:16, color:'#64748b', desc:'PPML\u6B8B\u5DEE\u03C3=0.20'},
+      {name:'GDP\u6210\u9577\u7387', pct:10, color:'#a78bfa', desc:'\u03C3=2%pt \u00D7 ela=1.10'},
+      {name:'\u30D5\u30E9\u30A4\u30C8\u4F9B\u7D66', pct:6, color:'#4ade80', desc:'\u03C3=8% \u00D7 ela=0.55'},
+      {name:'\u6587\u5316\u7684\u95A2\u5FC3', pct:5, color:'#f472b6', desc:'SNS\u30C8\u30EC\u30F3\u30C9'}
+    ],
+    calendar: {1:0.60, 2:0.50, 3:1.05, 4:1.10, 5:1.00, 6:0.95, 7:1.15, 8:1.10, 9:1.00, 10:1.20, 11:1.05, 12:1.00},
+    risks: [
+      {name:'\u65E5\u4E2D\u95A2\u4FC2\u6025\u60AA\u5316', probability:0.15, impact:-0.35, expected_loss:0.053,
+       trigger:'\u5916\u4EA4\u4E8B\u4EF6', recovery_months:18},
+      {name:'\u9999\u6E2F\u7D4C\u6E08\u60AA\u5316', probability:0.20, impact:-0.15, expected_loss:0.030,
+       trigger:'\u4E2D\u56FD\u672C\u571F\u666F\u6C17\u9023\u52D5', recovery_months:10}
+    ],
+    pref_share: {'\u6771\u4EAC':0.30, '\u5927\u962A':0.20, '\u5317\u6D77\u9053':0.12, '\u4EAC\u90FD':0.08, '\u6C96\u7E04':0.07, '\u798F\u5CA1':0.06, '\u5343\u8449':0.04, '\u795E\u5948\u5DDD':0.03, '\u611B\u77E5':0.03, '\u305D\u306E\u4ED6':0.07}
+  },
+  TH: {
+    name:'\u30BF\u30A4', flag:'\uD83C\uDDF9\uD83C\uDDED', base:148000, band:0.30, cic:0.700, tfi:18.0,
+    drivers: [
+      {name:'\u70BA\u66FF(THB/JPY)', pct:38, color:'#3b82f6', desc:'\u03C3=8% \u00D7 ela=-0.85 \u2192 6.8%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u56FA\u6709\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3', pct:22, color:'#64748b', desc:'PPML\u6B8B\u5DEE\u03C3=0.20'},
+      {name:'GDP\u6210\u9577\u7387', pct:15, color:'#a78bfa', desc:'\u03C3=2%pt \u00D7 ela=1.10'},
+      {name:'\u30D5\u30E9\u30A4\u30C8\u4F9B\u7D66', pct:12, color:'#4ade80', desc:'\u03C3=10% \u00D7 ela=0.55'},
+      {name:'\u6587\u5316\u7684\u95A2\u5FC3', pct:8, color:'#f472b6', desc:'SNS/J-POP\u30C8\u30EC\u30F3\u30C9'},
+      {name:'\u6D88\u8CBB\u8005\u4FE1\u983C\u611F', pct:5, color:'#facc15', desc:'\u03C3=5pt \u00D7 coef=0.010'}
+    ],
+    calendar: {1:0.85, 2:0.80, 3:1.00, 4:1.20, 5:1.10, 6:0.90, 7:1.05, 8:1.00, 9:0.90, 10:1.15, 11:1.10, 12:1.05},
+    risks: [
+      {name:'\u30BF\u30A4\u653F\u6CBB\u4E0D\u5B89', probability:0.15, impact:-0.15, expected_loss:0.023,
+       trigger:'\u653F\u5909/\u5927\u898F\u6A21\u30C7\u30E2', recovery_months:8},
+      {name:'\u5186\u9AD810%\u9032\u884C', probability:0.35, impact:-0.10, expected_loss:0.035,
+       trigger:'\u30EA\u30B9\u30AF\u30AA\u30D5/\u65E5\u9280\u5F15\u7DE0', recovery_months:6}
+    ],
+    pref_share: {'\u6771\u4EAC':0.30, '\u5927\u962A':0.18, '\u5317\u6D77\u9053':0.10, '\u4EAC\u90FD':0.08, '\u6C96\u7E04':0.07, '\u798F\u5CA1':0.06, '\u5343\u8449':0.05, '\u611B\u77E5':0.04, '\u795E\u5948\u5DDD':0.03, '\u305D\u306E\u4ED6':0.09}
+  },
+  AU: {
+    name:'\u8C6A\u5DDE', flag:'\uD83C\uDDE6\uD83C\uDDFA', base:72000, band:0.22, cic:0.600, tfi:32.0,
+    drivers: [
+      {name:'\u70BA\u66FF(AUD/JPY)', pct:42, color:'#3b82f6', desc:'\u03C3=12% \u00D7 ela=-1.22 \u2192 14.6%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u56FA\u6709\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3', pct:20, color:'#64748b', desc:'PPML\u6B8B\u5DEE\u03C3=0.18'},
+      {name:'GDP\u6210\u9577\u7387', pct:15, color:'#a78bfa', desc:'\u03C3=1.5%pt \u00D7 ela=1.15'},
+      {name:'\u30D5\u30E9\u30A4\u30C8\u4F9B\u7D66', pct:10, color:'#4ade80', desc:'\u03C3=10% \u00D7 ela=0.50'},
+      {name:'\u6587\u5316\u7684\u95A2\u5FC3', pct:8, color:'#f472b6', desc:'\u30B9\u30AD\u30FC/\u98DF\u6587\u5316\u30C8\u30EC\u30F3\u30C9'},
+      {name:'\u6D88\u8CBB\u8005\u4FE1\u983C\u611F', pct:5, color:'#facc15', desc:'\u03C3=4pt \u00D7 coef=0.008'}
+    ],
+    calendar: {1:1.20, 2:1.10, 3:1.00, 4:0.95, 5:0.90, 6:0.85, 7:0.80, 8:0.85, 9:1.00, 10:1.05, 11:1.10, 12:1.20},
+    risks: [
+      {name:'\u8C6A\u5DDE\u666F\u6C17\u5F8C\u9000', probability:0.15, impact:-0.12, expected_loss:0.018,
+       trigger:'\u8CC7\u6E90\u4FA1\u683C\u4E0B\u843D', recovery_months:10},
+      {name:'\u5186\u9AD810%\u9032\u884C', probability:0.35, impact:-0.15, expected_loss:0.053,
+       trigger:'\u30EA\u30B9\u30AF\u30AA\u30D5/\u65E5\u9280\u5F15\u7DE0', recovery_months:6}
+    ],
+    pref_share: {'\u6771\u4EAC':0.30, '\u5317\u6D77\u9053':0.18, '\u4EAC\u90FD':0.12, '\u5927\u962A':0.10, '\u5E83\u5CF6':0.06, '\u6C96\u7E04':0.05, '\u9577\u91CE':0.05, '\u5948\u826F':0.04, '\u798F\u5CA1':0.03, '\u305D\u306E\u4ED6':0.07}
+  },
+  SG: {
+    name:'\u30B7\u30F3\u30AC\u30DD\u30FC\u30EB', flag:'\uD83C\uDDF8\uD83C\uDDEC', base:52000, band:0.18, cic:0.680, tfi:20.5,
+    drivers: [
+      {name:'\u70BA\u66FF(SGD/JPY)', pct:40, color:'#3b82f6', desc:'\u03C3=6% \u00D7 ela=-1.00 \u2192 6%\u306E\u5909\u52D5\u5E45'},
+      {name:'\u56FA\u6709\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3', pct:22, color:'#64748b', desc:'PPML\u6B8B\u5DEE\u03C3=0.15'},
+      {name:'GDP\u6210\u9577\u7387', pct:15, color:'#a78bfa', desc:'\u03C3=1.5%pt \u00D7 ela=1.20'},
+      {name:'\u30D5\u30E9\u30A4\u30C8\u4F9B\u7D66', pct:10, color:'#4ade80', desc:'\u03C3=6% \u00D7 ela=0.55'},
+      {name:'\u6587\u5316\u7684\u95A2\u5FC3', pct:8, color:'#f472b6', desc:'SNS/\u30A2\u30CB\u30E1\u30C8\u30EC\u30F3\u30C9'},
+      {name:'\u6D88\u8CBB\u8005\u4FE1\u983C\u611F', pct:5, color:'#facc15', desc:'\u03C3=3pt \u00D7 coef=0.010'}
+    ],
+    calendar: {1:0.90, 2:0.85, 3:1.10, 4:1.05, 5:1.00, 6:1.05, 7:1.10, 8:1.05, 9:0.95, 10:1.00, 11:1.05, 12:1.00},
+    risks: [
+      {name:'\u5186\u9AD810%\u9032\u884C', probability:0.35, impact:-0.12, expected_loss:0.042,
+       trigger:'\u30EA\u30B9\u30AF\u30AA\u30D5/\u65E5\u9280\u5F15\u7DE0', recovery_months:6},
+      {name:'SG\u666F\u6C17\u6E1B\u901F', probability:0.15, impact:-0.10, expected_loss:0.015,
+       trigger:'\u8CBF\u6613\u6E1B\u901F', recovery_months:8}
+    ],
+    pref_share: {'\u6771\u4EAC':0.32, '\u5927\u962A':0.16, '\u4EAC\u90FD':0.12, '\u5317\u6D77\u9053':0.10, '\u6C96\u7E04':0.06, '\u798F\u5CA1':0.05, '\u5E83\u5CF6':0.04, '\u5948\u826F':0.04, '\u5343\u8449':0.03, '\u305D\u306E\u4ED6':0.08}
+  }
+};
+
+/* ===== 月次予測生成（国別） ===== */
+function generateForecast(profile) {
+  try {
+    var labels = [];
+    var base = [];
+    var p10 = [];
+    var p90 = [];
+    var months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    var year = 2026;
+    var month = 4;
+    var i, m, cal, b, halfBand;
+    for (i = 0; i < 21; i++) {
+      m = month + i;
+      var y = year + Math.floor((m - 1) / 12);
+      var mm = ((m - 1) % 12) + 1;
+      labels.push(y + '/' + (mm < 10 ? '0' : '') + mm);
+      cal = profile.calendar[mm] || 1.0;
+      /* トレンド: 年1%成長 */
+      var trend = 1.0 + (i / 12) * 0.01;
+      b = Math.round((profile.base / 10000) * cal * trend * 10) / 10;
+      halfBand = profile.band / 2;
+      base.push(b);
+      p10.push(Math.round(b * (1 - halfBand) * 10) / 10);
+      p90.push(Math.round(b * (1 + halfBand) * 10) / 10);
+    }
+    return {labels: labels, base: base, p10: p10, p90: p90};
+  } catch(e) { return {labels: [], base: [], p10: [], p90: []}; }
+}
+
+/* ===== URLパラメータ取得 ===== */
+function getCountryCode() {
+  try {
+    var params = window.location.search.substring(1).split('&');
+    var i, pair;
+    for (i = 0; i < params.length; i++) {
+      pair = params[i].split('=');
+      if (pair[0] === 'country') return decodeURIComponent(pair[1]);
+    }
+    return 'CN';
+  } catch(e) { return 'CN'; }
+}
+
+/* ===== 描画関数 ===== */
+var forecastChartInstance = null;
+var calendarChartInstance = null;
+
+function renderForecastChart(profile) {
+  try {
+    var fc = generateForecast(profile);
+    var ctx = document.getElementById('forecastChart').getContext('2d');
+    if (forecastChartInstance) { forecastChartInstance.destroy(); }
+
+    /* 統計 */
+    var baseSum = 0, p10Sum = 0, p90Sum = 0;
+    var i;
+    for (i = 0; i < fc.base.length; i++) {
+      baseSum += fc.base[i];
+      p10Sum += fc.p10[i];
+      p90Sum += fc.p90[i];
+    }
+    var baseAvg = (baseSum / fc.base.length).toFixed(1);
+    var p10Avg = (p10Sum / fc.p10.length).toFixed(1);
+    var p90Avg = (p90Sum / fc.p90.length).toFixed(1);
+    var bw = (((p90Avg - p10Avg) / baseAvg) * 100).toFixed(1);
+
+    document.getElementById('forecast-stats').innerHTML =
+      '<div class="forecast-stat"><span class="forecast-stat-label">p50</span><span class="forecast-stat-value base-val">' + baseAvg + '\u4E07\u4EBA/\u6708</span></div>' +
+      '<div class="forecast-stat"><span class="forecast-stat-label">p10</span><span class="forecast-stat-value pessimistic-val">' + p10Avg + '\u4E07\u4EBA</span></div>' +
+      '<div class="forecast-stat"><span class="forecast-stat-label">p90</span><span class="forecast-stat-value optimistic-val">' + p90Avg + '\u4E07\u4EBA</span></div>' +
+      '<div class="forecast-stat"><span class="forecast-stat-label">\u5E2F\u5E45</span><span class="forecast-stat-value band-val">' + bw + '%</span></div>';
+
+    forecastChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: fc.labels,
+        datasets: [
+          {
+            label: '\u697D\u89B3 (p90)',
+            data: fc.p90,
+            borderColor: 'rgba(34,197,94,0.5)',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+            tension: 0.3,
+            order: 2
+          },
+          {
+            label: '\u30D9\u30FC\u30B9 (p50)',
+            data: fc.base,
+            borderColor: '#3b82f6',
+            backgroundColor: 'transparent',
+            borderWidth: 2.5,
+            pointRadius: 2,
+            pointBackgroundColor: '#3b82f6',
+            fill: false,
+            tension: 0.3,
+            order: 1
+          },
+          {
+            label: '\u60B2\u89B3 (p10)',
+            data: fc.p10,
+            borderColor: 'rgba(239,68,68,0.5)',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+            tension: 0.3,
+            order: 3
+          },
+          {
+            label: '\u4FE1\u983C\u533A\u9593',
+            data: fc.p90,
+            borderColor: 'transparent',
+            backgroundColor: 'rgba(59,130,246,0.07)',
+            borderWidth: 0,
+            pointRadius: 0,
+            fill: '+1',
+            tension: 0.3,
+            order: 4
+          },
+          {
+            label: '_fill_bottom',
+            data: fc.p10,
+            borderColor: 'transparent',
+            backgroundColor: 'transparent',
+            borderWidth: 0,
+            pointRadius: 0,
+            fill: false,
+            tension: 0.3,
+            order: 5
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: '#64748b',
+              font: { size: 10, family: "'SF Mono', monospace" },
+              usePointStyle: true,
+              pointStyle: 'line',
+              padding: 10,
+              filter: function(item) { return item.text.indexOf('_') !== 0; }
+            }
+          },
+          tooltip: {
+            backgroundColor: '#1e293b',
+            titleColor: '#e2e8f0',
+            bodyColor: '#94a3b8',
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            callbacks: {
+              label: function(ctx) {
+                try {
+                  if (ctx.dataset.label.indexOf('_') === 0 || ctx.dataset.label === '\u4FE1\u983C\u533A\u9593') return null;
+                  return ctx.dataset.label + ': ' + ctx.parsed.y + '\u4E07\u4EBA';
+                } catch(e) { return ''; }
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#475569', font: { size: 9, family: "'SF Mono', monospace" }, maxRotation: 45 }
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#475569', font: { size: 9, family: "'SF Mono', monospace" }, callback: function(v) { return v + '\u4E07'; } },
+            title: { display: true, text: '\u4E07\u4EBA/\u6708', color: '#475569', font: { size: 9 } }
+          }
+        }
+      }
+    });
+  } catch(e) { console.error('renderForecastChart:', e); }
+}
+
+function renderDriverBars(profile) {
+  try {
+    var container = document.getElementById('driver-bars');
+    var html = '';
+    var i, d;
+    for (i = 0; i < profile.drivers.length; i++) {
+      d = profile.drivers[i];
+      html += '<div class="driver-bar-row">' +
+        '<div class="driver-bar-name">' + d.name + '</div>' +
+        '<div class="driver-bar-track"><div class="driver-bar-fill" style="width:' + d.pct + '%;background:' + d.color + '"></div></div>' +
+        '<div class="driver-bar-pct">' + d.pct + '%</div>' +
+      '</div>' +
+      '<div class="driver-bar-desc">' + d.desc + '</div>';
+    }
+    container.innerHTML = html;
+  } catch(e) { console.error('renderDriverBars:', e); }
+}
+
+function renderCalendarChart(profile) {
+  try {
+    var ctx = document.getElementById('calendarChart').getContext('2d');
+    if (calendarChartInstance) { calendarChartInstance.destroy(); }
+
+    var labels = ['1\u6708','2\u6708','3\u6708','4\u6708','5\u6708','6\u6708','7\u6708','8\u6708','9\u6708','10\u6708','11\u6708','12\u6708'];
+    var data = [];
+    var colors = [];
+    var i, val;
+    for (i = 1; i <= 12; i++) {
+      val = profile.calendar[i] || 1.0;
+      data.push(val);
+      if (val > 1.1) { colors.push('#22c55e'); }
+      else if (val < 0.9) { colors.push('#ef4444'); }
+      else { colors.push('#3b82f6'); }
+    }
+
+    calendarChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '\u5B63\u7BC0\u6307\u6570',
+          data: data,
+          backgroundColor: colors,
+          borderRadius: 3,
+          barPercentage: 0.7
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#1e293b',
+            titleColor: '#e2e8f0',
+            bodyColor: '#94a3b8',
+            callbacks: {
+              label: function(ctx) {
+                try { return '\u6307\u6570: ' + ctx.parsed.y.toFixed(2); } catch(e) { return ''; }
+              }
+            }
+          },
+          annotation: undefined
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: '#475569', font: { size: 10, family: "'SF Mono', monospace" } }
+          },
+          y: {
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#475569', font: { size: 10, family: "'SF Mono', monospace" } },
+            suggestedMin: 0,
+            suggestedMax: 2.5
+          }
+        }
+      },
+      plugins: [{
+        id: 'baselineDraw',
+        afterDraw: function(chart) {
+          try {
+            var yScale = chart.scales.y;
+            var xScale = chart.scales.x;
+            var yPixel = yScale.getPixelForValue(1.0);
+            var ctxCanvas = chart.ctx;
+            ctxCanvas.save();
+            ctxCanvas.beginPath();
+            ctxCanvas.setLineDash([4, 4]);
+            ctxCanvas.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctxCanvas.lineWidth = 1;
+            ctxCanvas.moveTo(xScale.left, yPixel);
+            ctxCanvas.lineTo(xScale.right, yPixel);
+            ctxCanvas.stroke();
+            ctxCanvas.restore();
+          } catch(e) {}
+        }
+      }]
+    });
+  } catch(e) { console.error('renderCalendarChart:', e); }
+}
+
+function renderRiskCards(profile) {
+  try {
+    var container = document.getElementById('risk-cards');
+    var html = '';
+    var i, r;
+    for (i = 0; i < profile.risks.length; i++) {
+      r = profile.risks[i];
+      html += '<div class="risk-card">' +
+        '<div class="risk-header">' +
+          '<span class="risk-name">' + r.name + '</span>' +
+          '<span class="risk-prob">\u78BA\u7387 ' + (r.probability * 100).toFixed(0) + '%</span>' +
+        '</div>' +
+        '<div class="risk-detail">' +
+          '\u2192 \u6765\u8A2A\u8005 <span class="risk-impact">' + (r.impact * 100).toFixed(0) + '%</span>' +
+          ' (\u671F\u5F85\u640D\u5931 <span class="risk-el">' + (r.expected_loss * 100).toFixed(1) + '%</span>)' +
+        '</div>' +
+        '<div class="risk-trigger">\u30C8\u30EA\u30AC\u30FC: ' + r.trigger + ' | \u56DE\u5FA9: ' + r.recovery_months + '\u30F6\u6708</div>' +
+      '</div>';
+    }
+    container.innerHTML = html;
+  } catch(e) { console.error('renderRiskCards:', e); }
+}
+
+function renderPrefBars(profile) {
+  try {
+    var container = document.getElementById('pref-bars');
+    var html = '';
+    var keys = [];
+    var key;
+    for (key in profile.pref_share) {
+      if (profile.pref_share.hasOwnProperty(key)) {
+        keys.push({name: key, share: profile.pref_share[key]});
+      }
+    }
+    keys.sort(function(a, b) { return b.share - a.share; });
+    var i, item, h;
+    for (i = 0; i < keys.length; i++) {
+      item = keys[i];
+      h = Math.max(4, Math.round(item.share * 200));
+      html += '<div class="pref-col">' +
+        '<div class="pref-bar-outer"><div class="pref-bar-fill" style="height:' + h + 'px"></div></div>' +
+        '<div class="pref-label">' + item.name + '</div>' +
+        '<div class="pref-pct">' + (item.share * 100).toFixed(0) + '%</div>' +
+      '</div>';
+    }
+    container.innerHTML = html;
+  } catch(e) { console.error('renderPrefBars:', e); }
+}
+
+function renderStatusBar(profile) {
+  try {
+    var html = '<span>CIC: ' + profile.cic.toFixed(3) + '</span>' +
+      '<span>TFI: ' + profile.tfi.toFixed(1) + '</span>' +
+      '<span>\u5E2F\u5E45\u4FC2\u6570: ' + (profile.band * 100).toFixed(0) + '%</span>' +
+      '<span>\u30D9\u30FC\u30B9: ' + (profile.base / 10000).toFixed(1) + '\u4E07\u4EBA/\u6708</span>' +
+      '<span>model: full_mc_29vars</span>' +
+      '<span>N: 3,000</span>';
+    document.getElementById('status-bar').innerHTML = html;
+  } catch(e) {}
+}
+
+/* ===== 初期化 ===== */
+function init() {
+  try {
+    var code = getCountryCode();
+    var profile = COUNTRY_PROFILES[code];
+    if (!profile) { profile = COUNTRY_PROFILES['CN']; code = 'CN'; }
+
+    document.getElementById('page-title').innerHTML = profile.flag + ' ' + profile.name + ' \u2014 \u8A73\u7D30\u5206\u6790';
+    document.title = 'SCRI Terminal - ' + profile.name + ' \u8A73\u7D30';
+
+    renderForecastChart(profile);
+    renderDriverBars(profile);
+    renderCalendarChart(profile);
+    renderRiskCards(profile);
+    renderPrefBars(profile);
+    renderStatusBar(profile);
+  } catch(e) { console.error('init:', e); }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
