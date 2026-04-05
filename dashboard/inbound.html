@@ -476,6 +476,15 @@ body {
   .factors-grid { gap: 8px; }
   .factor-row { flex-wrap: wrap; }
 }
+/* 新セクションモバイル対応 */
+@media (max-width: 768px) {
+  #facility-sim select, #facility-sim input[type="number"] { font-size: 14px; }
+  #fsim_results table { font-size: 11px; }
+  #spending-panel table { font-size: 11px; }
+  #supply-panel table { font-size: 11px; }
+  #fx-cost-panel table { font-size: 11px; }
+  #accuracy-panel { font-size: 12px; }
+}
 
 /* データ鮮度 */
 .freshness {
@@ -2031,7 +2040,7 @@ function renderAccuracyPanel() {
       {code:'US', name:'米国', mape:10.2},
       {code:'HK', name:'香港', mape:11.8},
       {code:'TH', name:'タイ', mape:13.0},
-      {code:'SG', name:'SG', mape:14.5},
+      {code:'SG', name:'星国', mape:14.5},
       {code:'AU', name:'豪州', mape:16.2},
       {code:'CN', name:'中国', mape:22.0}
     ];
@@ -2144,6 +2153,7 @@ function loadFromAPI() {
    シナリオ比較テーブル
    ============================================================= */
 function renderScenarioCompare() {
+  try {
   var tbl = document.getElementById('scenario-table');
   if (!tbl) return;
 
@@ -2205,6 +2215,7 @@ function renderScenarioCompare() {
 
   html += '</tbody>';
   tbl.innerHTML = html;
+  } catch(e) { console.error('renderScenarioCompare:', e); }
 }
 
 /* =============================================================
@@ -2261,6 +2272,7 @@ function renderSupplyPanel() {
    リスクアラートバナー
    ============================================================= */
 function renderAlerts() {
+  try {
   var container = document.getElementById('risk-alerts');
   if (!container) return;
   var alerts = [];
@@ -2325,6 +2337,7 @@ function renderAlerts() {
   }
   container.innerHTML = html;
   container.style.display = 'block';
+  } catch(e) { console.error('renderAlerts:', e); }
 }
 
 /* =============================================================
