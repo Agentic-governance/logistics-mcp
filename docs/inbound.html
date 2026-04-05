@@ -739,6 +739,100 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
 .cta-btn:hover { background: #2563eb; }
 .cta-btn.secondary { background: transparent; border: 1px solid rgba(59,130,246,0.5); color: #60a5fa; }
 
+/* Board One-Pager (役員会向け) */
+.board-onepager {
+  background: linear-gradient(135deg, #0d1117 0%, #1a2332 100%);
+  border: 2px solid rgba(96,165,250,0.3);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  margin-bottom: var(--space-5);
+}
+.onepager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: var(--space-4);
+}
+.onepager-title {
+  font-size: var(--text-xs);
+  letter-spacing: 0.15em;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.onepager-date {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+.onepager-conclusion {
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
+  padding: 12px 16px;
+  background: rgba(96,165,250,0.05);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+}
+.onepager-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+.onepager-decision-list {
+  margin: 0;
+  padding: 0 0 0 20px;
+  list-style: none;
+  counter-reset: decision;
+}
+.onepager-decision-list li {
+  counter-increment: decision;
+  padding: 8px 0;
+  padding-left: 32px;
+  position: relative;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.onepager-decision-list li::before {
+  content: counter(decision);
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 22px;
+  height: 22px;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: 50%;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 22px;
+}
+.onepager-decision-list li:last-child { border-bottom: none; }
+.onepager-decision-owner {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(96,165,250,0.1);
+  color: var(--color-primary);
+  border-radius: 3px;
+  margin-left: 6px;
+}
+.onepager-decision-deadline {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-warning);
+  margin-left: 6px;
+}
+
 /* ===== エクスポート・ツールバー ===== */
 .toolbar {
   display: flex;
@@ -878,6 +972,21 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
 <div id="risk-alerts" style="display:none;" role="region" aria-label="リスクアラート" aria-live="polite"></div>
 
 <main id="main" class="page-content" role="main">
+  <!-- Board One-Pager (役員会向け1枚要約) -->
+  <div class="board-onepager" id="board-onepager" data-tab-group="overview" role="region" aria-label="役員会向けサマリー">
+    <div class="onepager-header">
+      <div class="onepager-title">BOARD ONE-PAGER</div>
+      <div class="onepager-date" id="onepager-date">2026-04-05</div>
+    </div>
+    <div class="onepager-body">
+      <div class="onepager-conclusion" id="onepager-conclusion"></div>
+      <div class="onepager-decisions">
+        <div class="onepager-label">今週の意思決定 (Top 3)</div>
+        <ol class="onepager-decision-list" id="onepager-decisions"></ol>
+      </div>
+    </div>
+  </div>
+
   <!-- 次アクションCTA (概要タブ固定) -->
   <div class="cta-bar" id="next-action-cta" data-tab-group="overview">
     <div class="cta-text">
@@ -4657,6 +4766,75 @@ var TAB_MAP = {
 
 var currentTab = 'overview';
 
+function renderBoardOnePager() {
+  try {
+    var n = calcNational();
+    var cKeys = Object.keys(COUNTRY_DATA);
+    var highRiskCount = 0;
+    var topCountry = {name:'',base:0};
+    for (var i = 0; i < cKeys.length; i++) {
+      var cd = COUNTRY_DATA[cKeys[i]];
+      var bw = (cd.p90-cd.p10)/cd.base*100;
+      if (bw >= 45) highRiskCount++;
+      if (cd.base > topCountry.base) topCountry = {name:cd.name, base:cd.base};
+    }
+    /* 結論文生成 */
+    var conclusion = '月次予測 <strong>' + n.base.toFixed(1) + '万人</strong> (下振れ' + n.downsidePct.toFixed(1) + '% / 上振れ+' + n.upsidePct.toFixed(1) + '%)。';
+    conclusion += '最大市場は<strong>' + topCountry.name + '</strong>(' + topCountry.base.toFixed(1) + '万人)。';
+    if (highRiskCount >= 2) {
+      conclusion += ' <span style="color:var(--color-danger);">⚠ 高ボラ通貨' + highRiskCount + 'カ国あり。ヘッジ見直し推奨。</span>';
+    } else if (n.upsidePct > 15) {
+      conclusion += ' <span style="color:var(--color-success);">成長機会あり。施設増強を検討。</span>';
+    } else {
+      conclusion += ' 通常運用継続。';
+    }
+    var el = document.getElementById('onepager-conclusion');
+    if (el) el.innerHTML = conclusion;
+
+    /* 意思決定3件生成 */
+    var decisions = [];
+    if (highRiskCount >= 2) {
+      decisions.push('<strong>ヘッジ比率の見直し</strong>: 通貨別Notional再計算とCFOビューでのVaR確認<span class="onepager-decision-owner">CFO</span><span class="onepager-decision-deadline">~' + getDateStr(7) + '</span>');
+    }
+    if (n.bandPct >= 35) {
+      decisions.push('<strong>シナリオ別P/Lレビュー</strong>: p10/p50/p90シナリオで月次予算の感応度分析<span class="onepager-decision-owner">経営企画</span><span class="onepager-decision-deadline">~' + getDateStr(5) + '</span>');
+    }
+    if (n.upsidePct > 15) {
+      decisions.push('<strong>施設キャパシティ拡張判断</strong>: RevPAR予測から客室追加のROI検証<span class="onepager-decision-owner">運営本部</span><span class="onepager-decision-deadline">~' + getDateStr(14) + '</span>');
+    }
+    /* デフォルト補完で必ず3件 */
+    if (decisions.length < 3) {
+      decisions.push('<strong>' + topCountry.name + '市場の詳細分析</strong>: ドライバー感度から販促施策の優先順位付け<span class="onepager-decision-owner">マーケ</span><span class="onepager-decision-deadline">~' + getDateStr(10) + '</span>');
+    }
+    if (decisions.length < 3) {
+      decisions.push('<strong>予測モデルの月次校正</strong>: バックテストMAPE確認+パラメータ調整<span class="onepager-decision-owner">データ</span><span class="onepager-decision-deadline">~月末</span>');
+    }
+    if (decisions.length < 3) {
+      decisions.push('<strong>次月の価格戦略決定</strong>: ダイナミックプライシング推奨を業務本部とレビュー<span class="onepager-decision-owner">営業</span><span class="onepager-decision-deadline">~月末</span>');
+    }
+    var listEl = document.getElementById('onepager-decisions');
+    if (listEl) {
+      var listHtml = '';
+      for (var di = 0; di < Math.min(3, decisions.length); di++) {
+        listHtml += '<li>' + decisions[di] + '</li>';
+      }
+      listEl.innerHTML = listHtml;
+    }
+    /* 日付 */
+    var dateEl = document.getElementById('onepager-date');
+    if (dateEl) {
+      var today = new Date();
+      dateEl.textContent = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    }
+  } catch(e) { console.warn('OnePager:', e.message); }
+}
+
+function getDateStr(daysAhead) {
+  var d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return String(d.getMonth()+1) + '/' + String(d.getDate());
+}
+
 function renderHeroKPI() {
   try {
     var el = document.getElementById('hero-kpi');
@@ -4802,6 +4980,7 @@ function init() {
     renderHFPanel();
     renderStatusBar();
     renderAlerts();
+    renderBoardOnePager();
     renderHeroKPI();
     renderNextActionCTA();
     applyTabClassification();
