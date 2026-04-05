@@ -1341,6 +1341,10 @@ async def get_three_scenarios(
                 "asymmetry_by_month": mc_result.get("asymmetry_by_month", []),
                 "uncertainty_by_month": mc_result.get("uncertainty_by_month", []),
                 "model_note": f"29変数相関行列, N={_full_mc_engine.n_samples}",
+                "correlation_health": _full_mc_engine.correlation_health(),
+                "backtest_summary": _get_cached("bt_summary_2024", lambda: _full_mc_engine.backtest(
+                    [f"2024/{m:02d}" for m in range(1,13)], "ALL"
+                )) if True else None,
             }
         except Exception as e:
             logger.warning("FullMCEngine計算失敗: %s", e)
