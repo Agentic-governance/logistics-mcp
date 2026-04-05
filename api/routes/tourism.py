@@ -1683,6 +1683,28 @@ async def get_dynamic_rebalance(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/anomaly-detection")
+async def get_anomalies(z_threshold: float = Query(default=2.5, ge=1.0, le=5.0)):
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        result = _full_mc_engine.detect_anomalies(z_threshold=z_threshold)
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/market-regime")
+async def get_market_regime():
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        result = _full_mc_engine.classify_market_regime()
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/hedge-discontinuation")
 async def check_discontinuation(
     effectiveness: str = "[95, 98, 102]",

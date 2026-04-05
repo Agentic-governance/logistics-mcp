@@ -630,6 +630,83 @@ class FullMCEngine:
             "within_policy": 0.30 <= new_ratio <= 0.70,
         }
 
+    def detect_anomalies(self, months=None, z_threshold=2.5):
+        """異常値検出 (z-score based, adjust for hedge fund PMs)"""
+        if months is None:
+            months = [f"2024/{m:02d}" for m in range(1,13)] + [f"2025/{m:02d}" for m in range(1,13)]
+        actuals = np.array(self._load_actual_arrivals(months, "ALL"), dtype=float)
+        mask = actuals > 0
+        if mask.sum() < 6: return {"status": "insufficient_data"}
+        values = actuals[mask]
+        months_valid = [m for i,m in enumerate(months) if mask[i]]
+        # Log growth rates
+        log_growth = np.diff(np.log(values))
+        mean_g = float(np.mean(log_growth))
+        std_g = float(np.std(log_growth))
+        anomalies = []
+        for i in range(len(log_growth)):
+            z = (log_growth[i] - mean_g) / max(std_g, 1e-9)
+            if abs(z) > z_threshold:
+                anomalies.append({
+                    "month": months_valid[i+1], "growth_rate": round(float(log_growth[i]), 4),
+                    "z_score": round(float(z), 2),
+                    "direction": "SURGE" if z > 0 else "DROP",
+                    "magnitude_pct": round(float(log_growth[i]) * 100, 1),
+                })
+        return {
+            "months_analyzed": len(values), "anomalies_detected": len(anomalies),
+            "z_threshold": z_threshold,
+            "mean_growth_rate": round(mean_g, 4),
+            "std_growth_rate": round(std_g, 4),
+            "anomalies": anomalies,
+        }
+
+    def classify_market_regime(self, months=None):
+        """市場レジーム分類 (Bull/Bear/Transition)"""
+        if months is None:
+            months = [f"2023/{m:02d}" for m in range(1,13)] + [f"2024/{m:02d}" for m in range(1,13)]
+        actuals = np.array(self._load_actual_arrivals(months, "ALL"), dtype=float)
+        mask = actuals > 0
+        if mask.sum() < 12: return {"status": "insufficient_data"}
+        values = actuals[mask]
+        # 3M moving average for trend
+        window = 3
+        if len(values) < window + 1: return {"status": "insufficient_data"}
+        ma = np.convolve(values, np.ones(window)/window, mode='valid')
+        # Recent trend: last 3 vs previous 3
+        recent_ma = float(ma[-1])
+        prior_ma = float(ma[-4]) if len(ma) >= 4 else float(ma[0])
+        trend_pct = (recent_ma - prior_ma) / max(prior_ma, 1) * 100
+        # Volatility regime
+        log_growth = np.diff(np.log(values))
+        recent_vol = float(np.std(log_growth[-6:])) if len(log_growth) >= 6 else float(np.std(log_growth))
+        prior_vol = float(np.std(log_growth[-12:-6])) if len(log_growth) >= 12 else recent_vol
+        vol_regime = "HIGH_VOL" if recent_vol > prior_vol * 1.3 else ("LOW_VOL" if recent_vol < prior_vol * 0.7 else "NORMAL_VOL")
+        # Regime classification
+        if trend_pct > 10:
+            regime = "BULL"
+            description = "強気相場: 来訪者数上昇トレンド"
+        elif trend_pct < -10:
+            regime = "BEAR"
+            description = "弱気相場: 来訪者数下降トレンド"
+        else:
+            regime = "TRANSITION"
+            description = "推移期: 方向感なし"
+        return {
+            "regime": regime, "description": description,
+            "trend_pct": round(trend_pct, 1),
+            "recent_ma_visitors": int(recent_ma),
+            "prior_ma_visitors": int(prior_ma),
+            "vol_regime": vol_regime,
+            "recent_vol_monthly": round(recent_vol, 4),
+            "prior_vol_monthly": round(prior_vol, 4),
+            "recommended_action": {
+                "BULL": "アップサイド享受。ヘッジ比率を30-40%に抑制",
+                "BEAR": "ダウンサイド防御。ヘッジ比率を60-70%に引き上げ",
+                "TRANSITION": "中立ポジション維持。ヘッジ比率50%前後",
+            }.get(regime, "継続監視"),
+        }
+
     def detect_discontinuation(self, effectiveness_history, r_squared_history, correlation_sign_history):
         """ヘッジ会計中止条件検出 (IFRS 9 6.5.6)"""
         triggers = []
@@ -1135,10 +1212,21 @@ class FullMCEngine:
             raise ValueError(f"n_samples must be >= 1, got {self.n_samples}")
         if source_country != "ALL" and source_country not in PARAMS:
             raise ValueError(f"Unknown source_country '{source_country}'. Valid: {list(PARAMS.keys())} or 'ALL'")
+        if not months:
+            raise ValueError("months must not be empty")
+        seen = set()
         for ms in months:
             parts = ms.split('/')
             if len(parts) != 2 or not all(p.isdigit() for p in parts):
                 raise ValueError(f"Invalid month format '{ms}'. Expected 'YYYY/MM'")
+            y, m = int(parts[0]), int(parts[1])
+            if not (1 <= m <= 12):
+                raise ValueError(f"Invalid month value '{ms}'. Month must be 1-12")
+            if not (2000 <= y <= 2100):
+                raise ValueError(f"Year out of range '{ms}'. Year must be 2000-2100")
+            if ms in seen:
+                raise ValueError(f"Duplicate month '{ms}'")
+            seen.add(ms)
         countries = ALL_COUNTRIES if source_country == "ALL" else [source_country]
         nm = len(months)
         total = np.zeros((nm, self.n_samples))

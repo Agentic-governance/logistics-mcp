@@ -681,6 +681,12 @@ body {
     <div id="cfo-panel"></div>
   </div>
 
+  <!-- ヘッジファンド/トレーダービュー -->
+  <div class="chart-section" id="hf-section" style="border:1px solid rgba(14,165,233,0.3);">
+    <div class="chart-section-title" style="color:#0ea5e9;">ヘッジファンド/トレーダービュー</div>
+    <div id="hf-panel"></div>
+  </div>
+
 <div class="status-bar" id="status-bar"></div>
 
 <script>
@@ -3874,6 +3880,294 @@ function renderCFOPanel() {
 }
 
 /* =============================================================
+   ヘッジファンド/トレーダービュー
+   ============================================================= */
+function renderHFPanel() {
+  try {
+    var panel = document.getElementById('hf-panel');
+    if (!panel) return;
+
+    /* 静的フォールバック値 */
+    var pairs = [
+      {a:'KR', b:'TW', z:1.0, hl:8.0, signal:'NEUTRAL'},
+      {a:'CN', b:'HK', z:0.5, hl:12.0, signal:'NEUTRAL'},
+      {a:'US', b:'AU', z:0.8, hl:10.0, signal:'NEUTRAL'},
+      {a:'TW', b:'HK', z:0.6, hl:9.0, signal:'NEUTRAL'}
+    ];
+    var fxFwds = [
+      {ccy:'USD', spot:150.00, fwd3m:153.37, fwd6m:154.50, annPrem:-4.2},
+      {ccy:'KRW', spot:0.108, fwd3m:0.1085, fwd6m:0.1090, annPrem:-1.8},
+      {ccy:'CNY', spot:20.80, fwd3m:20.95, fwd6m:21.05, annPrem:-2.5},
+      {ccy:'AUD', spot:98.50, fwd3m:99.10, fwd6m:99.60, annPrem:-2.1}
+    ];
+    var vols = [
+      {ccy:'USD', iv:9.5, rv:10.0, spread:-0.5, signal:'NEUTRAL'},
+      {ccy:'KRW', iv:11.2, rv:10.8, spread:0.4, signal:'NEUTRAL'},
+      {ccy:'AUD', iv:12.5, rv:11.9, spread:0.6, signal:'NEUTRAL'}
+    ];
+    var regime = {regime:'BULL', trend:15.3, vol:'LOW_VOL', action:'リスクオン - ロング推奨'};
+
+    function setBadge(id, isLive) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (isLive) {
+        el.innerHTML = '<span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:400;letter-spacing:0;">LIVE</span>';
+      } else {
+        el.innerHTML = '<span style="background:rgba(234,179,8,0.15);color:#facc15;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:400;letter-spacing:0;">STATIC</span>';
+      }
+    }
+
+    function sigColor(sig) {
+      if (sig && sig.indexOf('STRONG') === 0) return '#ef4444';
+      if (sig === 'LONG' || sig === 'BUY_VOL') return '#22c55e';
+      if (sig === 'SHORT' || sig === 'SELL_VOL') return '#f59e0b';
+      return '#94a3b8';
+    }
+
+    function regimeColor(r) {
+      if (r === 'BULL') return '#22c55e';
+      if (r === 'BEAR') return '#ef4444';
+      return '#facc15';
+    }
+
+    /* DOM構造初期化 */
+    var html = '';
+    html += '<div id="hf-pair-block" style="margin-bottom:16px;">';
+    html += '<div style="font-size:11px;color:#0ea5e9;margin-bottom:6px;letter-spacing:1px;">1. ペアトレードシグナル <span id="hf-pair-badge"></span></div>';
+    html += '<div id="hf-pair-table"></div>';
+    html += '</div>';
+
+    html += '<div id="hf-fx-block" style="margin-bottom:16px;">';
+    html += '<div style="font-size:11px;color:#0ea5e9;margin-bottom:6px;letter-spacing:1px;">2. FX Forward Curve <span id="hf-fx-badge"></span></div>';
+    html += '<div id="hf-fx-table"></div>';
+    html += '</div>';
+
+    html += '<div id="hf-vol-block" style="margin-bottom:16px;">';
+    html += '<div style="font-size:11px;color:#0ea5e9;margin-bottom:6px;letter-spacing:1px;">3. IV vs RV スプレッド <span id="hf-vol-badge"></span></div>';
+    html += '<div id="hf-vol-table"></div>';
+    html += '</div>';
+
+    html += '<div id="hf-regime-block">';
+    html += '<div style="font-size:11px;color:#0ea5e9;margin-bottom:6px;letter-spacing:1px;">4. Market Regime <span id="hf-regime-badge"></span></div>';
+    html += '<div id="hf-regime-card"></div>';
+    html += '</div>';
+    panel.innerHTML = html;
+
+    function drawPairs(data) {
+      var t = '<table style="width:100%;font-size:11px;border-collapse:collapse;">';
+      t += '<thead><tr style="color:#64748b;border-bottom:1px solid rgba(148,163,184,0.2);">';
+      t += '<th style="text-align:left;padding:4px 6px;">ペア</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">z-score</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">半減期(月)</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">シグナル</th>';
+      t += '</tr></thead><tbody>';
+      for (var i=0;i<data.length;i++) {
+        var p = data[i];
+        var c = sigColor(p.signal);
+        t += '<tr style="border-bottom:1px solid rgba(148,163,184,0.08);">';
+        t += '<td style="padding:4px 6px;color:#e2e8f0;">' + p.a + '-' + p.b + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:#e2e8f0;">' + Number(p.z).toFixed(2) + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:#e2e8f0;">' + Number(p.hl).toFixed(1) + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:' + c + ';font-weight:600;">' + p.signal + '</td>';
+        t += '</tr>';
+      }
+      t += '</tbody></table>';
+      document.getElementById('hf-pair-table').innerHTML = t;
+    }
+
+    function drawFx(data) {
+      var t = '<table style="width:100%;font-size:11px;border-collapse:collapse;">';
+      t += '<thead><tr style="color:#64748b;border-bottom:1px solid rgba(148,163,184,0.2);">';
+      t += '<th style="text-align:left;padding:4px 6px;">通貨</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">Spot</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">3M Fwd</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">6M Fwd</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">年率プレミアム</th>';
+      t += '</tr></thead><tbody>';
+      for (var i=0;i<data.length;i++) {
+        var f = data[i];
+        var pc = (f.annPrem < 0) ? '#ef4444' : '#22c55e';
+        t += '<tr style="border-bottom:1px solid rgba(148,163,184,0.08);">';
+        t += '<td style="padding:4px 6px;color:#e2e8f0;">' + f.ccy + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:#e2e8f0;">' + Number(f.spot).toFixed(4) + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:#e2e8f0;">' + Number(f.fwd3m).toFixed(4) + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:#e2e8f0;">' + Number(f.fwd6m).toFixed(4) + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:' + pc + ';font-weight:600;">' + Number(f.annPrem).toFixed(2) + '%</td>';
+        t += '</tr>';
+      }
+      t += '</tbody></table>';
+      document.getElementById('hf-fx-table').innerHTML = t;
+    }
+
+    function drawVol(data) {
+      var t = '<table style="width:100%;font-size:11px;border-collapse:collapse;">';
+      t += '<thead><tr style="color:#64748b;border-bottom:1px solid rgba(148,163,184,0.2);">';
+      t += '<th style="text-align:left;padding:4px 6px;">通貨</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">IV %</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">RV %</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">Spread</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">シグナル</th>';
+      t += '</tr></thead><tbody>';
+      for (var i=0;i<data.length;i++) {
+        var v = data[i];
+        var c = sigColor(v.signal);
+        t += '<tr style="border-bottom:1px solid rgba(148,163,184,0.08);">';
+        t += '<td style="padding:4px 6px;color:#e2e8f0;">' + v.ccy + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:#e2e8f0;">' + Number(v.iv).toFixed(2) + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:#e2e8f0;">' + Number(v.rv).toFixed(2) + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:#e2e8f0;">' + Number(v.spread).toFixed(2) + '</td>';
+        t += '<td style="padding:4px 6px;text-align:right;color:' + c + ';font-weight:600;">' + v.signal + '</td>';
+        t += '</tr>';
+      }
+      t += '</tbody></table>';
+      document.getElementById('hf-vol-table').innerHTML = t;
+    }
+
+    function drawRegime(r) {
+      var c = regimeColor(r.regime);
+      var h = '<div style="display:flex;align-items:center;gap:12px;padding:10px;background:rgba(14,165,233,0.05);border-radius:4px;">';
+      h += '<div style="font-size:24px;font-weight:700;color:' + c + ';">' + r.regime + '</div>';
+      h += '<div style="flex:1;">';
+      h += '<div style="font-size:10px;color:#94a3b8;">トレンド: <span style="color:#e2e8f0;">' + Number(r.trend).toFixed(1) + '%</span> &nbsp; ボラ: <span style="color:#e2e8f0;">' + r.vol + '</span></div>';
+      h += '<div style="font-size:11px;color:#e2e8f0;margin-top:4px;">推奨: ' + r.action + '</div>';
+      h += '</div></div>';
+      document.getElementById('hf-regime-card').innerHTML = h;
+    }
+
+    /* 初期描画(静的) */
+    drawPairs(pairs);
+    drawFx(fxFwds);
+    drawVol(vols);
+    drawRegime(regime);
+    setBadge('hf-pair-badge', false);
+    setBadge('hf-fx-badge', false);
+    setBadge('hf-vol-badge', false);
+    setBadge('hf-regime-badge', false);
+
+    /* APIフェッチ (各独立AbortController, 8秒) */
+    var pairList = [{a:'KR',b:'TW'},{a:'CN',b:'HK'},{a:'US',b:'AU'},{a:'TW',b:'HK'}];
+    var pairResults = pairs.slice();
+    var pairDone = 0;
+    var pairLive = false;
+    for (var pi=0; pi<pairList.length; pi++) {
+      (function(idx, pp){
+        var ctrl = new AbortController();
+        var to = setTimeout(function(){ ctrl.abort(); }, 8000);
+        fetch('/api/v1/tourism/pair-trading?country_a=' + pp.a + '&country_b=' + pp.b, {signal: ctrl.signal})
+          .then(function(r){ clearTimeout(to); if (!r.ok) throw new Error('http'); return r.json(); })
+          .then(function(j){
+            try {
+              var d = j.data || j;
+              pairResults[idx] = {
+                a: pp.a, b: pp.b,
+                z: (d.z_score !== undefined) ? d.z_score : pairResults[idx].z,
+                hl: (d.half_life_months !== undefined) ? d.half_life_months : ((d.half_life !== undefined) ? d.half_life : pairResults[idx].hl),
+                signal: d.signal || pairResults[idx].signal
+              };
+              pairLive = true;
+            } catch(e){}
+            pairDone++;
+            if (pairDone === pairList.length) { drawPairs(pairResults); if (pairLive) setBadge('hf-pair-badge', true); }
+          })
+          .catch(function(e){
+            pairDone++;
+            if (pairDone === pairList.length) { drawPairs(pairResults); if (pairLive) setBadge('hf-pair-badge', true); }
+            console.warn('pair-trading:', e && e.message);
+          });
+      })(pi, pairList[pi]);
+    }
+
+    var ccyList = ['USD','KRW','CNY','AUD'];
+    var fxResults = fxFwds.slice();
+    var fxDone = 0;
+    var fxLive = false;
+    for (var fi=0; fi<ccyList.length; fi++) {
+      (function(idx, ccy){
+        var ctrl = new AbortController();
+        var to = setTimeout(function(){ ctrl.abort(); }, 8000);
+        fetch('/api/v1/tourism/fx-forward?currency=' + ccy + '&tenor_months=3', {signal: ctrl.signal})
+          .then(function(r){ clearTimeout(to); if (!r.ok) throw new Error('http'); return r.json(); })
+          .then(function(j){
+            try {
+              var d = j.data || j;
+              fxResults[idx] = {
+                ccy: ccy,
+                spot: (d.spot !== undefined) ? d.spot : fxResults[idx].spot,
+                fwd3m: (d.forward_3m !== undefined) ? d.forward_3m : ((d.fwd_3m !== undefined) ? d.fwd_3m : fxResults[idx].fwd3m),
+                fwd6m: (d.forward_6m !== undefined) ? d.forward_6m : ((d.fwd_6m !== undefined) ? d.fwd_6m : fxResults[idx].fwd6m),
+                annPrem: (d.annualized_premium !== undefined) ? d.annualized_premium : ((d.ann_prem !== undefined) ? d.ann_prem : fxResults[idx].annPrem)
+              };
+              fxLive = true;
+            } catch(e){}
+            fxDone++;
+            if (fxDone === ccyList.length) { drawFx(fxResults); if (fxLive) setBadge('hf-fx-badge', true); }
+          })
+          .catch(function(e){
+            fxDone++;
+            if (fxDone === ccyList.length) { drawFx(fxResults); if (fxLive) setBadge('hf-fx-badge', true); }
+            console.warn('fx-forward:', e && e.message);
+          });
+      })(fi, ccyList[fi]);
+    }
+
+    var volCcyList = ['USD','KRW','AUD'];
+    var volResults = vols.slice();
+    var volDone = 0;
+    var volLive = false;
+    for (var vi=0; vi<volCcyList.length; vi++) {
+      (function(idx, ccy){
+        var ctrl = new AbortController();
+        var to = setTimeout(function(){ ctrl.abort(); }, 8000);
+        fetch('/api/v1/tourism/fx-vol?currency=' + ccy, {signal: ctrl.signal})
+          .then(function(r){ clearTimeout(to); if (!r.ok) throw new Error('http'); return r.json(); })
+          .then(function(j){
+            try {
+              var d = j.data || j;
+              volResults[idx] = {
+                ccy: ccy,
+                iv: (d.iv !== undefined) ? d.iv : ((d.implied_vol !== undefined) ? d.implied_vol : volResults[idx].iv),
+                rv: (d.rv !== undefined) ? d.rv : ((d.realized_vol !== undefined) ? d.realized_vol : volResults[idx].rv),
+                spread: (d.spread !== undefined) ? d.spread : ((d.iv_rv_spread !== undefined) ? d.iv_rv_spread : volResults[idx].spread),
+                signal: d.signal || volResults[idx].signal
+              };
+              volLive = true;
+            } catch(e){}
+            volDone++;
+            if (volDone === volCcyList.length) { drawVol(volResults); if (volLive) setBadge('hf-vol-badge', true); }
+          })
+          .catch(function(e){
+            volDone++;
+            if (volDone === volCcyList.length) { drawVol(volResults); if (volLive) setBadge('hf-vol-badge', true); }
+            console.warn('fx-vol:', e && e.message);
+          });
+      })(vi, volCcyList[vi]);
+    }
+
+    (function(){
+      var ctrl = new AbortController();
+      var to = setTimeout(function(){ ctrl.abort(); }, 8000);
+      fetch('/api/v1/tourism/market-regime', {signal: ctrl.signal})
+        .then(function(r){ clearTimeout(to); if (!r.ok) throw new Error('http'); return r.json(); })
+        .then(function(j){
+          try {
+            var d = j.data || j;
+            var r2 = {
+              regime: d.regime || regime.regime,
+              trend: (d.trend !== undefined) ? d.trend : ((d.trend_pct !== undefined) ? d.trend_pct : regime.trend),
+              vol: d.vol_regime || d.vol || regime.vol,
+              action: d.recommended_action || d.action || regime.action
+            };
+            drawRegime(r2);
+            setBadge('hf-regime-badge', true);
+          } catch(e){ console.warn('market-regime:', e.message); }
+        })
+        .catch(function(e){ console.warn('market-regime fetch:', e && e.message); });
+    })();
+
+  } catch(e) { console.error('renderHFPanel:', e); }
+}
+
+/* =============================================================
    初期化
    ============================================================= */
 function init() {
@@ -3899,6 +4193,7 @@ function init() {
     renderSupplyPanel();
     renderModelInfo();
     renderCFOPanel();
+    renderHFPanel();
     renderStatusBar();
     renderAlerts();
   } catch(e) { console.error('init:', e); }
