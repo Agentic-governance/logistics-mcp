@@ -833,6 +833,96 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
   margin-left: 6px;
 }
 
+/* Morning Brief */
+.morning-brief {
+  background: linear-gradient(135deg, #0d1117 0%, #162030 100%);
+  border: 2px solid rgba(251,191,36,0.3);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-5);
+}
+.morning-brief-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid rgba(251,191,36,0.15);
+  margin-bottom: var(--space-4);
+}
+.morning-brief-title {
+  font-size: var(--text-xs);
+  letter-spacing: 0.15em;
+  color: var(--color-warning);
+  font-weight: 700;
+}
+.morning-brief-date {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+.morning-brief-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: var(--space-4);
+}
+@media (max-width: 768px) { .morning-brief-grid { grid-template-columns: 1fr; } }
+.morning-brief-block {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.02);
+}
+.morning-brief-block.accent {
+  background: rgba(96,165,250,0.06);
+  border: 1px solid rgba(96,165,250,0.15);
+}
+.morning-brief-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+.morning-brief-content {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.morning-brief-content strong { color: var(--color-text-primary); }
+.morning-brief-content .impact-amount {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-base);
+}
+
+/* ===== 印刷専用スタイル (白背景・会議配布用) ===== */
+@media print {
+  body { background: white !important; color: #000 !important; font-size: 12pt !important; }
+  .terminal-header, .tab-nav, .status-bar, .cta-bar,
+  .toolbar, .toolbar-btn, .cta-btn, .live-dot,
+  [data-tab-group="finance"], [data-tab-group="quant"],
+  [data-tab-group="model"], #risk-alerts { display: none !important; }
+  .chart-section, .table-section, .national-summary,
+  .board-onepager, .morning-brief, .hero-card {
+    background: white !important;
+    border: 1px solid #ddd !important;
+    color: #000 !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .hero-value, .national-value { color: #000 !important; }
+  .onepager-conclusion { border-left-color: #333 !important; background: #f5f5f5 !important; color: #000 !important; }
+  .morning-brief { border-color: #999 !important; background: #fafafa !important; }
+  .morning-brief-title, .onepager-title { color: #333 !important; }
+  .morning-brief-content, .morning-brief-label,
+  .onepager-label, .hero-label, .hero-sub { color: #666 !important; }
+  a { color: #000 !important; text-decoration: none !important; }
+  .data-table th, .data-table td { color: #000 !important; border-color: #ccc !important; }
+  .td-neg { color: #c00 !important; }
+  .td-pos { color: #060 !important; }
+  .skip-link { display: none !important; }
+}
+
 /* ===== エクスポート・ツールバー ===== */
 .toolbar {
   display: flex;
@@ -972,6 +1062,28 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
 <div id="risk-alerts" style="display:none;" role="region" aria-label="リスクアラート" aria-live="polite"></div>
 
 <main id="main" class="page-content" role="main">
+  <!-- 朝30秒サマリー (CEO view: 昨日→今日→意思決定) -->
+  <div class="morning-brief" data-tab-group="overview" role="region" aria-label="朝30秒サマリー">
+    <div class="morning-brief-header">
+      <div class="morning-brief-title">MORNING BRIEF — 朝30秒</div>
+      <div class="morning-brief-date" id="morning-brief-date">2026-04-05</div>
+    </div>
+    <div class="morning-brief-grid">
+      <div class="morning-brief-block">
+        <div class="morning-brief-label">昨日の結果</div>
+        <div class="morning-brief-content" id="brief-yesterday"></div>
+      </div>
+      <div class="morning-brief-block">
+        <div class="morning-brief-label">乖離要因 Top3</div>
+        <div class="morning-brief-content" id="brief-factors"></div>
+      </div>
+      <div class="morning-brief-block accent">
+        <div class="morning-brief-label">今日の意思決定 3件</div>
+        <div class="morning-brief-content" id="brief-decisions"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Board One-Pager (役員会向け1枚要約) -->
   <div class="board-onepager" id="board-onepager" data-tab-group="overview" role="region" aria-label="役員会向けサマリー">
     <div class="onepager-header">
@@ -4766,6 +4878,62 @@ var TAB_MAP = {
 
 var currentTab = 'overview';
 
+function renderMorningBrief() {
+  try {
+    var n = calcNational();
+    var cKeys = Object.keys(COUNTRY_DATA);
+    /* 昨日の結果 (シミュレーション: p50ベース ± 日次ランダム) */
+    var yesterdayHtml = '';
+    var estRevenue = n.base * 10000 * 150000;  /* 万人 × 消費額 */
+    var estRevenueOku = (estRevenue / 1e8).toFixed(0);
+    yesterdayHtml += '<div>推定日次売上: <span class="impact-amount" style="color:var(--color-primary);">' + estRevenueOku + '億円</span></div>';
+    yesterdayHtml += '<div>全国来訪者: <strong>' + n.base.toFixed(1) + '万人/月</strong> (日次' + (n.base/30).toFixed(1) + '万人)</div>';
+    /* YoY */
+    var yoyTotal = 0;
+    var yk = Object.keys(YOY_DATA);
+    for (var yi = 0; yi < yk.length; yi++) yoyTotal += YOY_DATA[yk[yi]];
+    var yoyPct = yoyTotal > 0 ? ((n.base - yoyTotal) / yoyTotal * 100) : 0;
+    yesterdayHtml += '<div>前年比: <strong style="color:' + (yoyPct >= 0 ? 'var(--color-success)' : 'var(--color-danger)') + ';">' + (yoyPct >= 0 ? '+' : '') + yoyPct.toFixed(1) + '%</strong></div>';
+    document.getElementById('brief-yesterday').innerHTML = yesterdayHtml;
+
+    /* 乖離要因 Top3 */
+    var factors = [];
+    for (var fi = 0; fi < cKeys.length; fi++) {
+      var cd = COUNTRY_DATA[cKeys[fi]];
+      var bandPct = (cd.p90 - cd.p10) / cd.base * 100;
+      if (bandPct >= 35) {
+        factors.push({name: cd.name, bw: bandPct, impact: Math.round(cd.base * bandPct / 100 * 10000 * 150000 / 1e8)});
+      }
+    }
+    factors.sort(function(a, b) { return b.impact - a.impact; });
+    var factorHtml = '';
+    for (var fj = 0; fj < Math.min(3, factors.length); fj++) {
+      var f = factors[fj];
+      factorHtml += '<div>' + (fj + 1) + '. <strong>' + f.name + '</strong> 予測ブレ幅' + f.bw.toFixed(0) + '% (影響' + f.impact + '億円)</div>';
+    }
+    if (factors.length === 0) factorHtml = '<div>大きな乖離要因なし。安定推移。</div>';
+    document.getElementById('brief-factors').innerHTML = factorHtml;
+
+    /* 今日の意思決定 3件 */
+    var decisions = [];
+    if (factors.length >= 2) {
+      decisions.push('<strong>為替ヘッジ見直し</strong> — 変動大の市場' + factors.length + 'カ国。CFOビューでVaR確認。<span class="onepager-decision-owner">財務</span>');
+    }
+    decisions.push('<strong>今週の価格改定</strong> — RevPAR予測を確認し、ADR調整案を営業と協議。<span class="onepager-decision-owner">営業</span>');
+    decisions.push('<strong>人員シフト確定</strong> — 来週の需要予測ベースで清掃・フロントの配置確定。<span class="onepager-decision-owner">運営</span>');
+    var decHtml = '';
+    for (var di = 0; di < Math.min(3, decisions.length); di++) {
+      decHtml += '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);">' + decisions[di] + '</div>';
+    }
+    document.getElementById('brief-decisions').innerHTML = decHtml;
+
+    /* 日付 */
+    var today = new Date();
+    var dateStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    document.getElementById('morning-brief-date').textContent = dateStr;
+  } catch(e) { console.warn('MorningBrief:', e.message); }
+}
+
 function renderBoardOnePager() {
   try {
     var n = calcNational();
@@ -4982,6 +5150,7 @@ function init() {
     renderHFPanel();
     renderStatusBar();
     renderAlerts();
+    renderMorningBrief();
     renderBoardOnePager();
     renderHeroKPI();
     renderNextActionCTA();
