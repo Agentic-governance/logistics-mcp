@@ -17,14 +17,14 @@ CLT_COEF = 0.010
 PARAMS = {
     "KR": dict(base=716000,fx="fx_krw",gdp="gdp_kr",geo="geo_kr",flt="flt_kr",cci="cci_kr",stk="stk_kr",clt="clt_kr",
                idio=0.08,peaks={7:1.35,8:1.40,4:1.15,3:1.10,10:1.10},troughs={2:0.75,9:0.80}),
-    "CN": dict(base=433000,fx="fx_cny",gdp="gdp_cn",geo="geo_cn",flt="flt_cn",cci="cci_cn",stk="stk_cn",clt="clt_cn",
-               idio=0.22,peaks={10:2.20,5:1.60,9:1.20},troughs={2:0.45,1:0.55}),
+    "CN": dict(base=580000,fx="fx_cny",gdp="gdp_cn",geo="geo_cn",flt="flt_cn",cci="cci_cn",stk="stk_cn",clt="clt_cn",
+               idio=0.22,peaks={10:1.55,5:1.45,9:1.15},troughs={2:0.45,1:0.55}),  # base 433K→580K: 2024実績に合わせ
     "TW": dict(base=400000,fx="fx_twd",gdp="gdp_tw",geo="geo_tw",flt="flt_tw",cci=None,stk=None,clt=None,
                idio=0.12,peaks={4:1.20,7:1.15,8:1.10},troughs={2:0.55}),
     "US": dict(base=300000,fx="fx_usd",gdp="gdp_us",geo=None,flt="flt_us",cci="cci_us",stk="stk_us",clt="clt_us",
-               idio=0.15,peaks={7:1.45,8:1.50,4:1.15},troughs={11:0.75,12:0.80}),
+               idio=0.20,peaks={7:1.45,8:1.50,4:1.15},troughs={11:0.75,12:0.80}),  # idio 0.15→0.20: 長距離市場はボラ高い
     "AU": dict(base=53000,fx="fx_aud",gdp="gdp_au",geo=None,flt="flt_au",cci=None,stk=None,clt=None,
-               idio=0.18,peaks={7:2.50,8:2.80,1:1.80,2:1.60},troughs={5:0.85,6:0.90}),
+               idio=0.18,peaks={7:1.60,8:1.70,1:1.30,2:1.25},troughs={5:0.85,6:0.90}),  # 8月2.80→1.70: 月単位で過大だった
     "TH": dict(base=35000,fx="fx_thb",gdp=None,geo="geo_th",flt=None,cci=None,stk=None,clt=None,
                idio=0.20,peaks={4:1.20,10:1.15},troughs={}),
     "HK": dict(base=109000,fx="fx_usd",gdp=None,geo="geo_cn",flt=None,cci=None,stk=None,clt=None,
