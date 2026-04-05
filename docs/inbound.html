@@ -665,6 +665,16 @@ body {
   <div id="model-info-panel" style="display:none; margin-top:12px;"></div>
 </div>
 
+  <!-- エクスポート -->
+  <div class="chart-section" id="export-section">
+    <div class="chart-section-title">データエクスポート</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="toolbar-btn" onclick="exportFullCSV()">全データCSV</button>
+      <button class="toolbar-btn" onclick="exportSummaryCSV()">サマリーCSV</button>
+      <button class="toolbar-btn" onclick="exportMethodology()">方法論テキスト</button>
+    </div>
+  </div>
+
 <div class="status-bar" id="status-bar"></div>
 
 <script>

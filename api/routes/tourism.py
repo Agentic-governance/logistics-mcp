@@ -1495,6 +1495,28 @@ async def get_three_scenarios(
     }
 
 
+@router.get("/auto-calibrate")
+async def get_auto_calibrate():
+    """バックテスト結果に基づくidioパラメータ自動校正"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _full_mc_engine.auto_calibrate)
+        # Re-run backtest after calibration
+        bt_after = await loop.run_in_executor(
+            None, lambda: _full_mc_engine.backtest([f"2024/{m:02d}" for m in range(1, 13)], "ALL")
+        )
+        return {
+            "status": "ok",
+            "adjustments": result,
+            "backtest_after": bt_after,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/model-diagnostics")
 async def get_model_diagnostics():
     """モデル診断情報（バックテスト + 相関行列 + 設定）"""

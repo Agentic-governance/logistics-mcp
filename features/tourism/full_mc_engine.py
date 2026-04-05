@@ -21,12 +21,12 @@ PARAMS = {
                idio=0.22,peaks={10:1.55,5:1.45,9:1.15},troughs={2:0.45,1:0.55}),  # base 433K→580K: 2024実績に合わせ
     "TW": dict(base=400000,fx="fx_twd",gdp="gdp_tw",geo="geo_tw",flt="flt_tw",cci=None,stk=None,clt=None,
                idio=0.12,peaks={4:1.20,7:1.15,8:1.10},troughs={2:0.55}),
-    "US": dict(base=300000,fx="fx_usd",gdp="gdp_us",geo=None,flt="flt_us",cci="cci_us",stk="stk_us",clt="clt_us",
-               idio=0.20,peaks={7:1.45,8:1.50,4:1.15},troughs={11:0.75,12:0.80}),  # idio 0.15→0.20: 長距離市場はボラ高い
+    "US": dict(base=272000,fx="fx_usd",gdp="gdp_us",geo=None,flt="flt_us",cci="cci_us",stk="stk_us",clt="clt_us",
+               idio=0.20,peaks={7:1.45,8:1.50,4:1.15},troughs={11:0.75,12:0.80}),  # base 300K→272K: 2024実績反映
     "AU": dict(base=53000,fx="fx_aud",gdp="gdp_au",geo=None,flt="flt_au",cci=None,stk=None,clt=None,
                idio=0.18,peaks={7:1.60,8:1.70,1:1.30,2:1.25},troughs={5:0.85,6:0.90}),  # 8月2.80→1.70: 月単位で過大だった
-    "TH": dict(base=35000,fx="fx_thb",gdp=None,geo="geo_th",flt=None,cci=None,stk=None,clt=None,
-               idio=0.20,peaks={4:1.20,10:1.15},troughs={}),
+    "TH": dict(base=98000,fx="fx_thb",gdp=None,geo="geo_th",flt=None,cci=None,stk=None,clt=None,
+               idio=0.20,peaks={4:1.20,10:1.15},troughs={}),  # base 35K→98K: 2024実績に合わせ
     "HK": dict(base=109000,fx="fx_usd",gdp=None,geo="geo_cn",flt=None,cci=None,stk=None,clt=None,
                idio=0.18,peaks={4:1.15,10:1.20},troughs={2:0.50}),
     "SG": dict(base=45000,fx="fx_usd",gdp=None,geo=None,flt=None,cci=None,stk=None,clt=None,
@@ -219,6 +219,30 @@ class FullMCEngine:
             "is_positive_definite": bool(eigvals.min() > 0),
             "near_singular": bool(eigvals.min() < 1e-4),
         }
+
+    def auto_calibrate(self):
+        """バックテスト結果に基づくidioパラメータ自動校正"""
+        months_2024 = [f"2024/{m:02d}" for m in range(1, 13)]
+        adjustments = {}
+        for iso2 in ALL_COUNTRIES:
+            bt = self.backtest(months_2024, iso2)
+            if bt['mape'] is None:
+                continue
+            cov = bt['coverage_p10_p90']
+            current_idio = PARAMS[iso2]['idio']
+            if cov < 70:
+                new_idio = min(current_idio * 1.3, 0.40)  # +30%, cap at 0.40
+                PARAMS[iso2]['idio'] = new_idio
+                adjustments[iso2] = {"old": current_idio, "new": round(new_idio, 3), "coverage": cov, "action": "increased"}
+            elif cov < 80:
+                new_idio = min(current_idio * 1.15, 0.35)  # +15%
+                PARAMS[iso2]['idio'] = new_idio
+                adjustments[iso2] = {"old": current_idio, "new": round(new_idio, 3), "coverage": cov, "action": "increased"}
+            elif cov > 95:
+                new_idio = max(current_idio * 0.90, 0.05)  # -10%, floor 0.05
+                PARAMS[iso2]['idio'] = new_idio
+                adjustments[iso2] = {"old": current_idio, "new": round(new_idio, 3), "coverage": cov, "action": "decreased"}
+        return adjustments
 
     def _load_actual_arrivals(self, months, source_country="ALL"):
         """DBから実績来訪者数を取得 (ISO3→ISO2変換付き)"""
