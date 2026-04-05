@@ -378,6 +378,12 @@ body {
 .td-neg { color: #f87171; }
 .td-pos { color: #4ade80; }
 .td-muted { color: #94a3b8; }
+/* 色覚多様性対応: 形状でも意味を伝える */
+.td-neg::before { content: '▼ '; font-size: 9px; }
+.td-pos::before { content: '▲ '; font-size: 9px; }
+.risk-high::before { content: '● '; }
+.risk-med::before  { content: '◆ '; }
+.risk-low::before  { content: '○ '; }
 .td-risk-tag {
   font-size: 10px;
   padding: 2px 6px;
@@ -814,6 +820,9 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
       <button class="cta-btn secondary" onclick="switchTab('operations')">施設シミュ</button>
     </div>
   </div>
+
+  <!-- Hero KPI (4カード) -->
+  <div class="hero-grid" id="hero-kpi" data-tab-group="overview"></div>
 
   <!-- 全国サマリー -->
   <div class="national-summary" id="national-summary"></div>
@@ -2313,8 +2322,9 @@ function renderCountryTable() {
       } else {
         var sorted = countrySortKey === col.key ? ' sorted' : '';
         var arrow = countrySortKey === col.key ? (countrySortAsc ? '\u25B2' : '\u25BC') : '\u25BC';
-        html += '<th class="' + sorted + '" onclick="sortCountryTable(\'' + col.key + '\')">';
-        html += col.label + '<span class="sort-arrow">' + arrow + '</span></th>';
+        var ariaSort = countrySortKey===col.key ? (countrySortAsc?'ascending':'descending') : 'none';
+        html += '<th class="' + sorted + '" onclick="sortCountryTable(\'' + col.key + '\')" role="columnheader" aria-sort="' + ariaSort + '" tabindex="0" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){sortCountryTable(\'' + col.key + '\');event.preventDefault();}">';
+        html += col.label + '<span class="sort-arrow" aria-hidden="true">' + arrow + '</span></th>';
       }
     }
     html += '</tr></thead><tbody>';
@@ -2412,8 +2422,9 @@ function renderPrefTable() {
       } else {
         var sorted = prefSortKey === col.key ? ' sorted' : '';
         var arrow = prefSortKey === col.key ? (prefSortAsc ? '\u25B2' : '\u25BC') : '\u25BC';
-        html += '<th class="' + sorted + '" onclick="sortPrefTable(\'' + col.key + '\')">';
-        html += col.label + '<span class="sort-arrow">' + arrow + '</span></th>';
+        var ariaSortP = prefSortKey===col.key ? (prefSortAsc?'ascending':'descending') : 'none';
+        html += '<th class="' + sorted + '" onclick="sortPrefTable(\'' + col.key + '\')" role="columnheader" aria-sort="' + ariaSortP + '" tabindex="0" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){sortPrefTable(\'' + col.key + '\');event.preventDefault();}">';
+        html += col.label + '<span class="sort-arrow" aria-hidden="true">' + arrow + '</span></th>';
       }
     }
     html += '</tr></thead><tbody>';
@@ -4576,6 +4587,52 @@ var TAB_MAP = {
 
 var currentTab = 'overview';
 
+function renderHeroKPI() {
+  try {
+    var el = document.getElementById('hero-kpi');
+    if (!el) return;
+    var n = calcNational();
+    var yoyTotal = 0;
+    var yoyKeys = Object.keys(YOY_DATA);
+    for (var i = 0; i < yoyKeys.length; i++) yoyTotal += YOY_DATA[yoyKeys[i]];
+    var yoyPct = yoyTotal > 0 ? ((n.base - yoyTotal) / yoyTotal * 100) : 0;
+    var asymRatio = (n.upside / Math.max(n.downside, 0.1)).toFixed(2);
+    var cKeys = Object.keys(COUNTRY_DATA);
+    var highRiskCount = 0;
+    for (var j = 0; j < cKeys.length; j++) {
+      var cd = COUNTRY_DATA[cKeys[j]];
+      if ((cd.p90-cd.p10)/cd.base*100 >= 45) highRiskCount++;
+    }
+    var html = '';
+    /* 主KPI: 全国月次予測 */
+    html += '<div class="hero-card primary">';
+    html += '<div class="hero-label">全国月次予測 (p50)</div>';
+    html += '<div class="hero-value">' + n.base.toFixed(1) + '<span style="font-size:16px;color:#94a3b8;font-weight:400;"> 万人/月</span></div>';
+    html += '<div class="hero-delta ' + (yoyPct>=0?'up':'down') + '">' + (yoyPct>=0?'▲':'▼') + ' ' + Math.abs(yoyPct).toFixed(1) + '% YoY</div>';
+    html += '</div>';
+    /* 帯幅 */
+    var bwColor = n.bandPct >= 45 ? '#ef4444' : (n.bandPct >= 30 ? '#eab308' : '#22c55e');
+    html += '<div class="hero-card">';
+    html += '<div class="hero-label">予測帯幅 (p90-p10)</div>';
+    html += '<div class="hero-value" style="color:' + bwColor + ';">' + n.bandPct.toFixed(1) + '%</div>';
+    html += '<div class="hero-sub">不確実性指標</div>';
+    html += '</div>';
+    /* 非対称比 */
+    html += '<div class="hero-card">';
+    html += '<div class="hero-label">上下振れ比 (非対称)</div>';
+    html += '<div class="hero-value">' + asymRatio + '<span style="font-size:14px;color:#94a3b8;font-weight:400;">x</span></div>';
+    html += '<div class="hero-sub">' + (parseFloat(asymRatio)>1 ? '上振れ優位' : '下振れ警戒') + '</div>';
+    html += '</div>';
+    /* 高ボラ市場数 */
+    html += '<div class="hero-card">';
+    html += '<div class="hero-label">高ボラ市場数 (帯幅≥45%)</div>';
+    html += '<div class="hero-value" style="color:' + (highRiskCount>=2?'#ef4444':'#e2e8f0') + ';">' + highRiskCount + '<span style="font-size:14px;color:#94a3b8;font-weight:400;"> / ' + cKeys.length + '</span></div>';
+    html += '<div class="hero-sub">' + (highRiskCount>=2?'ヘッジ検討推奨':'通常') + '</div>';
+    html += '</div>';
+    el.innerHTML = html;
+  } catch(e) { console.warn('HeroKPI:', e.message); }
+}
+
 function renderNextActionCTA() {
   try {
     var el = document.getElementById('cta-message');
@@ -4670,6 +4727,7 @@ function init() {
     renderHFPanel();
     renderStatusBar();
     renderAlerts();
+    renderHeroKPI();
     renderNextActionCTA();
     applyTabClassification();
   } catch(e) { console.error('init:', e); }
