@@ -3792,10 +3792,10 @@ function loadFromAPI() {
           renderChartStats();
 
           /* データソースバッジ: シナリオ系セクション */
-          renderDataSource('forecast-section', true);
-          renderDataSource('scenario-section', true);
-          renderDataSource('country-section', true);
-          renderDataSource('pref-section', true);
+          renderDataSource('forecast-chart-section', true);
+          renderDataSource('scenario-compare', true);
+          renderDataSource('country-table-section', true);
+          renderDataSource('pref-table-section', true);
 
           /* ステータスバーをLIVEモードに更新 */
           var statusBar = document.getElementById('status-bar');
@@ -4299,7 +4299,7 @@ function renderModelInfo() {
     /* バックテスト結果をAPIから取得試行 */
     try {
       var xhr = new XMLHttpRequest();
-      xhr.open('GET', 'http://localhost:8000/api/inbound/backtest', true);
+      xhr.open('GET', '/api/v1/tourism/backtest?source_country=ALL&start_year=2024&end_year=2024', true);
       xhr.timeout = 5000;
       xhr.onload = function() {
         if (xhr.status === 200) {
