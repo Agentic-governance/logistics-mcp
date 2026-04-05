@@ -636,25 +636,91 @@ var PREF_SHARE = {
 /* 主要都道府県リスト */
 var PREF_LIST = ['東京','大阪','京都','北海道','沖縄','福岡','千葉','愛知','神奈川','広島','長崎','熊本'];
 
-/* 下振れ要因 (p10近辺の典型的サンプル) */
-var DOWNSIDE_FACTORS = [
-  {var_name:'日中関係', change:'-18pt悪化', country:'CN', impact:'-63%', contribution:5.2},
-  {var_name:'円高(USD/JPY)', change:'-8.2%', country:'全市場', impact:'-9.7%', contribution:3.8},
-  {var_name:'台湾海峡', change:'-12pt', country:'TW', impact:'-46%', contribution:1.5},
-  {var_name:'中国GDP', change:'-1.5%pt', country:'CN', impact:'-1.9%', contribution:0.8},
-  {var_name:'フライト(日中)', change:'-12%', country:'CN', impact:'-7.2%', contribution:0.6},
-  {var_name:'韓国CCI', change:'-5pt', country:'KR', impact:'-6.0%', contribution:0.5}
-];
+/* 下振れ要因 (MC engine パラメータから動的計算) */
+var DOWNSIDE_FACTORS = (function() {
+  // MC engine の感応度パラメータ定義
+  // elasticity: 変数1単位変化あたりの訪日客数変化率
+  // sigma: 年間の標準偏差 (MC trial で使用)
+  // p10_shock: 10パーセンタイル相当ショック値
+  var MC_SENSITIVITY = {
+    bilateral_CN:     {label:'日中関係悪化',       unit:'pt', elasticity:-0.035, sigma:12, p10_shock:-18, countries:['CN','HK']},
+    taiwan_strait:    {label:'台湾海峡危機',       unit:'pt', elasticity:-0.038, sigma:8,  p10_shock:-12, countries:['TW']},
+    fx_jpy:           {label:'円高(USD/JPY)',      unit:'%',  elasticity:-1.18,  sigma:10, p10_shock:-10, countries:['ALL']},
+    kr_gdp:           {label:'韓国景気減速',       unit:'%pt',elasticity:-1.27,  sigma:1.2,p10_shock:-1.5,countries:['KR']},
+    cn_gdp:           {label:'中国GDP減速',        unit:'%pt',elasticity:-1.25,  sigma:2.0,p10_shock:-2.0,countries:['CN','HK']},
+    flight_cn:        {label:'フライト削減(日中)',  unit:'%',  elasticity:-0.60,  sigma:10, p10_shock:-15, countries:['CN']},
+    kr_cci:           {label:'韓国CCI低下',        unit:'pt', elasticity:-1.20,  sigma:5,  p10_shock:-8,  countries:['KR']}
+  };
+  var total_base = 0;
+  for (var k in COUNTRY_DATA) total_base += COUNTRY_DATA[k].base;
+  var factors = [];
+  for (var key in MC_SENSITIVITY) {
+    var s = MC_SENSITIVITY[key];
+    var affected_base = 0;
+    if (s.countries[0] === 'ALL') {
+      affected_base = total_base;
+    } else {
+      for (var i = 0; i < s.countries.length; i++) {
+        var cd = COUNTRY_DATA[s.countries[i]];
+        if (cd) affected_base += cd.base;
+      }
+    }
+    var share = affected_base / total_base;
+    var impact_pct = s.elasticity * s.p10_shock * share;
+    var change_str = s.p10_shock + s.unit + ' (\u03c3=' + s.sigma + s.unit + ')';
+    var contribution = Math.abs(impact_pct) * Math.abs(s.p10_shock) / s.sigma * 0.1;
+    factors.push({
+      var_name: s.label,
+      change: change_str,
+      country: s.countries[0] === 'ALL' ? '全市場' : s.countries[0],
+      impact: (impact_pct >= 0 ? '+' : '') + impact_pct.toFixed(1) + '%',
+      contribution: Math.round(contribution * 10) / 10
+    });
+  }
+  factors.sort(function(a,b){ return b.contribution - a.contribution; });
+  return factors;
+})();
 
-/* 上振れ要因 (p90近辺の典型的サンプル) */
-var UPSIDE_FACTORS = [
-  {var_name:'円安(USD/JPY)', change:'+12.5%', country:'全市場', impact:'+14.8%', contribution:5.8},
-  {var_name:'フライト(日韓)', change:'+15%', country:'KR', impact:'+9%', contribution:2.1},
-  {var_name:'韓国CCI', change:'+8pt', country:'KR', impact:'+9.6%', contribution:0.8},
-  {var_name:'中国GDP', change:'+1.2%pt', country:'CN', impact:'+1.5%', contribution:0.6},
-  {var_name:'日本関心(中国)', change:'+15pt', country:'CN', impact:'+15%', contribution:0.5},
-  {var_name:'フライト(日中)', change:'+10%', country:'CN', impact:'+6%', contribution:0.4}
-];
+/* 上振れ要因 (MC engine パラメータから動的計算) */
+var UPSIDE_FACTORS = (function() {
+  var MC_SENSITIVITY = {
+    fx_jpy_weak:      {label:'円安(USD/JPY)',      unit:'%',  elasticity:1.18,  sigma:10, p90_shock:15,  countries:['ALL']},
+    bilateral_KR:     {label:'日韓関係改善',       unit:'pt', elasticity:0.033, sigma:5,  p90_shock:8,   countries:['KR']},
+    flight_kr:        {label:'フライト増便(日韓)',  unit:'%',  elasticity:0.60,  sigma:6,  p90_shock:15,  countries:['KR']},
+    sns_cn:           {label:'中国SNSトレンド',     unit:'pt', elasticity:0.010, sigma:10, p90_shock:15,  countries:['CN','HK']},
+    us_cci:           {label:'米国CCI上昇',        unit:'pt', elasticity:0.012, sigma:6,  p90_shock:10,  countries:['US']},
+    cn_gdp_up:        {label:'中国GDP加速',        unit:'%pt',elasticity:1.25,  sigma:2.0,p90_shock:1.5, countries:['CN','HK']},
+    fx_aud:           {label:'豪ドル安',           unit:'%',  elasticity:1.22,  sigma:13, p90_shock:12,  countries:['AU']}
+  };
+  var total_base = 0;
+  for (var k in COUNTRY_DATA) total_base += COUNTRY_DATA[k].base;
+  var factors = [];
+  for (var key in MC_SENSITIVITY) {
+    var s = MC_SENSITIVITY[key];
+    var affected_base = 0;
+    if (s.countries[0] === 'ALL') {
+      affected_base = total_base;
+    } else {
+      for (var i = 0; i < s.countries.length; i++) {
+        var cd = COUNTRY_DATA[s.countries[i]];
+        if (cd) affected_base += cd.base;
+      }
+    }
+    var share = affected_base / total_base;
+    var impact_pct = s.elasticity * s.p90_shock * share;
+    var change_str = '+' + s.p90_shock + s.unit + ' (\u03c3=' + s.sigma + s.unit + ')';
+    var contribution = Math.abs(impact_pct) * s.p90_shock / s.sigma * 0.1;
+    factors.push({
+      var_name: s.label,
+      change: change_str,
+      country: s.countries[0] === 'ALL' ? '全市場' : s.countries[0],
+      impact: '+' + impact_pct.toFixed(1) + '%',
+      contribution: Math.round(contribution * 10) / 10
+    });
+  }
+  factors.sort(function(a,b){ return b.contribution - a.contribution; });
+  return factors;
+})();
 
 /* 21ヶ月予測 (万人) */
 var FORECAST_LABELS = [
@@ -667,10 +733,40 @@ var FORECAST_BASE = [243,245,220,273,276,214,280,211,211,204,152,226,247,247,217
 var FORECAST_P10 =  [196,188,174,218,225,166,214,163,168,163,125,180,196,187,173,220,224,169,215,165,167];
 var FORECAST_P90 =  [323,330,287,349,349,285,389,280,278,259,189,296,313,330,281,343,355,279,387,282,283];
 
+var COUNTRY_TREND = {
+  KR: [72,78,74,82,85,76],
+  CN: [43,55,48,42,68,50],
+  TW: [48,52,50,54,52,49],
+  US: [30,32,30,36,38,34],
+  HK: [13,14,13,15,16,14],
+  TH: [4,4,4,5,5,4],
+  AU: [5,6,5,10,12,7],
+  SG: [5,5,5,5,6,5]
+};
+
 
 /* =============================================================
    ユーティリティ関数
    ============================================================= */
+
+function miniSparkline(data, width, height) {
+  try {
+    if (!data || data.length < 2) return '';
+    var min = Math.min.apply(null, data);
+    var max = Math.max.apply(null, data);
+    var range = max - min || 1;
+    var pts = '';
+    for (var i = 0; i < data.length; i++) {
+      var x = (i / (data.length - 1)) * width;
+      var y = height - ((data[i] - min) / range) * (height - 4) - 2;
+      pts += x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+    }
+    var color = data[data.length-1] >= data[0] ? '#4ade80' : '#f87171';
+    return '<svg width="' + width + '" height="' + height + '" style="vertical-align:middle;">' +
+      '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linecap="round"/>' +
+      '</svg>';
+  } catch(e) { return ''; }
+}
 
 function fmtMan(v) {
   /* 万人単位でフォーマット */
@@ -1340,6 +1436,7 @@ function renderCountryTable() {
       {key:'downside', label:'下振れ'},
       {key:'upside', label:'上振れ'},
       {key:'bandPct', label:'帯幅%'},
+      {key:'_spark', label:'6M傾向'},
       {key:'_bar', label:'分布'},
       {key:'risk', label:'主要リスク'}
     ];
@@ -1347,7 +1444,7 @@ function renderCountryTable() {
     var html = '<thead><tr>';
     for (var t = 0; t < thCols.length; t++) {
       var col = thCols[t];
-      if (col.key === '_bar') {
+      if (col.key === '_bar' || col.key === '_spark') {
         html += '<th>' + col.label + '</th>';
       } else {
         var sorted = countrySortKey === col.key ? ' sorted' : '';
@@ -1383,6 +1480,8 @@ function renderCountryTable() {
       html += '<td class="td-mono td-neg">-' + fmtUnitShort(row.downside) + '</td>';
       html += '<td class="td-mono td-pos">+' + fmtUnitShort(row.upside) + '</td>';
       html += '<td class="td-mono"><span class="td-risk-tag ' + riskClass + '">' + row.bandPct.toFixed(1) + '%</span></td>';
+      var trend = COUNTRY_TREND[row.code];
+      html += '<td>' + miniSparkline(trend || [], 50, 16) + '</td>';
       html += '<td><div class="mini-asym-bar">';
       html += '<div class="mini-bar-down" style="width:' + downW + 'px"></div>';
       html += '<div class="mini-bar-center"></div>';
