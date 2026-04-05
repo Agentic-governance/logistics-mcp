@@ -1900,7 +1900,478 @@ function updateFacilitySim() {
     ltHtml += '</div>';
     document.getElementById('fsim_leadtime').innerHTML = ltHtml;
 
+    /* 連動パネル更新 */
+    try { renderRevparForecast(); } catch(e2) {}
+    try { renderDynamicPricing(); } catch(e3) {}
+
   } catch(e) { console.error('updateFacilitySim:', e); }
+}
+
+
+/* =============================================================
+   月別季節指数 (1=平均月、観光庁統計ベース)
+   ============================================================= */
+var MONTHLY_SEASONALITY = {
+  1:0.72, 2:0.78, 3:1.05, 4:1.18, 5:1.02, 6:0.85,
+  7:1.12, 8:1.10, 9:0.88, 10:1.15, 11:1.05, 12:1.10
+};
+
+/* 月名ラベル (4月始まり年度) */
+var MONTH_LABELS = ['4月','5月','6月','7月','8月','9月','10月','11月','12月','1月','2月','3月'];
+var MONTH_NUMBERS = [4,5,6,7,8,9,10,11,12,1,2,3];
+
+
+/* =============================================================
+   12ヶ月RevPAR予測テーブル (P/L計画用)
+   施設シミュレーターの設定値を季節指数で12ヶ月に展開
+   ============================================================= */
+function renderRevparForecast() {
+  try {
+    var container = document.getElementById('revpar-forecast-panel');
+    if (!container) return;
+
+    var prefEl = document.getElementById('fsim_pref');
+    var roomsEl = document.getElementById('fsim_rooms');
+    var ratioEl = document.getElementById('fsim_inbound_ratio');
+    var adrEl = document.getElementById('fsim_adr');
+
+    var pref = prefEl ? prefEl.value : '東京';
+    var rooms = roomsEl ? (parseInt(roomsEl.value) || 30) : 30;
+    var inboundRatio = ratioEl ? (parseInt(ratioEl.value) / 100) : 0.60;
+    var baseADR = adrEl ? (parseInt(adrEl.value) || 25000) : 25000;
+
+    var totalSupply = PREF_ROOM_SUPPLY[pref] || 20000;
+    var myShare = rooms / totalSupply;
+    var capacity = rooms * 30;
+
+    /* 加重平均LOS */
+    var avgLOS = 0;
+    var totalWeight = 0;
+    var cKeys = Object.keys(COUNTRY_DATA);
+    var ci;
+    for (ci = 0; ci < cKeys.length; ci++) {
+      var cc = cKeys[ci];
+      var share = (PREF_SHARE[cc] || {})[pref] || 0.02;
+      var los = COUNTRY_LOS[cc] || 4.0;
+      avgLOS += los * share * COUNTRY_DATA[cc].base;
+      totalWeight += share * COUNTRY_DATA[cc].base;
+    }
+    avgLOS = totalWeight > 0 ? avgLOS / totalWeight : 4.0;
+
+    /* 加重ADR */
+    var wADR = 0;
+    var wTotal = 0;
+    for (ci = 0; ci < cKeys.length; ci++) {
+      var ac = cKeys[ci];
+      var aShare = (PREF_SHARE[ac] || {})[pref] || 0.02;
+      var adrIdx = COUNTRY_ADR_INDEX[ac] || 1.0;
+      wADR += baseADR * adrIdx * aShare * COUNTRY_DATA[ac].base;
+      wTotal += aShare * COUNTRY_DATA[ac].base;
+    }
+    wADR = wTotal > 0 ? wADR / wTotal : baseADR;
+
+    /* 月別予測を計算 */
+    var prefFc = calcPrefForecast(pref);
+    var guestsPerRoom = 1.8;
+    var monthRows = [];
+    var annualRevP10 = 0, annualRevP50 = 0, annualRevP90 = 0;
+
+    for (var mi = 0; mi < 12; mi++) {
+      var mn = MONTH_NUMBERS[mi];
+      var sf = MONTHLY_SEASONALITY[mn] || 1.0;
+
+      /* 季節調整済み来訪者 */
+      var vBase = prefFc.base * 10000 * sf;
+      var vP10 = prefFc.p10 * 10000 * sf;
+      var vP90 = prefFc.p90 * 10000 * sf;
+
+      /* 室泊数 */
+      var rnBase = vBase * avgLOS * myShare / guestsPerRoom * inboundRatio;
+      var rnP10 = vP10 * avgLOS * myShare / guestsPerRoom * inboundRatio;
+      var rnP90 = vP90 * avgLOS * myShare / guestsPerRoom * inboundRatio;
+
+      /* 国内客追加 */
+      var domFactor = (1 - inboundRatio) / inboundRatio;
+      rnBase *= (1 + domFactor);
+      rnP10 *= (1 + domFactor);
+      rnP90 *= (1 + domFactor);
+
+      /* 稼働率 */
+      var occBase = Math.min(rnBase / capacity * 100, 100);
+      var occP10 = Math.min(rnP10 / capacity * 100, 100);
+      var occP90 = Math.min(rnP90 / capacity * 100, 100);
+
+      /* 季節ADR調整 (繁忙期+, 閑散期-) */
+      var adrSF = 1.0 + (sf - 1.0) * 0.5;
+      var mADR = wADR * adrSF;
+
+      /* RevPAR */
+      var rpBase = mADR * occBase / 100;
+      var rpP10 = mADR * occP10 / 100;
+      var rpP90 = mADR * occP90 / 100;
+
+      /* 月間売上 */
+      var revBase = rpBase * rooms * 30;
+      var revP10 = rpP10 * rooms * 30;
+      var revP90 = rpP90 * rooms * 30;
+
+      annualRevP10 += revP10;
+      annualRevP50 += revBase;
+      annualRevP90 += revP90;
+
+      monthRows.push({
+        label: MONTH_LABELS[mi],
+        sf: sf,
+        occP10: occP10, occBase: occBase, occP90: occP90,
+        adr: mADR,
+        rpP10: rpP10, rpBase: rpBase, rpP90: rpP90,
+        revP10: revP10, revBase: revBase, revP90: revP90
+      });
+    }
+
+    /* テーブルHTML */
+    var html = '<div style="overflow-x:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11px;font-family:SF Mono,Fira Code,Consolas,monospace;white-space:nowrap;">';
+    html += '<thead><tr style="border-bottom:2px solid rgba(255,255,255,0.12);color:#64748b;font-size:9px;text-transform:uppercase;">';
+    html += '<th style="text-align:left;padding:4px 6px;">月</th>';
+    html += '<th style="text-align:center;padding:4px 6px;">季節指数</th>';
+    html += '<th style="text-align:right;padding:4px 6px;">稼働率(p10)</th>';
+    html += '<th style="text-align:right;padding:4px 6px;">稼働率(p50)</th>';
+    html += '<th style="text-align:right;padding:4px 6px;">稼働率(p90)</th>';
+    html += '<th style="text-align:right;padding:4px 6px;">ADR</th>';
+    html += '<th style="text-align:right;padding:4px 6px;">RevPAR(p10)</th>';
+    html += '<th style="text-align:right;padding:4px 6px;color:#3b82f6;">RevPAR(p50)</th>';
+    html += '<th style="text-align:right;padding:4px 6px;">RevPAR(p90)</th>';
+    html += '<th style="text-align:right;padding:4px 6px;">売上(p50)</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var ri = 0; ri < monthRows.length; ri++) {
+      var r = monthRows[ri];
+      var rowBg = r.sf >= 1.10 ? 'rgba(34,197,94,0.06)' : r.sf <= 0.80 ? 'rgba(239,68,68,0.06)' : 'transparent';
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);background:' + rowBg + ';">';
+      html += '<td style="padding:4px 6px;font-weight:600;color:#e2e8f0;">' + r.label + '</td>';
+      html += '<td style="text-align:center;padding:4px 6px;color:' + (r.sf >= 1.0 ? '#4ade80' : '#f87171') + ';">' + r.sf.toFixed(2) + '</td>';
+      html += '<td style="text-align:right;padding:4px 6px;color:#f87171;">' + r.occP10.toFixed(1) + '%</td>';
+      html += '<td style="text-align:right;padding:4px 6px;color:#3b82f6;">' + r.occBase.toFixed(1) + '%</td>';
+      html += '<td style="text-align:right;padding:4px 6px;color:#4ade80;">' + r.occP90.toFixed(1) + '%</td>';
+      html += '<td style="text-align:right;padding:4px 6px;color:#e2e8f0;">' + Math.round(r.adr).toLocaleString('ja-JP') + '</td>';
+      html += '<td style="text-align:right;padding:4px 6px;color:#f87171;">' + Math.round(r.rpP10).toLocaleString('ja-JP') + '</td>';
+      html += '<td style="text-align:right;padding:4px 6px;color:#3b82f6;font-weight:700;">' + Math.round(r.rpBase).toLocaleString('ja-JP') + '</td>';
+      html += '<td style="text-align:right;padding:4px 6px;color:#4ade80;">' + Math.round(r.rpP90).toLocaleString('ja-JP') + '</td>';
+      html += '<td style="text-align:right;padding:4px 6px;color:#e2e8f0;">' + (r.revBase / 10000).toFixed(0) + '万</td>';
+      html += '</tr>';
+    }
+
+    /* 年間合計行 */
+    var avgOccP50 = 0;
+    for (ri = 0; ri < monthRows.length; ri++) avgOccP50 += monthRows[ri].occBase;
+    avgOccP50 /= 12;
+
+    html += '<tr style="border-top:2px solid rgba(255,255,255,0.15);font-weight:700;">';
+    html += '<td style="padding:6px;color:#e2e8f0;">年間合計</td>';
+    html += '<td style="text-align:center;padding:6px;color:#64748b;">--</td>';
+    html += '<td colspan="3" style="text-align:center;padding:6px;color:#3b82f6;">平均稼働率: ' + avgOccP50.toFixed(1) + '%</td>';
+    html += '<td style="text-align:right;padding:6px;color:#64748b;">--</td>';
+    html += '<td style="text-align:right;padding:6px;color:#f87171;">' + (annualRevP10 / 100000000).toFixed(2) + '億</td>';
+    html += '<td style="text-align:right;padding:6px;color:#3b82f6;font-size:13px;">' + (annualRevP50 / 100000000).toFixed(2) + '億</td>';
+    html += '<td style="text-align:right;padding:6px;color:#4ade80;">' + (annualRevP90 / 100000000).toFixed(2) + '億</td>';
+    html += '<td style="text-align:right;padding:6px;color:#e2e8f0;">' + (annualRevP50 / 10000).toFixed(0) + '万</td>';
+    html += '</tr>';
+
+    html += '</tbody></table></div>';
+
+    /* CSV出力ボタン */
+    html += '<div style="margin-top:10px;display:flex;gap:12px;align-items:center;">';
+    html += '<button onclick="downloadRevparCSV()" style="background:#1e40af;color:#e2e8f0;border:none;border-radius:4px;padding:6px 14px;font-size:11px;cursor:pointer;">CSV出力</button>';
+    html += '<span style="font-size:10px;color:#475569;">' + pref + ' | ' + rooms + '室 | インバウンド比率' + Math.round(inboundRatio * 100) + '% | 基準ADR ' + baseADR.toLocaleString('ja-JP') + '円</span>';
+    html += '</div>';
+
+    /* 注釈 */
+    html += '<div style="margin-top:6px;font-size:9px;color:#475569;">';
+    html += '※ 季節指数は観光庁統計(2024年)ベース。ADRは季節変動を反映(繁忙期+, 閑散期-)。p10/p50/p90はモンテカルロシミュレーション由来。';
+    html += '</div>';
+
+    container.innerHTML = html;
+  } catch(e) { console.error('renderRevparForecast:', e); }
+}
+
+/* RevPAR予測CSV出力 */
+function downloadRevparCSV() {
+  try {
+    var prefEl = document.getElementById('fsim_pref');
+    var pref = prefEl ? prefEl.value : '東京';
+    var lines = ['月,季節指数,稼働率(p10),稼働率(p50),稼働率(p90),ADR,RevPAR(p10),RevPAR(p50),RevPAR(p90),売上(p50)'];
+
+    var tbl = document.querySelector('#revpar-forecast-panel table');
+    if (!tbl) return;
+    var trs = tbl.querySelectorAll('tbody tr');
+    for (var i = 0; i < trs.length; i++) {
+      var cells = trs[i].querySelectorAll('td');
+      var row = [];
+      for (var j = 0; j < cells.length; j++) {
+        row.push(cells[j].textContent.replace(/,/g, ''));
+      }
+      lines.push(row.join(','));
+    }
+    downloadCSV(lines.join('\n'), 'revpar_forecast_' + pref + '.csv');
+  } catch(e) { console.error('downloadRevparCSV:', e); }
+}
+
+
+/* =============================================================
+   ダイナミックプライシング推奨ロジック
+   需要弾性 × 稼働率 × 競合供給成長 × 季節指数 → 推奨ADR改定率
+   ============================================================= */
+function renderDynamicPricing() {
+  try {
+    var container = document.getElementById('dynamic-pricing-panel');
+    if (!container) return;
+
+    var prefEl = document.getElementById('fsim_pref');
+    var adrEl = document.getElementById('fsim_adr');
+    var pref = prefEl ? prefEl.value : '東京';
+    var baseADR = adrEl ? (parseInt(adrEl.value) || 25000) : 25000;
+
+    /* 競合供給成長率 */
+    var supplyData = PREF_SUPPLY_TREND[pref];
+    var supplyGrowth = supplyData ? parseFloat(supplyData.growth) / 100 : 0.05;
+
+    /* 価格弾力性: インバウンド宿泊は-0.85が実証値 */
+    var priceElasticity = -0.85;
+
+    var html = '<div style="overflow-x:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11px;font-family:SF Mono,Fira Code,Consolas,monospace;white-space:nowrap;">';
+    html += '<thead><tr style="border-bottom:2px solid rgba(255,255,255,0.12);color:#64748b;font-size:9px;text-transform:uppercase;">';
+    html += '<th style="text-align:left;padding:4px 8px;">月</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">需要指数</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">供給圧力</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">需給バランス</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">推奨ADR改定率</th>';
+    html += '<th style="text-align:right;padding:4px 8px;color:#f59e0b;">推奨ADR</th>';
+    html += '<th style="text-align:center;padding:4px 8px;">判定</th>';
+    html += '<th style="text-align:left;padding:4px 8px;">アクション</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var mi = 0; mi < 12; mi++) {
+      var mn = MONTH_NUMBERS[mi];
+      var sf = MONTHLY_SEASONALITY[mn] || 1.0;
+
+      /* 需要指数: 季節性 × YoY成長トレンド(+5%) */
+      var demandIdx = sf * 1.05;
+
+      /* 供給圧力: 開業集中月(4月,10月)を重み付け */
+      var openWeight = (mn === 4 || mn === 10) ? 1.5 : (mn === 3 || mn === 9) ? 1.2 : 0.8;
+      var supplyPressure = 1.0 + supplyGrowth * openWeight;
+
+      /* 需給バランス = 需要 / 供給 */
+      var balance = demandIdx / supplyPressure;
+
+      /* 推奨改定率 */
+      var adjustFactor = 0.6;
+      var recRate = (balance - 1.0) / Math.abs(priceElasticity) * adjustFactor;
+      recRate = Math.max(-0.15, Math.min(0.30, recRate));
+
+      var recADR = Math.round(baseADR * (1 + recRate));
+
+      /* 判定とアクション */
+      var verdict, verdictColor, action;
+      if (recRate >= 0.15) {
+        verdict = '強気'; verdictColor = '#22c55e';
+        action = 'ADR積極引上げ + 早期予約割引縮小';
+      } else if (recRate >= 0.05) {
+        verdict = 'やや強気'; verdictColor = '#4ade80';
+        action = 'ADR小幅引上げ + OTA露出維持';
+      } else if (recRate >= -0.03) {
+        verdict = '中立'; verdictColor = '#3b82f6';
+        action = 'ADR維持 + 付加価値プラン投入';
+      } else if (recRate >= -0.10) {
+        verdict = 'やや弱気'; verdictColor = '#f59e0b';
+        action = 'ADR小幅引下げ + 長期滞在プラン';
+      } else {
+        verdict = '弱気'; verdictColor = '#ef4444';
+        action = '早期予約割引拡大 + 団体誘致';
+      }
+
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+      html += '<td style="padding:4px 8px;font-weight:600;color:#e2e8f0;">' + MONTH_LABELS[mi] + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:' + (demandIdx >= 1.0 ? '#4ade80' : '#f87171') + ';">' + demandIdx.toFixed(2) + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#94a3b8;">' + supplyPressure.toFixed(3) + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:' + (balance >= 1.0 ? '#4ade80' : '#f87171') + ';font-weight:600;">' + balance.toFixed(3) + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:' + (recRate >= 0 ? '#4ade80' : '#f87171') + ';font-weight:700;">' + (recRate >= 0 ? '+' : '') + (recRate * 100).toFixed(1) + '%</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#f59e0b;font-weight:700;">' + recADR.toLocaleString('ja-JP') + '円</td>';
+      html += '<td style="text-align:center;padding:4px 8px;color:' + verdictColor + ';font-weight:700;">' + verdict + '</td>';
+      html += '<td style="padding:4px 8px;color:#94a3b8;font-size:10px;">' + action + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+
+    /* パラメータ注釈 */
+    html += '<div style="margin-top:10px;padding:10px 14px;background:#0d1117;border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-size:10px;color:#475569;">';
+    html += '<div style="font-weight:600;color:#64748b;margin-bottom:4px;">算出パラメータ</div>';
+    html += '<div>価格弾力性: ' + priceElasticity.toFixed(2) + ' | ';
+    html += '供給成長率: ' + (supplyGrowth * 100).toFixed(1) + '% (' + pref + ') | ';
+    html += '調整係数: ' + adjustFactor.toFixed(1) + ' | ';
+    html += '改定レンジ: -15% ~ +30%</div>';
+    html += '<div style="margin-top:4px;">推奨ADR = 基準ADR x (1 + 改定率). 改定率 = (需給バランス - 1) / |弾力性| x 調整係数</div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+  } catch(e) { console.error('renderDynamicPricing:', e); }
+}
+
+
+/* =============================================================
+   地域経済波及効果 (産業連関推計)
+   観光消費 → 直接効果 → 間接1次 → 間接2次 → 雇用誘発 → 税収
+   ============================================================= */
+var RIPPLE_MULTIPLIERS = {
+  '東京':  {indirect1:0.52, indirect2:0.30, employment:12.8, taxRate:0.082},
+  '大阪':  {indirect1:0.48, indirect2:0.28, employment:13.5, taxRate:0.078},
+  '京都':  {indirect1:0.45, indirect2:0.26, employment:14.2, taxRate:0.075},
+  '北海道':{indirect1:0.42, indirect2:0.24, employment:15.5, taxRate:0.070},
+  '沖縄':  {indirect1:0.40, indirect2:0.22, employment:16.0, taxRate:0.068},
+  '福岡':  {indirect1:0.46, indirect2:0.27, employment:13.8, taxRate:0.076},
+  '千葉':  {indirect1:0.44, indirect2:0.25, employment:13.0, taxRate:0.074},
+  '愛知':  {indirect1:0.50, indirect2:0.29, employment:12.5, taxRate:0.080},
+  '神奈川':{indirect1:0.49, indirect2:0.28, employment:12.6, taxRate:0.079},
+  '広島':  {indirect1:0.43, indirect2:0.25, employment:14.0, taxRate:0.073},
+  '長崎':  {indirect1:0.38, indirect2:0.21, employment:16.5, taxRate:0.065},
+  '熊本':  {indirect1:0.39, indirect2:0.22, employment:16.2, taxRate:0.066}
+};
+
+function renderRippleEffect() {
+  try {
+    var container = document.getElementById('ripple-panel');
+    if (!container) return;
+
+    var codes = ['KR','CN','TW','US','HK','TH','AU','SG'];
+    var html = '';
+
+    html += '<div style="overflow-x:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11px;font-family:SF Mono,Fira Code,Consolas,monospace;white-space:nowrap;">';
+    html += '<thead><tr style="border-bottom:2px solid rgba(255,255,255,0.12);color:#64748b;font-size:9px;text-transform:uppercase;">';
+    html += '<th style="text-align:left;padding:4px 8px;">都道府県</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">直接消費(億円)</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">間接1次(億円)</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">間接2次(億円)</th>';
+    html += '<th style="text-align:right;padding:4px 8px;color:#f59e0b;">総波及効果(億円)</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">乗数</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">雇用誘発(人)</th>';
+    html += '<th style="text-align:right;padding:4px 8px;">税収効果(億円)</th>';
+    html += '</tr></thead><tbody>';
+
+    var grandDirect = 0, grandTotal = 0, grandEmploy = 0, grandTax = 0;
+
+    for (var pi = 0; pi < PREF_LIST.length; pi++) {
+      var pref = PREF_LIST[pi];
+      var mult = RIPPLE_MULTIPLIERS[pref] || {indirect1:0.42, indirect2:0.24, employment:14.0, taxRate:0.072};
+
+      /* 当該都道府県のインバウンド直接消費額 (月次→年換算) */
+      var directMonthly = 0;
+      for (var ci = 0; ci < codes.length; ci++) {
+        var cc = codes[ci];
+        var cd = COUNTRY_DATA[cc];
+        var sp = COUNTRY_SPENDING[cc];
+        if (!cd || !sp) continue;
+        var prefShare = (PREF_SHARE[cc] || {})[pref] || 0.02;
+        directMonthly += cd.base * 10000 * prefShare * sp.total / 100000000;
+      }
+      var directAnnual = directMonthly * 12;
+
+      /* 波及計算 */
+      var indirect1 = directAnnual * mult.indirect1;
+      var indirect2 = directAnnual * mult.indirect2;
+      var totalEffect = directAnnual + indirect1 + indirect2;
+      var multiplier = directAnnual > 0 ? totalEffect / directAnnual : 0;
+      var employment = Math.round(directAnnual * mult.employment);
+      var taxRevenue = totalEffect * mult.taxRate;
+
+      grandDirect += directAnnual;
+      grandTotal += totalEffect;
+      grandEmploy += employment;
+      grandTax += taxRevenue;
+
+      var rowBg = totalEffect >= 500 ? 'rgba(59,130,246,0.06)' : 'transparent';
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);background:' + rowBg + ';">';
+      html += '<td style="padding:4px 8px;font-weight:600;color:#e2e8f0;">' + pref + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#e2e8f0;">' + directAnnual.toFixed(1) + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#94a3b8;">' + indirect1.toFixed(1) + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#94a3b8;">' + indirect2.toFixed(1) + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#f59e0b;font-weight:700;">' + totalEffect.toFixed(1) + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#3b82f6;">' + multiplier.toFixed(2) + 'x</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#a855f7;">' + employment.toLocaleString('ja-JP') + '</td>';
+      html += '<td style="text-align:right;padding:4px 8px;color:#22c55e;">' + taxRevenue.toFixed(1) + '</td>';
+      html += '</tr>';
+    }
+
+    /* 合計行 */
+    html += '<tr style="border-top:2px solid rgba(255,255,255,0.15);font-weight:700;">';
+    html += '<td style="padding:6px 8px;color:#e2e8f0;">12都道府県計</td>';
+    html += '<td style="text-align:right;padding:6px 8px;color:#e2e8f0;">' + grandDirect.toFixed(0) + '</td>';
+    html += '<td colspan="2" style="text-align:center;padding:6px 8px;color:#64748b;">--</td>';
+    html += '<td style="text-align:right;padding:6px 8px;color:#f59e0b;font-size:13px;">' + grandTotal.toFixed(0) + '</td>';
+    html += '<td style="text-align:right;padding:6px 8px;color:#3b82f6;">' + (grandDirect > 0 ? (grandTotal / grandDirect).toFixed(2) : '0') + 'x</td>';
+    html += '<td style="text-align:right;padding:6px 8px;color:#a855f7;">' + grandEmploy.toLocaleString('ja-JP') + '</td>';
+    html += '<td style="text-align:right;padding:6px 8px;color:#22c55e;">' + grandTax.toFixed(0) + '</td>';
+    html += '</tr>';
+
+    html += '</tbody></table></div>';
+
+    /* 産業別内訳 */
+    html += '<div style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">';
+
+    var sectors = [
+      {name:'宿泊業', share:0.30, color:'#3b82f6'},
+      {name:'飲食業', share:0.22, color:'#f59e0b'},
+      {name:'小売業', share:0.20, color:'#ef4444'},
+      {name:'運輸業', share:0.12, color:'#22c55e'},
+      {name:'娯楽・体験', share:0.10, color:'#a855f7'},
+      {name:'その他サービス', share:0.06, color:'#64748b'}
+    ];
+
+    for (var si = 0; si < sectors.length; si++) {
+      var sec = sectors[si];
+      var secAmount = grandTotal * sec.share;
+      html += '<div style="background:#0d1117;border:1px solid rgba(255,255,255,0.06);border-left:3px solid ' + sec.color + ';border-radius:4px;padding:8px 12px;">';
+      html += '<div style="font-size:10px;color:#64748b;">' + sec.name + ' (' + (sec.share * 100).toFixed(0) + '%)</div>';
+      html += '<div style="font-family:SF Mono,monospace;font-size:14px;color:' + sec.color + ';font-weight:700;">' + secAmount.toFixed(0) + '億円</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    /* 注釈 */
+    html += '<div style="margin-top:10px;font-size:9px;color:#475569;">';
+    html += '※ 産業連関乗数は総務省「産業連関表」(2020年)および観光庁「経済波及効果推計手法」に準拠。';
+    html += '雇用誘発係数: 直接消費1億円あたりの雇用創出人数。税収効果: 消費税+地方税推計。';
+    html += '</div>';
+
+    /* CSV出力ボタン */
+    html += '<div style="margin-top:8px;">';
+    html += '<button onclick="downloadRippleCSV()" style="background:#1e40af;color:#e2e8f0;border:none;border-radius:4px;padding:6px 14px;font-size:11px;cursor:pointer;">波及効果CSV出力</button>';
+    html += '</div>';
+
+    container.innerHTML = html;
+  } catch(e) { console.error('renderRippleEffect:', e); }
+}
+
+/* 波及効果CSV出力 */
+function downloadRippleCSV() {
+  try {
+    var lines = ['都道府県,直接消費(億円),間接1次(億円),間接2次(億円),総波及効果(億円),乗数,雇用誘発(人),税収効果(億円)'];
+    var tbl = document.querySelector('#ripple-panel table');
+    if (!tbl) return;
+    var trs = tbl.querySelectorAll('tbody tr');
+    for (var i = 0; i < trs.length; i++) {
+      var cells = trs[i].querySelectorAll('td');
+      var row = [];
+      for (var j = 0; j < cells.length; j++) {
+        row.push(cells[j].textContent.replace(/,/g, ''));
+      }
+      lines.push(row.join(','));
+    }
+    downloadCSV(lines.join('\n'), 'ripple_effect.csv');
+  } catch(e) { console.error('downloadRippleCSV:', e); }
 }
 
 
@@ -2481,7 +2952,10 @@ function init() {
     renderPrefTable();
     renderFxCostPanel();
     renderFacilitySim();
+    renderRevparForecast();
+    renderDynamicPricing();
     renderSpendingPanel();
+    renderRippleEffect();
     renderAccuracyPanel();
     renderSupplyPanel();
     renderStatusBar();
