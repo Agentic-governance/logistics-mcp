@@ -119,6 +119,42 @@ class FullMCEngine:
             }
         return {"iso2": iso2, "base_visitors": int(base_visitors), "sensitivities": results}
 
+    def market_opportunity_score(self, month=4, year=2026):
+        """各市場の投資機会スコア (0-100)"""
+        months = [f"{year}/{month:02d}"]
+        result = self.run(months, "ALL")
+        scores = {}
+        for iso2 in ALL_COUNTRIES:
+            bc = result["by_country"][iso2]
+            median = bc["median"][0]
+            p10 = bc["p10"][0]
+            p90 = bc["p90"][0]
+            bandwidth = (p90 - p10) / max(median, 1)
+            upside = p90 - median
+            downside = median - p10
+            asym = upside / max(downside, 1)
+
+            # Composite score (0-100)
+            size_score = min(median / 800000 * 30, 30)  # max 30 for largest markets
+            efficiency_score = min((1 / max(bandwidth, 0.1)) * 15, 30)  # lower bandwidth = better
+            asym_score = min(asym * 20, 20)  # higher asymmetry = better
+            growth_score = 20  # placeholder for YoY
+
+            total = size_score + efficiency_score + asym_score + growth_score
+            scores[iso2] = {
+                "score": round(total, 1),
+                "median": median,
+                "bandwidth_pct": round(bandwidth * 100, 1),
+                "asymmetry": round(asym, 2),
+                "components": {
+                    "size": round(size_score, 1),
+                    "efficiency": round(efficiency_score, 1),
+                    "asymmetry": round(asym_score, 1),
+                    "growth": round(growth_score, 1)
+                }
+            }
+        return {"month": f"{year}/{month:02d}", "scores": scores}
+
     def run(self, months, source_country="ALL"):
         countries = ALL_COUNTRIES if source_country == "ALL" else [source_country]
         nm = len(months)

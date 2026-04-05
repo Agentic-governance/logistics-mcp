@@ -591,22 +591,22 @@ var COUNTRY_DATA = {
   TH: {code:'TH', name:'タイ', flag:'\uD83C\uDDF9\uD83C\uDDED', base:4.3, p10:2.9, p90:6.9, risk:'バーツ安'},
   AU: {code:'AU', name:'豪州', flag:'\uD83C\uDDE6\uD83C\uDDFA', base:5.4, p10:4.2, p90:6.5, risk:'豪ドル・季節'},
   SG: {code:'SG', name:'シンガポール', flag:'\uD83C\uDDF8\uD83C\uDDEC', base:5.2, p10:4.4, p90:6.0, risk:'アジア景気'},
-  PH: {code:'PH', name:'フィリピン', flag:'\uD83C\uDDF5\uD83C\uDDED', base:8.5, p10:6.8, p90:10.8, risk:'ペソ安'},
-  VN: {code:'VN', name:'ベトナム', flag:'\uD83C\uDDFB\uD83C\uDDF3', base:6.3, p10:4.8, p90:8.2, risk:'ビザ・為替'},
-  ID: {code:'ID', name:'インドネシア', flag:'\uD83C\uDDEE\uD83C\uDDE9', base:4.8, p10:3.5, p90:6.5, risk:'ルピア安'},
-  GB: {code:'GB', name:'英国', flag:'\uD83C\uDDEC\uD83C\uDDE7', base:3.8, p10:2.9, p90:5.0, risk:'欧州景気'},
-  FR: {code:'FR', name:'フランス', flag:'\uD83C\uDDEB\uD83C\uDDF7', base:3.5, p10:2.6, p90:4.6, risk:'欧州景気'},
-  DE: {code:'DE', name:'ドイツ', flag:'\uD83C\uDDE9\uD83C\uDDEA', base:2.8, p10:2.1, p90:3.7, risk:'欧州景気'},
-  CA: {code:'CA', name:'カナダ', flag:'\uD83C\uDDE8\uD83C\uDDE6', base:3.2, p10:2.4, p90:4.2, risk:'北米景気'},
-  MY: {code:'MY', name:'マレーシア', flag:'\uD83C\uDDF2\uD83C\uDDFE', base:4.2, p10:3.2, p90:5.5, risk:'リンギット'},
-  IN: {code:'IN', name:'インド', flag:'\uD83C\uDDEE\uD83C\uDDF3', base:3.0, p10:2.1, p90:4.2, risk:'ビザ・為替'}
+  PH: {code:'PH', name:'フィリピン', flag:'\uD83C\uDDF5\uD83C\uDDED', base:8.2, p10:6.6, p90:10.5, risk:'ペソ安'},
+  VN: {code:'VN', name:'ベトナム', flag:'\uD83C\uDDFB\uD83C\uDDF3', base:6.0, p10:4.5, p90:8.0, risk:'ビザ・為替'},
+  ID: {code:'ID', name:'インドネシア', flag:'\uD83C\uDDEE\uD83C\uDDE9', base:4.5, p10:3.3, p90:6.2, risk:'ルピア安'},
+  GB: {code:'GB', name:'英国', flag:'\uD83C\uDDEC\uD83C\uDDE7', base:3.6, p10:2.8, p90:4.8, risk:'欧州景気'},
+  FR: {code:'FR', name:'フランス', flag:'\uD83C\uDDEB\uD83C\uDDF7', base:3.3, p10:2.5, p90:4.4, risk:'欧州景気'},
+  DE: {code:'DE', name:'ドイツ', flag:'\uD83C\uDDE9\uD83C\uDDEA', base:2.6, p10:2.0, p90:3.5, risk:'欧州景気'},
+  CA: {code:'CA', name:'カナダ', flag:'\uD83C\uDDE8\uD83C\uDDE6', base:3.0, p10:2.3, p90:4.0, risk:'北米景気'},
+  MY: {code:'MY', name:'マレーシア', flag:'\uD83C\uDDF2\uD83C\uDDFE', base:4.0, p10:3.0, p90:5.3, risk:'リンギット'},
+  IN: {code:'IN', name:'インド', flag:'\uD83C\uDDEE\uD83C\uDDF3', base:2.8, p10:1.9, p90:4.0, risk:'ビザ・為替'}
 };
 
 /* 前年同月実績 (2025年4月, 万人) — JNTO速報値ベース */
 var YOY_DATA = {
   KR: 78.2, CN: 38.5, TW: 44.1, US: 32.0, HK: 16.5,
-  TH: 13.2, AU: 6.1, SG: 4.6, PH: 7.5, VN: 5.4,
-  ID: 4.0, GB: 3.3, FR: 3.0, DE: 2.4, CA: 2.8, MY: 3.6, IN: 2.3
+  TH: 13.2, AU: 6.1, SG: 4.6, PH: 7.2, VN: 5.1,
+  ID: 3.8, GB: 3.1, FR: 2.8, DE: 2.2, CA: 2.6, MY: 3.4, IN: 2.0
 };
 
 /* 単位モード: 'man'=万人, 'real'=実数 */
@@ -889,10 +889,10 @@ function renderNationalSummary() {
 
     html += '<div class="asymmetric-bar-track">';
     html += '<div class="bar-downside" style="width:' + downPct.toFixed(1) + '%">';
-    html += '-' + n.downside.toFixed(1) + '万 (' + n.downsidePct.toFixed(1) + '%)';
+    html += '-' + fmtUnitShort(n.downside) + ' (' + n.downsidePct.toFixed(1) + '%)';
     html += '</div>';
     html += '<div class="bar-upside" style="width:' + upPct.toFixed(1) + '%">';
-    html += '+' + n.upside.toFixed(1) + '万 (+' + n.upsidePct.toFixed(1) + '%)';
+    html += '+' + fmtUnitShort(n.upside) + ' (+' + n.upsidePct.toFixed(1) + '%)';
     html += '</div>';
     html += '</div>';
 

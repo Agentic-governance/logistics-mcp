@@ -28,6 +28,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/tourism", tags=["tourism"])
 
+import time as _time
+_cache = {}
+_CACHE_TTL = 300  # 5分
+
+def _get_cached(key, compute_fn):
+    """5分キャッシュ"""
+    now = _time.time()
+    if key in _cache and now - _cache[key]["ts"] < _CACHE_TTL:
+        return _cache[key]["data"]
+    data = compute_fn()
+    _cache[key] = {"data": data, "ts": now}
+    return data
+
 # ── ISO2→ISO3マッピング ──
 ISO2_TO_ISO3 = {
     'CN':'CHN','KR':'KOR','TW':'TWN','US':'USA','AU':'AUS',
@@ -211,14 +224,32 @@ async def get_driver_sensitivity(
     try:
         import asyncio
         loop = asyncio.get_event_loop()
+        cache_key = f"driver_sensitivity_{source_country}"
         result = await loop.run_in_executor(
-            None, lambda: _full_mc_engine.driver_sensitivity(source_country)
+            None, lambda: _get_cached(cache_key, lambda: _full_mc_engine.driver_sensitivity(source_country))
         )
         return {"status": "ok", **result}
     except KeyError:
         raise HTTPException(status_code=400, detail=f"未対応の国コード: {source_country}")
     except Exception as e:
         logger.error("driver-sensitivity エラー: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/market-opportunity")
+async def get_market_opportunity():
+    """市場機会スコアリング"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        cache_key = "market_opportunity"
+        result = await loop.run_in_executor(
+            None, lambda: _get_cached(cache_key, _full_mc_engine.market_opportunity_score)
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1150,8 +1181,9 @@ async def get_three_scenarios(
         try:
             import asyncio
             loop = asyncio.get_event_loop()
+            cache_key = f"three_scenarios_{source_country}"
             mc_result = await loop.run_in_executor(
-                None, lambda: _full_mc_engine.run(months, source_country)
+                None, lambda: _get_cached(cache_key, lambda: _full_mc_engine.run(months, source_country))
             )
             # YoY計算（前年同月DBから取得）
             yoy_data = {}
@@ -1344,3 +1376,12 @@ async def get_three_scenarios(
         },
         "country_impacts": country_impacts,
     }
+
+
+@router.get("/cache-status")
+async def get_cache_status():
+    now = _time.time()
+    entries = {}
+    for k, v in _cache.items():
+        entries[k] = {"age_seconds": round(now - v["ts"], 1), "expired": now - v["ts"] >= _CACHE_TTL}
+    return {"cache_entries": len(_cache), "ttl_seconds": _CACHE_TTL, "entries": entries}
