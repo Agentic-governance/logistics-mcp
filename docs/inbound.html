@@ -60,6 +60,23 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Skip link (a11y) */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  padding: 8px 16px;
+  text-decoration: none;
+  z-index: 9999;
+  font-weight: 700;
+}
+.skip-link:focus {
+  left: 16px;
+  top: 8px;
+}
 body {
   background: var(--color-bg);
   color: var(--color-text-primary);
@@ -839,27 +856,28 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
 </head>
 <body>
 
-<div class="terminal-header">
-  <span class="logo">SCRI Terminal</span>
-  <span class="title">インバウンド観光需要予測</span>
-  <span class="live-indicator">
-    <span class="live-dot"></span>
+<a href="#main" class="skip-link">メインコンテンツへスキップ</a>
+<header class="terminal-header" role="banner">
+  <span class="logo" aria-label="SCRI Terminal">SCRI Terminal</span>
+  <span class="title"><h1 style="font-size:inherit;font-weight:inherit;display:inline;">インバウンド観光需要予測</h1></span>
+  <span class="live-indicator" aria-live="polite">
+    <span class="live-dot" aria-hidden="true"></span>
     <span id="clock">--:-- JST</span>
   </span>
-</div>
+</header>
 
-<div class="tab-nav">
-  <button class="tab-nav-btn active" data-tab="overview" onclick="switchTab('overview')"><span class="tab-icon">◎</span>概要</button>
-  <button class="tab-nav-btn" data-tab="forecast" onclick="switchTab('forecast')"><span class="tab-icon">◯</span>予測</button>
-  <button class="tab-nav-btn" data-tab="operations" onclick="switchTab('operations')"><span class="tab-icon">◈</span>業務</button>
-  <button class="tab-nav-btn" data-tab="finance" onclick="switchTab('finance')"><span class="tab-icon">¥</span>財務/ヘッジ</button>
-  <button class="tab-nav-btn" data-tab="quant" onclick="switchTab('quant')"><span class="tab-icon">σ</span>クオンツ</button>
-  <button class="tab-nav-btn" data-tab="model" onclick="switchTab('model')"><span class="tab-icon">?</span>モデル</button>
-</div>
+<nav class="tab-nav" role="tablist" aria-label="ビュー切替タブ">
+  <button class="tab-nav-btn active" data-tab="overview" onclick="switchTab('overview')" role="tab" aria-selected="true"><span class="tab-icon" aria-hidden="true">◎</span>概要</button>
+  <button class="tab-nav-btn" data-tab="forecast" onclick="switchTab('forecast')" role="tab" aria-selected="false"><span class="tab-icon" aria-hidden="true">◯</span>予測</button>
+  <button class="tab-nav-btn" data-tab="operations" onclick="switchTab('operations')" role="tab" aria-selected="false"><span class="tab-icon" aria-hidden="true">◈</span>業務</button>
+  <button class="tab-nav-btn" data-tab="finance" onclick="switchTab('finance')" role="tab" aria-selected="false"><span class="tab-icon" aria-hidden="true">¥</span>財務/ヘッジ</button>
+  <button class="tab-nav-btn" data-tab="quant" onclick="switchTab('quant')" role="tab" aria-selected="false"><span class="tab-icon" aria-hidden="true">σ</span>クオンツ</button>
+  <button class="tab-nav-btn" data-tab="model" onclick="switchTab('model')" role="tab" aria-selected="false"><span class="tab-icon" aria-hidden="true">?</span>モデル</button>
+</nav>
 
-<div id="risk-alerts" style="display:none;"></div>
+<div id="risk-alerts" style="display:none;" role="region" aria-label="リスクアラート" aria-live="polite"></div>
 
-<div class="page-content">
+<main id="main" class="page-content" role="main">
   <!-- 次アクションCTA (概要タブ固定) -->
   <div class="cta-bar" id="next-action-cta" data-tab-group="overview">
     <div class="cta-text">
@@ -1026,8 +1044,9 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
     <div class="chart-section-title" style="color:#0ea5e9;">ヘッジファンド/トレーダービュー</div>
     <div id="hf-panel"></div>
   </div>
+</main>
 
-<div class="status-bar" id="status-bar"></div>
+<footer class="status-bar" id="status-bar" role="contentinfo"></footer>
 
 <script>
 /* =============================================================
@@ -4733,8 +4752,13 @@ function switchTab(tabName) {
     /* タブボタン更新 */
     var btns = document.querySelectorAll('.tab-nav-btn');
     for (var i = 0; i < btns.length; i++) {
-      if (btns[i].getAttribute('data-tab') === tabName) btns[i].classList.add('active');
-      else btns[i].classList.remove('active');
+      if (btns[i].getAttribute('data-tab') === tabName) {
+        btns[i].classList.add('active');
+        btns[i].setAttribute('aria-selected', 'true');
+      } else {
+        btns[i].classList.remove('active');
+        btns[i].setAttribute('aria-selected', 'false');
+      }
     }
     /* セクション表示切替 */
     var sections = document.querySelectorAll('[data-tab-group]');
