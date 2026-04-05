@@ -366,19 +366,74 @@ class FullMCEngine:
             ],
         }
 
-    def audit_trail(self, action, params, user="system", result_summary=""):
-        """監査証跡 (immutable log)"""
-        import hashlib, datetime, json
+    def audit_trail(self, action, params, user="system", result_summary="", persist=True):
+        """監査証跡 (チェーン化された不変ログ、永続化対応)"""
+        import hashlib, datetime, json, os
         timestamp = datetime.datetime.now().isoformat()
+        prev_hash = self._get_last_audit_hash() if persist else "GENESIS"
         entry = {
             "timestamp": timestamp, "action": action, "user": user,
             "params": params, "result_summary": result_summary,
             "model_version": "full_mc_29vars_v1.6.0",
+            "previous_entry_hash": prev_hash,
         }
-        # SHA-256ハッシュで改ざん検知
-        entry_hash = hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
-        entry["entry_hash"] = entry_hash[:16]
+        entry_str = json.dumps(entry, sort_keys=True, ensure_ascii=False)
+        entry_hash = hashlib.sha256(entry_str.encode('utf-8')).hexdigest()
+        entry["entry_hash"] = entry_hash
+        if persist:
+            audit_dir = os.path.expanduser("~/supply-chain-risk/data")
+            try:
+                os.makedirs(audit_dir, exist_ok=True)
+                audit_path = os.path.join(audit_dir, "audit_trail.jsonl")
+                with open(audit_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+            except Exception: pass
         return entry
+
+    def _get_last_audit_hash(self):
+        import os, json
+        audit_path = os.path.expanduser("~/supply-chain-risk/data/audit_trail.jsonl")
+        if not os.path.exists(audit_path): return "GENESIS"
+        try:
+            with open(audit_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            if not lines: return "GENESIS"
+            return json.loads(lines[-1].strip()).get("entry_hash", "GENESIS")
+        except Exception: return "GENESIS"
+
+    def verify_audit_chain(self):
+        """監査証跡チェーンの整合性検証 (改ざん検知)"""
+        import os, json, hashlib
+        audit_path = os.path.expanduser("~/supply-chain-risk/data/audit_trail.jsonl")
+        if not os.path.exists(audit_path):
+            return {"status": "empty", "entries": 0, "chain_valid": True}
+        entries = []
+        with open(audit_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line: entries.append(json.loads(line))
+        if not entries: return {"status": "empty", "entries": 0, "chain_valid": True}
+        prev_hash = "GENESIS"
+        broken_at = None
+        for i, entry in enumerate(entries):
+            if entry.get("previous_entry_hash") != prev_hash:
+                broken_at = i; break
+            stored_hash = entry.get("entry_hash")
+            entry_copy = {k:v for k,v in entry.items() if k != "entry_hash"}
+            recomputed = hashlib.sha256(
+                json.dumps(entry_copy, sort_keys=True, ensure_ascii=False).encode('utf-8')
+            ).hexdigest()
+            if stored_hash != recomputed:
+                broken_at = i; break
+            prev_hash = stored_hash
+        return {
+            "status": "verified" if broken_at is None else "tampered",
+            "entries": len(entries),
+            "chain_valid": broken_at is None,
+            "broken_at_entry": broken_at,
+            "first_entry_time": entries[0].get("timestamp"),
+            "last_entry_time": entries[-1].get("timestamp"),
+        }
 
     def optimal_hedge_ratio(self, month=4, year=2026, target="cvar_min"):
         """ヘッジ比率最適化 (制約: 30-70%, 目的: CVaR最小化)"""

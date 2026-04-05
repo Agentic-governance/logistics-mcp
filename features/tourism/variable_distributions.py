@@ -78,19 +78,25 @@ def _build_corr():
     s("clt_us","gdp_us",+0.35)
     s("flt_cn","gdp_cn",+0.30); s("flt_kr","gdp_kr",+0.20)
     # Higham (2002) nearest correlation matrix（対角1を保持しつつ正定値に）
+    # Broadcasting matmul (np.diag回避) + ridge regularization
     S = np.zeros_like(C)
     Y = C.copy()
+    eps = 1e-4  # 固有値下限を引き上げ (1e-6→1e-4) で数値安定性向上
     for _ in range(200):
         R = Y - S
         eigvals, eigvecs = np.linalg.eigh(R)
-        eigvals = np.maximum(eigvals, 1e-6)
-        X = eigvecs @ np.diag(eigvals) @ eigvecs.T
+        eigvals = np.maximum(eigvals, eps)
+        X = (eigvecs * eigvals) @ eigvecs.T  # broadcasting (np.diagより高速・安定)
         S = X - R
         Y = X.copy()
         np.fill_diagonal(Y, 1.0)
-        if np.linalg.eigvalsh(Y).min() >= 1e-6:
+        if np.linalg.eigvalsh(Y).min() >= eps:
             break
-    C = Y
+    # Ridge regularization: わずかにI_nを混ぜて条件数改善
+    ridge_alpha = 0.001
+    C = (1 - ridge_alpha) * Y + ridge_alpha * np.eye(N_VARS)
+    # 再度対角を1に戻す
+    np.fill_diagonal(C, 1.0)
     return C
 
 CORR = _build_corr()
