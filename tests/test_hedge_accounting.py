@@ -139,16 +139,35 @@ class TestAuditTrail:
         assert entry.get("persisted") is True
         assert audit_file.exists()
 
-    def test_strict_mode_fail_fast(self, tmp_path, monkeypatch):
+    def test_strict_mode_fail_fast(self, monkeypatch):
         """strict=Trueで書き込み失敗時にIOError送出"""
-        # 書き込み不可パス設定
-        monkeypatch.setenv("SCRI_AUDIT_LOG", "/nonexistent_dir_xxx/impossible/audit.jsonl")
+        # 書き込み不可パスを設定 (作成不可能な深いパス)
+        import tempfile, os
+        # 既存ファイルをサブディレクトリのように扱うとOSError
+        with tempfile.NamedTemporaryFile(delete=False) as tf:
+            tmpfile = tf.name
+        bad_path = os.path.join(tmpfile, "subdir", "audit.jsonl")  # tmpfileはファイルなのでmkdirで失敗
+        monkeypatch.setenv("SCRI_AUDIT_LOG", bad_path)
         from features.tourism.full_mc_engine import FullMCEngine
         e = FullMCEngine(n_samples=100)
-        # strict=Falseなら成功扱い
+        # strict=Trueでは例外送出
+        with pytest.raises(IOError, match="監査ログ書き込み失敗"):
+            e.audit_trail("test", {"x":1}, persist=True, strict=True)
+        os.unlink(tmpfile)
+
+    def test_non_strict_mode_returns_error_flag(self, monkeypatch):
+        """strict=Falseでは persisted=False/persist_error が記録される"""
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False) as tf:
+            tmpfile = tf.name
+        bad_path = os.path.join(tmpfile, "subdir", "audit.jsonl")
+        monkeypatch.setenv("SCRI_AUDIT_LOG", bad_path)
+        from features.tourism.full_mc_engine import FullMCEngine
+        e = FullMCEngine(n_samples=100)
         entry = e.audit_trail("test", {"x":1}, persist=True, strict=False)
-        # persistedフラグで失敗が検知できる
-        assert entry.get("persisted") in (True, False)  # dirの有無次第
+        assert entry.get("persisted") is False
+        assert "persist_error" in entry
+        os.unlink(tmpfile)
 
 
 class TestHedgeDocumentation:
