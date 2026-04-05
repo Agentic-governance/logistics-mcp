@@ -361,6 +361,18 @@ body {
     <div id="risk-cards"></div>
   </div>
 
+  <!-- 曜日別需要パターン -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">曜日別需要パターン</div>
+    <div id="weekday-panel"></div>
+  </div>
+
+  <!-- 推奨アクション -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">推奨アクション</div>
+    <div id="action-panel"></div>
+  </div>
+
   <!-- What-If シナリオシミュレーター -->
   <div class="panel" style="grid-column: 1 / -1;">
     <div class="panel-title">What-If シナリオシミュレーター</div>
@@ -544,6 +556,93 @@ var COUNTRY_PROFILES = {
        trigger:'\u8CBF\u6613\u6E1B\u901F', recovery_months:8}
     ],
     pref_share: {'\u6771\u4EAC':0.32, '\u5927\u962A':0.16, '\u4EAC\u90FD':0.12, '\u5317\u6D77\u9053':0.10, '\u6C96\u7E04':0.06, '\u798F\u5CA1':0.05, '\u5E83\u5CF6':0.04, '\u5948\u826F':0.04, '\u5343\u8449':0.03, '\u305D\u306E\u4ED6':0.08}
+  }
+};
+
+/* ===== 曜日別需要倍率 ===== */
+var WEEKEND_MULTIPLIER = {
+  KR: 1.45,  /* 韓国は週末需要が平日の1.45倍 (近距離・週末旅行) */
+  CN: 1.10,  /* 中国は曜日差が小さい (長期滞在) */
+  TW: 1.25,  /* 台湾は週末やや多い */
+  US: 0.95,  /* 米国は平日やや多い (ビジネス混在) */
+  HK: 1.30,  /* 香港は週末需要高い */
+  TH: 1.05,  /* タイは曜日差小さい */
+  AU: 0.90,  /* 豪州は平日多い (長期滞在) */
+  SG: 1.15   /* シンガポールは週末やや多い */
+};
+
+/* ===== 国別推奨アクション生成 ===== */
+var ACTION_RULES = {
+  geopolitical: {
+    check: function(profile) {
+      var d = profile.drivers;
+      for (var i = 0; i < d.length; i++) {
+        if ((d[i].name.indexOf('\u5730\u653F\u5B66') !== -1 || d[i].name.indexOf('\u6D77\u5CE1') !== -1) && d[i].pct >= 20) return d[i].pct;
+      }
+      return 0;
+    },
+    actions: [
+      {text: '\u4EE3\u66FF\u5E02\u5834\u3078\u306E\u8CA9\u4FC3\u30B7\u30D5\u30C8\u3092\u6E96\u5099', priority: 'P0'},
+      {text: '\u5730\u653F\u5B66\u30EA\u30B9\u30AF\u30D8\u30C3\u30B8\u3068\u3057\u3066\u8907\u6570\u56FD\u30DD\u30FC\u30C8\u30D5\u30A9\u30EA\u30AA\u3092\u69CB\u7BC9', priority: 'P1'}
+    ]
+  },
+  fx: {
+    check: function(profile) {
+      var d = profile.drivers;
+      for (var i = 0; i < d.length; i++) {
+        if (d[i].name.indexOf('\u70BA\u66FF') !== -1 && d[i].pct >= 20) return d[i].pct;
+      }
+      return 0;
+    },
+    actions: [
+      {text: '\u70BA\u66FF\u30D8\u30C3\u30B8 or \u30C0\u30A4\u30CA\u30DF\u30C3\u30AF\u30D7\u30E9\u30A4\u30B7\u30F3\u30B0\u5C0E\u5165', priority: 'P0'},
+      {text: '\u70BA\u66FF\u5909\u52D5\u306B\u9023\u52D5\u3059\u308B\u30D7\u30ED\u30E2\u30FC\u30B7\u30E7\u30F3\u81EA\u52D5\u8ABF\u6574\u6A5F\u80FD', priority: 'P1'}
+    ]
+  },
+  calendar_peak: {
+    check: function(profile) {
+      var maxCal = 0;
+      for (var m = 1; m <= 12; m++) {
+        var v = profile.calendar[m] || 1.0;
+        if (v > maxCal) maxCal = v;
+      }
+      return maxCal >= 1.3 ? maxCal : 0;
+    },
+    actions: [
+      {text: '\u30D4\u30FC\u30AF\u6708\u306E\u65E9\u671F\u4E88\u7D04\u30A4\u30F3\u30BB\u30F3\u30C6\u30A3\u30D6\u8A2D\u5B9A', priority: 'P0'},
+      {text: '\u30AA\u30D5\u30D4\u30FC\u30AF\u671F\u306E\u4FA1\u683C\u8A34\u6C42\u30AD\u30E3\u30F3\u30DA\u30FC\u30F3\u5F37\u5316', priority: 'P1'}
+    ]
+  },
+  volatility: {
+    check: function(profile) {
+      return profile.band >= 0.35 ? profile.band : 0;
+    },
+    actions: [
+      {text: '\u5909\u52D5\u4FC2\u6570\u304C\u9AD8\u3044\u305F\u3081\u30B7\u30CA\u30EA\u30AA\u5225\u4EBA\u54E1\u8A08\u753B\u3092\u7B56\u5B9A', priority: 'P1'},
+      {text: '\u30EA\u30A2\u30EB\u30BF\u30A4\u30E0\u30C7\u30FC\u30BF\u30E2\u30CB\u30BF\u30EA\u30F3\u30B0\u3067\u65E9\u671F\u8B66\u6212\u4F53\u5236\u69CB\u7BC9', priority: 'P1'}
+    ]
+  },
+  weekend: {
+    check: function(profile, code) {
+      var wm = WEEKEND_MULTIPLIER[code] || 1.0;
+      return wm >= 1.25 ? wm : 0;
+    },
+    actions: [
+      {text: '\u9031\u672B\u9700\u8981\u96C6\u4E2D\u306B\u5408\u308F\u305B\u305F\u30B7\u30D5\u30C8\u30FB\u4EBA\u54E1\u914D\u7F6E\u6700\u9069\u5316', priority: 'P1'},
+      {text: '\u5E73\u65E5\u9650\u5B9A\u5272\u5F15\u3067\u66DC\u65E5\u5206\u6563\u3092\u4FC3\u9032', priority: 'P2'}
+    ]
+  },
+  sns_culture: {
+    check: function(profile) {
+      var d = profile.drivers;
+      for (var i = 0; i < d.length; i++) {
+        if ((d[i].name.indexOf('SNS') !== -1 || d[i].name.indexOf('\u6587\u5316') !== -1) && d[i].pct >= 10) return d[i].pct;
+      }
+      return 0;
+    },
+    actions: [
+      {text: 'SNS\u30A4\u30F3\u30D5\u30EB\u30A8\u30F3\u30B5\u30FC\u30DE\u30FC\u30B1\u30C6\u30A3\u30F3\u30B0\u3092\u5F37\u5316', priority: 'P2'}
+    ]
   }
 };
 
@@ -1001,6 +1100,126 @@ function renderStaffingPanel(profile) {
   } catch(e) { console.error('renderStaffingPanel:', e); }
 }
 
+/* ===== 曜日別需要パターン ===== */
+function renderWeekdayPanel(profile) {
+  try {
+    var code = getCountryCode();
+    var wm = WEEKEND_MULTIPLIER[code] || 1.0;
+    var fri = 1.0 + (wm - 1.0) * 0.5; /* 金曜は平日と週末の中間 */
+    var days = [
+      {label: '\u6708', val: 1.0},
+      {label: '\u706B', val: 1.0},
+      {label: '\u6C34', val: 1.0},
+      {label: '\u6728', val: 1.0},
+      {label: '\u91D1', val: Math.round(fri * 100) / 100},
+      {label: '\u571F', val: wm},
+      {label: '\u65E5', val: wm}
+    ];
+
+    /* SVGバーチャート */
+    var barW = 48;
+    var gap = 8;
+    var chartH = 120;
+    var svgW = days.length * (barW + gap) - gap;
+    var maxVal = 0;
+    var i;
+    for (i = 0; i < days.length; i++) {
+      if (days[i].val > maxVal) maxVal = days[i].val;
+    }
+    maxVal = Math.max(maxVal, 1.5);
+
+    var svg = '<svg width="' + svgW + '" height="' + (chartH + 40) + '" style="display:block;margin:0 auto;">';
+
+    /* ベースライン (1.0) */
+    var baseY = chartH - (1.0 / maxVal) * chartH;
+    svg += '<line x1="0" y1="' + baseY + '" x2="' + svgW + '" y2="' + baseY + '" stroke="rgba(255,255,255,0.15)" stroke-dasharray="4,4" stroke-width="1"/>';
+    svg += '<text x="' + (svgW - 2) + '" y="' + (baseY - 4) + '" fill="#64748b" font-size="9" text-anchor="end" font-family="SF Mono,monospace">1.00x</text>';
+
+    for (i = 0; i < days.length; i++) {
+      var d = days[i];
+      var x = i * (barW + gap);
+      var barH = (d.val / maxVal) * chartH;
+      var y = chartH - barH;
+      var color;
+      if (i >= 5) { color = '#f59e0b'; }      /* 週末: amber */
+      else if (i === 4) { color = '#38bdf8'; } /* 金曜: sky */
+      else { color = '#3b82f6'; }               /* 平日: blue */
+
+      svg += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" rx="3" fill="' + color + '" opacity="0.85"/>';
+      svg += '<text x="' + (x + barW / 2) + '" y="' + (y - 4) + '" fill="#e2e8f0" font-size="11" text-anchor="middle" font-family="SF Mono,monospace">' + d.val.toFixed(2) + 'x</text>';
+      svg += '<text x="' + (x + barW / 2) + '" y="' + (chartH + 16) + '" fill="' + (i >= 5 ? '#f59e0b' : '#94a3b8') + '" font-size="13" text-anchor="middle" font-weight="600">' + d.label + '</text>';
+    }
+
+    svg += '</svg>';
+
+    var html = '<div style="text-align:center;margin-bottom:8px;">';
+    html += '<span style="font-size:11px;color:#94a3b8;">週末倍率: </span>';
+    html += '<span style="font-family:SF Mono,monospace;font-size:14px;font-weight:700;color:' + (wm >= 1.0 ? '#f59e0b' : '#3b82f6') + ';">' + wm.toFixed(2) + 'x</span>';
+    html += '<span style="font-size:11px;color:#64748b;margin-left:12px;">(' + (profile.name || code) + ')</span>';
+    html += '</div>';
+    html += svg;
+
+    document.getElementById('weekday-panel').innerHTML = html;
+  } catch(e) { console.error('renderWeekdayPanel:', e); }
+}
+
+/* ===== 推奨アクション ===== */
+function renderActionPanel(profile) {
+  try {
+    var code = getCountryCode();
+    var actions = [];
+    var ruleKey;
+    for (ruleKey in ACTION_RULES) {
+      if (!ACTION_RULES.hasOwnProperty(ruleKey)) continue;
+      var rule = ACTION_RULES[ruleKey];
+      var score = rule.check(profile, code);
+      if (score > 0) {
+        for (var ai = 0; ai < rule.actions.length; ai++) {
+          actions.push({
+            text: rule.actions[ai].text,
+            priority: rule.actions[ai].priority,
+            score: score,
+            category: ruleKey
+          });
+        }
+      }
+    }
+
+    /* 優先度でソート (P0 > P1 > P2) */
+    actions.sort(function(a, b) {
+      if (a.priority < b.priority) return -1;
+      if (a.priority > b.priority) return 1;
+      return b.score - a.score;
+    });
+
+    /* 最大5件 */
+    if (actions.length > 5) actions = actions.slice(0, 5);
+
+    if (actions.length === 0) {
+      document.getElementById('action-panel').innerHTML = '<div style="color:#64748b;font-size:12px;">現在の条件では特記すべき推奨アクションはありません</div>';
+      return;
+    }
+
+    var priorityColors = {
+      'P0': {bg: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.4)', text: '#f87171'},
+      'P1': {bg: 'rgba(234,179,8,0.12)', border: 'rgba(234,179,8,0.35)', text: '#facc15'},
+      'P2': {bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.3)', text: '#60a5fa'}
+    };
+
+    var html = '';
+    for (var i = 0; i < actions.length; i++) {
+      var a = actions[i];
+      var pc = priorityColors[a.priority] || priorityColors['P2'];
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:6px;background:' + pc.bg + ';border:1px solid ' + pc.border + ';border-radius:6px;">';
+      html += '<span style="font-family:SF Mono,monospace;font-size:10px;font-weight:700;color:' + pc.text + ';background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:3px;flex-shrink:0;">' + a.priority + '</span>';
+      html += '<span style="font-size:12px;color:#e2e8f0;">' + a.text + '</span>';
+      html += '</div>';
+    }
+
+    document.getElementById('action-panel').innerHTML = html;
+  } catch(e) { console.error('renderActionPanel:', e); }
+}
+
 function renderPrefBars(profile) {
   try {
     var container = document.getElementById('pref-bars');
@@ -1079,6 +1298,8 @@ function init() {
     renderDriverBars(profile);
     renderCalendarChart(profile);
     renderRiskCards(profile);
+    renderWeekdayPanel(profile);
+    renderActionPanel(profile);
     renderWhatIf(profile);
     renderStaffingPanel(profile);
     renderPrefBars(profile);

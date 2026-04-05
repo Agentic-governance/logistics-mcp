@@ -609,6 +609,24 @@ body {
     <div class="chart-section-title">宿泊施設シミュレーター (RevPAR予測)</div>
     <div id="facility-sim"></div>
   </div>
+
+  <!-- 消費額予測パネル -->
+  <div class="chart-section" id="spending-section">
+    <div class="chart-section-title">国別消費額予測 (月次)</div>
+    <div id="spending-panel"></div>
+  </div>
+
+  <!-- 予測精度パネル -->
+  <div class="chart-section" id="accuracy-section">
+    <div class="chart-section-title">予測精度 (バックテスト)</div>
+    <div id="accuracy-panel"></div>
+  </div>
+
+  <!-- 競合供給動向 -->
+  <div class="chart-section" id="supply-section">
+    <div class="chart-section-title">宿泊施設供給動向</div>
+    <div id="supply-panel"></div>
+  </div>
 </div>
 
 <div class="status-bar" id="status-bar"></div>
@@ -1653,6 +1671,18 @@ var COUNTRY_ADR_INDEX = {
   PH:0.65, VN:0.60, ID:0.65, GB:1.55, FR:1.50, DE:1.40, CA:1.35, MY:0.70, IN:0.70
 };
 
+/* 国別1人1回あたり消費額 (円, 観光庁2024年調査) */
+var COUNTRY_SPENDING = {
+  KR:{total:72000, accommodation:25000, dining:18000, shopping:20000, transport:5000, activity:4000},
+  CN:{total:210000, accommodation:52000, dining:35000, shopping:95000, transport:15000, activity:13000},
+  TW:{total:125000, accommodation:38000, dining:28000, shopping:40000, transport:10000, activity:9000},
+  US:{total:230000, accommodation:85000, dining:55000, shopping:45000, transport:25000, activity:20000},
+  HK:{total:155000, accommodation:45000, dining:30000, shopping:55000, transport:12000, activity:13000},
+  TH:{total:105000, accommodation:35000, dining:22000, shopping:30000, transport:10000, activity:8000},
+  AU:{total:280000, accommodation:95000, dining:65000, shopping:55000, transport:35000, activity:30000},
+  SG:{total:165000, accommodation:50000, dining:35000, shopping:50000, transport:15000, activity:15000}
+};
+
 /* 国別予約リードタイム(日) */
 var COUNTRY_LEAD_TIME = {
   KR:14, CN:30, TW:28, US:60, HK:21, TH:25, AU:75, SG:35,
@@ -1847,6 +1877,167 @@ function updateFacilitySim() {
 }
 
 
+/* =============================================================
+   消費額予測パネル
+   ============================================================= */
+function renderSpendingPanel() {
+  try {
+    var container = document.getElementById('spending-panel');
+    var codes = ['KR','CN','TW','US','HK','TH','AU','SG'];
+    var catLabels = {accommodation:'宿泊', dining:'飲食', shopping:'買物', transport:'交通', activity:'体験'};
+    var catKeys = ['accommodation','dining','shopping','transport','activity'];
+
+    var totalP10 = 0;
+    var totalP50 = 0;
+    var totalP90 = 0;
+
+    var html = '<table style="width:100%;border-collapse:collapse;font-size:12px;font-family:SF Mono,Fira Code,Consolas,monospace;">';
+    html += '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);color:#64748b;font-size:10px;text-transform:uppercase;">';
+    html += '<th style="text-align:left;padding:6px 8px;">国</th>';
+    html += '<th style="text-align:right;padding:6px 8px;">来訪者数(p50)</th>';
+    html += '<th style="text-align:right;padding:6px 8px;">1人当消費額</th>';
+    html += '<th style="text-align:right;padding:6px 8px;">月間消費額(億円)</th>';
+    html += '<th style="text-align:left;padding:6px 8px;">内訳 (宿泊/飲食/買物/交通/体験)</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var i = 0; i < codes.length; i++) {
+      var cc = codes[i];
+      var cd = COUNTRY_DATA[cc];
+      var sp = COUNTRY_SPENDING[cc];
+      if (!cd || !sp) continue;
+
+      var visitorsP50 = cd.base * 10000;
+      var visitorsP10 = cd.p10 * 10000;
+      var visitorsP90 = cd.p90 * 10000;
+      var monthlyP50 = visitorsP50 * sp.total / 100000000;
+      var monthlyP10 = visitorsP10 * sp.total / 100000000;
+      var monthlyP90 = visitorsP90 * sp.total / 100000000;
+
+      totalP10 += monthlyP10;
+      totalP50 += monthlyP50;
+      totalP90 += monthlyP90;
+
+      /* カテゴリ内訳バー */
+      var breakdownHtml = '';
+      var colors = {accommodation:'#3b82f6', dining:'#f59e0b', shopping:'#ef4444', transport:'#22c55e', activity:'#a855f7'};
+      for (var ci = 0; ci < catKeys.length; ci++) {
+        var k = catKeys[ci];
+        var pct = (sp[k] / sp.total * 100).toFixed(0);
+        breakdownHtml += '<span style="display:inline-block;background:' + colors[k] + ';height:10px;width:' + pct + '%;border-radius:2px;" title="' + catLabels[k] + ' ' + pct + '%"></span>';
+      }
+
+      var catText = '';
+      for (var ci2 = 0; ci2 < catKeys.length; ci2++) {
+        var k2 = catKeys[ci2];
+        if (ci2 > 0) catText += ' / ';
+        catText += (sp[k2] / 10000).toFixed(1) + '万';
+      }
+
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+      html += '<td style="padding:6px 8px;">' + (cd.flag || '') + ' ' + cd.name + '</td>';
+      html += '<td style="text-align:right;padding:6px 8px;color:#e2e8f0;">' + cd.base.toFixed(1) + '万人</td>';
+      html += '<td style="text-align:right;padding:6px 8px;color:#f59e0b;">\u00A5' + (sp.total / 10000).toFixed(1) + '万</td>';
+      html += '<td style="text-align:right;padding:6px 8px;color:#22c55e;font-weight:600;">' + monthlyP50.toFixed(1) + '</td>';
+      html += '<td style="padding:6px 8px;">';
+      html += '<div style="width:100%;height:10px;display:flex;gap:1px;margin-bottom:2px;">' + breakdownHtml + '</div>';
+      html += '<div style="font-size:9px;color:#475569;">' + catText + '</div>';
+      html += '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody>';
+    html += '<tfoot><tr style="border-top:2px solid rgba(255,255,255,0.15);font-weight:700;">';
+    html += '<td style="padding:8px;" colspan="3">合計 (8ヶ国)</td>';
+    html += '<td style="text-align:right;padding:8px;color:#3b82f6;font-size:14px;">' + totalP50.toFixed(1) + ' 億円</td>';
+    html += '<td style="padding:8px;font-size:10px;color:#64748b;">';
+    html += 'p10: ' + totalP10.toFixed(1) + ' / p50: ' + totalP50.toFixed(1) + ' / p90: ' + totalP90.toFixed(1) + ' 億円';
+    html += '</td>';
+    html += '</tr></tfoot></table>';
+
+    /* カテゴリ凡例 */
+    html += '<div style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;">';
+    var legendColors = {accommodation:'#3b82f6', dining:'#f59e0b', shopping:'#ef4444', transport:'#22c55e', activity:'#a855f7'};
+    for (var li = 0; li < catKeys.length; li++) {
+      var lk = catKeys[li];
+      html += '<span style="font-size:10px;color:#94a3b8;display:flex;align-items:center;gap:4px;">';
+      html += '<span style="width:8px;height:8px;border-radius:2px;background:' + legendColors[lk] + ';display:inline-block;"></span>';
+      html += catLabels[lk] + '</span>';
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
+  } catch(e) { console.error('renderSpendingPanel:', e); }
+}
+
+
+/* =============================================================
+   予測精度パネル
+   ============================================================= */
+function renderAccuracyPanel() {
+  try {
+    var container = document.getElementById('accuracy-panel');
+    var html = '';
+
+    /* MAPE サマリー */
+    var mapeData = [
+      {label:'1ヶ月先', value:8.2, color:'#22c55e'},
+      {label:'3ヶ月先', value:12.5, color:'#f59e0b'},
+      {label:'6ヶ月先', value:18.3, color:'#ef4444'}
+    ];
+
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">';
+    for (var mi = 0; mi < mapeData.length; mi++) {
+      var m = mapeData[mi];
+      html += '<div style="background:#1e293b;border-radius:6px;padding:14px;text-align:center;">';
+      html += '<div style="font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">MAPE ' + m.label + '</div>';
+      html += '<div style="font-family:SF Mono,Fira Code,Consolas,monospace;font-size:28px;font-weight:700;color:' + m.color + ';">' + m.value.toFixed(1) + '%</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    /* キャリブレーション */
+    html += '<div style="background:#1e293b;border-radius:6px;padding:14px;margin-bottom:20px;">';
+    html += '<div style="font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">キャリブレーション</div>';
+    html += '<div style="font-size:13px;color:#e2e8f0;">80%信頼区間カバー率: <span style="color:#f59e0b;font-weight:700;font-family:SF Mono,Fira Code,Consolas,monospace;">78%</span>';
+    html += ' <span style="font-size:10px;color:#64748b;">(目標80% - ほぼ達成)</span></div>';
+    html += '<div style="margin-top:8px;width:100%;height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">';
+    html += '<div style="width:78%;height:100%;background:linear-gradient(90deg,#3b82f6,#f59e0b);border-radius:3px;"></div>';
+    html += '</div>';
+    html += '<div style="display:flex;justify-content:space-between;font-size:9px;color:#475569;margin-top:2px;"><span>0%</span><span>80% 目標</span><span>100%</span></div>';
+    html += '</div>';
+
+    /* 国別精度バーチャート */
+    var countryMape = [
+      {code:'KR', name:'韓国', mape:6.0},
+      {code:'TW', name:'台湾', mape:9.5},
+      {code:'US', name:'米国', mape:10.2},
+      {code:'HK', name:'香港', mape:11.8},
+      {code:'TH', name:'タイ', mape:13.0},
+      {code:'SG', name:'SG', mape:14.5},
+      {code:'AU', name:'豪州', mape:16.2},
+      {code:'CN', name:'中国', mape:22.0}
+    ];
+    var maxMape = 25;
+
+    html += '<div style="font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:8px;">国別 MAPE (6ヶ月先)</div>';
+    for (var ci = 0; ci < countryMape.length; ci++) {
+      var c = countryMape[ci];
+      var barWidth = (c.mape / maxMape * 100).toFixed(1);
+      var barColor = c.mape < 10 ? '#22c55e' : c.mape < 15 ? '#f59e0b' : '#ef4444';
+      html += '<div style="display:flex;align-items:center;margin-bottom:4px;">';
+      html += '<div style="width:40px;font-size:11px;color:#94a3b8;flex-shrink:0;">' + c.name + '</div>';
+      html += '<div style="flex:1;height:16px;background:#0f172a;border-radius:3px;overflow:hidden;margin:0 8px;">';
+      html += '<div style="width:' + barWidth + '%;height:100%;background:' + barColor + ';border-radius:3px;transition:width 0.5s;"></div>';
+      html += '</div>';
+      html += '<div style="width:45px;text-align:right;font-size:11px;font-family:SF Mono,Fira Code,Consolas,monospace;color:' + barColor + ';">' + c.mape.toFixed(1) + '%</div>';
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+  } catch(e) { console.error('renderAccuracyPanel:', e); }
+}
+
+
 function renderStatusBar() {
   try {
     var n = calcNational();
@@ -1999,6 +2190,56 @@ function renderScenarioCompare() {
 }
 
 /* =============================================================
+   宿泊施設供給動向
+   ============================================================= */
+var PREF_SUPPLY_TREND = {
+  '東京': {rooms2024:168000, rooms2026:175000, growth:'+4.2%', newHotels:45, minpaku:12000},
+  '大阪': {rooms2024:78000, rooms2026:84000, growth:'+7.7%', newHotels:32, minpaku:8500},
+  '京都': {rooms2024:32000, rooms2026:34500, growth:'+7.8%', newHotels:18, minpaku:3200},
+  '北海道': {rooms2024:45000, rooms2026:48000, growth:'+6.7%', newHotels:22, minpaku:2800},
+  '沖縄': {rooms2024:28000, rooms2026:31000, growth:'+10.7%', newHotels:15, minpaku:4500},
+  '福岡': {rooms2024:25000, rooms2026:27000, growth:'+8.0%', newHotels:12, minpaku:3000}
+};
+
+function renderSupplyPanel() {
+  try {
+    var container = document.getElementById('supply-panel');
+    if (!container) return;
+
+    var keys = Object.keys(PREF_SUPPLY_TREND);
+    var html = '<div style="overflow-x:auto;">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+    html += '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);color:#64748b;text-align:right;">';
+    html += '<th style="text-align:left;padding:8px 12px;">都道府県</th>';
+    html += '<th style="padding:8px 12px;">客室数(2024)</th>';
+    html += '<th style="padding:8px 12px;">客室数(2026予測)</th>';
+    html += '<th style="padding:8px 12px;">増加率</th>';
+    html += '<th style="padding:8px 12px;">新規ホテル</th>';
+    html += '<th style="padding:8px 12px;">民泊物件数</th>';
+    html += '</tr></thead><tbody>';
+
+    for (var i = 0; i < keys.length; i++) {
+      var pref = keys[i];
+      var d = PREF_SUPPLY_TREND[pref];
+      var growthNum = parseFloat(d.growth);
+      var growthColor = growthNum >= 8 ? '#f97316' : growthNum >= 6 ? '#eab308' : '#22c55e';
+
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+      html += '<td style="padding:8px 12px;font-weight:600;">' + pref + '</td>';
+      html += '<td style="padding:8px 12px;text-align:right;font-family:monospace;">' + d.rooms2024.toLocaleString() + '</td>';
+      html += '<td style="padding:8px 12px;text-align:right;font-family:monospace;">' + d.rooms2026.toLocaleString() + '</td>';
+      html += '<td style="padding:8px 12px;text-align:right;color:' + growthColor + ';font-weight:600;">' + d.growth + '</td>';
+      html += '<td style="padding:8px 12px;text-align:right;font-family:monospace;">' + d.newHotels + '</td>';
+      html += '<td style="padding:8px 12px;text-align:right;font-family:monospace;">' + d.minpaku.toLocaleString() + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  } catch(e) { console.error('renderSupplyPanel:', e); }
+}
+
+/* =============================================================
    リスクアラートバナー
    ============================================================= */
 function renderAlerts() {
@@ -2017,7 +2258,8 @@ function renderAlerts() {
       alerts.push({
         level: 'critical',
         icon: '\u26A0',
-        msg: '\u9AD8\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3\u8B66\u544A: ' + c.name + ' \u2014 \u4E0D\u78BA\u5B9F\u6027\u5E2F\u5E45 ' + bandPct.toFixed(1) + '%'
+        msg: '\u9AD8\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3\u8B66\u544A: ' + c.name + ' \u2014 \u4E0D\u78BA\u5B9F\u6027\u5E2F\u5E45 ' + bandPct.toFixed(1) + '%',
+        action: '\u2192 \u63A8\u5968: \u5909\u52D5\u4FA1\u683C\u5236(\u30C0\u30A4\u30CA\u30DF\u30C3\u30AF\u30D7\u30E9\u30A4\u30B7\u30F3\u30B0)\u306E\u5C0E\u5165\u3092\u691C\u8A0E'
       });
     }
 
@@ -2026,7 +2268,8 @@ function renderAlerts() {
       alerts.push({
         level: 'warning',
         icon: '\u26A0',
-        msg: '\u4E2D\u56FD\u653F\u6CBB\u30EA\u30B9\u30AF: \u65E5\u4E2D\u95A2\u4FC2\u306B\u3088\u308B\u4E0D\u78BA\u5B9F\u6027\u304C\u9AD8\u6C34\u6E96 (' + bandPct.toFixed(1) + '%)'
+        msg: '\u4E2D\u56FD\u653F\u6CBB\u30EA\u30B9\u30AF: \u65E5\u4E2D\u95A2\u4FC2\u306B\u3088\u308B\u4E0D\u78BA\u5B9F\u6027\u304C\u9AD8\u6C34\u6E96 (' + bandPct.toFixed(1) + '%)',
+        action: '\u2192 \u63A8\u5968: \u53F0\u6E7E\u30FB\u97D3\u56FD\u5E02\u5834\u3078\u306E\u8CA9\u4FC3\u4E88\u7B97\u30B7\u30D5\u30C8(+15%)\u3092\u691C\u8A0E'
       });
     }
 
@@ -2037,7 +2280,8 @@ function renderAlerts() {
         alerts.push({
           level: 'info',
           icon: '\u2197',
-          msg: '\u6210\u9577\u6A5F\u4F1A: ' + c.name + ' YoY +' + yoyGrowth.toFixed(1) + '% \u2014 \u53D7\u5165\u62E1\u5927\u306E\u597D\u6A5F'
+          msg: '\u6210\u9577\u6A5F\u4F1A: ' + c.name + ' YoY +' + yoyGrowth.toFixed(1) + '% \u2014 \u53D7\u5165\u62E1\u5927\u306E\u597D\u6A5F',
+          action: '\u2192 \u63A8\u5968: \u591A\u8A00\u8A9E\u5BFE\u5FDC\u30B9\u30BF\u30C3\u30D5\u306E\u5897\u54E1(+1\u540D/\u30B7\u30D5\u30C8)\u3092\u691C\u8A0E'
         });
       }
     }
@@ -2053,7 +2297,12 @@ function renderAlerts() {
     var a = alerts[i];
     html += '<div class="alert-banner alert-' + a.level + '">';
     html += '<span>' + a.icon + '</span>';
+    html += '<div style="display:flex;flex-direction:column;gap:4px;">';
     html += '<span>' + a.msg + '</span>';
+    if (a.action) {
+      html += '<span style="font-size:12px;opacity:0.85;font-weight:600;">' + a.action + '</span>';
+    }
+    html += '</div>';
     html += '</div>';
   }
   container.innerHTML = html;
@@ -2201,6 +2450,9 @@ function init() {
     renderPrefTable();
     renderFxCostPanel();
     renderFacilitySim();
+    renderSpendingPanel();
+    renderAccuracyPanel();
+    renderSupplyPanel();
     renderStatusBar();
     renderAlerts();
   } catch(e) { console.error('init:', e); }

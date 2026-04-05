@@ -253,6 +253,26 @@ async def get_market_opportunity():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/spending-forecast")
+async def get_spending_forecast(
+    month: int = Query(default=4, ge=1, le=12),
+    year: int = Query(default=2026),
+):
+    """国別消費額予測（月次）"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        cache_key = f"spending_{year}_{month}"
+        result = await loop.run_in_executor(
+            None, lambda: _get_cached(cache_key, lambda: _full_mc_engine.spending_forecast(month, year))
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/market-ranking")
 async def get_market_ranking(
     top_n: int = Query(default=20, ge=1, le=50, description="評価市場数"),

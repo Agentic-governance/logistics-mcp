@@ -155,6 +155,40 @@ class FullMCEngine:
             }
         return {"month": f"{year}/{month:02d}", "scores": scores}
 
+    # 国別1人1回あたり消費額 (円, 観光庁2024年調査)
+    SPENDING_PER_VISITOR = {
+        "KR": 72000, "CN": 210000, "TW": 125000, "US": 230000,
+        "AU": 280000, "TH": 105000, "HK": 155000, "SG": 165000,
+    }
+
+    def spending_forecast(self, month=4, year=2026):
+        """国別消費額予測（月次）"""
+        months = [f"{year}/{month:02d}"]
+        result = self.run(months, "ALL")
+        spending = {}
+        total_p10 = 0; total_p50 = 0; total_p90 = 0
+        for iso2 in ALL_COUNTRIES:
+            bc = result["by_country"][iso2]
+            spv = self.SPENDING_PER_VISITOR.get(iso2, 120000)
+            s_p10 = bc["p10"][0] * spv
+            s_p50 = bc["median"][0] * spv
+            s_p90 = bc["p90"][0] * spv
+            spending[iso2] = {
+                "visitors_p50": bc["median"][0],
+                "spending_per_visitor": spv,
+                "monthly_spending_p10": round(s_p10),
+                "monthly_spending_p50": round(s_p50),
+                "monthly_spending_p90": round(s_p90),
+            }
+            total_p10 += s_p10; total_p50 += s_p50; total_p90 += s_p90
+        return {
+            "month": f"{year}/{month:02d}",
+            "by_country": spending,
+            "total_p10_oku": round(total_p10 / 1e8, 1),
+            "total_p50_oku": round(total_p50 / 1e8, 1),
+            "total_p90_oku": round(total_p90 / 1e8, 1),
+        }
+
     def run(self, months, source_country="ALL"):
         countries = ALL_COUNTRIES if source_country == "ALL" else [source_country]
         nm = len(months)
