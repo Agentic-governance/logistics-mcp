@@ -51,6 +51,9 @@
   --text-xs: 11px; --text-sm: 12px; --text-base: 14px;
   --text-lg: 16px; --text-xl: 18px; --text-2xl: 24px; --text-3xl: 32px;
 
+  /* Minimum readable size enforcement */
+  --text-min: 11px;
+
   /* Motion */
   --motion-fast: 150ms; --motion-base: 250ms;
 
@@ -60,6 +63,46 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Global minimum text size enforcement (UX audit: 90 instances of 9-10px) */
+body, td, th, span, div, p, li, label, button, input, select, textarea {
+  font-size: max(var(--text-xs), 11px);
+}
+
+/* Loading skeleton (UX audit: no loading states) */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.04; }
+  50% { opacity: 0.08; }
+}
+.skeleton-loading {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 400% 100%;
+  animation: skeleton-pulse 1.5s ease infinite;
+  border-radius: var(--radius-md);
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+/* Max line length for readability (50-75 chars) */
+.morning-brief-content,
+.onepager-conclusion,
+.glossary-def {
+  max-width: 65ch;
+}
+
+/* Interaction feedback (hover/active states) */
+.toolbar-btn:active, .cta-btn:active, .tab-nav-btn:active {
+  transform: scale(0.97);
+  transition: transform var(--motion-fast);
+}
+.chart-section:hover, .table-section:hover {
+  border-color: var(--color-border-strong);
+  transition: border-color var(--motion-base);
+}
 
 /* Skip link (a11y) */
 .skip-link {
@@ -1070,9 +1113,12 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
 <header class="terminal-header" role="banner">
   <span class="logo" aria-label="SCRI Terminal">SCRI Terminal</span>
   <span class="title"><h1 style="font-size:inherit;font-weight:inherit;display:inline;">インバウンド観光需要予測</h1></span>
-  <span class="live-indicator" aria-live="polite">
-    <span class="live-dot" aria-hidden="true"></span>
-    <span id="clock">--:-- JST</span>
+  <span style="display:flex;align-items:center;gap:12px;">
+    <span style="font-size:var(--text-xs);color:var(--color-text-tertiary);" id="data-freshness" aria-label="データ鮮度">MC v1.6 | N=3,000</span>
+    <span class="live-indicator" aria-live="polite">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span id="clock">--:-- JST</span>
+    </span>
   </span>
 </header>
 
@@ -1155,7 +1201,7 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
   <!-- 世界地図バブルチャート -->
   <div class="chart-section" id="world-map-section">
     <div class="chart-section-title">国別来訪者予測マップ</div>
-    <div id="worldMap" style="position:relative; width:100%; height:400px; overflow:hidden;"></div>
+    <div id="worldMap" style="position:relative; width:100%; height:400px; overflow:hidden;"><div class="skeleton-loading">地図データを読込中...</div></div>
     <div class="map-legend" aria-label="地図凡例">
       <div class="map-legend-item"><span class="map-legend-dot" style="background:#22c55e;"></span>低リスク(帯幅&lt;30%)</div>
       <div class="map-legend-item"><span class="map-legend-dot" style="background:#eab308;"></span>中リスク(30-45%)</div>
@@ -1199,7 +1245,7 @@ button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
   <!-- 日本地図ヒートマップ -->
   <div class="chart-section" id="japan-map-section">
     <div class="chart-section-title">都道府県別インバウンド集中度</div>
-    <div id="japanMap" style="position:relative; width:100%; height:420px; overflow:hidden;"></div>
+    <div id="japanMap" style="position:relative; width:100%; height:420px; overflow:hidden;"><div class="skeleton-loading">日本地図を読込中...</div></div>
     <div class="map-legend" aria-label="日本地図凡例">
       <div class="map-legend-item"><span class="map-legend-dot" style="background:#3b82f6;"></span>安定(帯幅&lt;28%)</div>
       <div class="map-legend-item"><span class="map-legend-dot" style="background:#eab308;"></span>中リスク(28-35%)</div>
