@@ -1638,6 +1638,51 @@ async def get_rolling_corr(country_a: str = "KR", country_b: str = "TW", window:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/stress-test")
+async def get_stress_test(month: int = Query(default=4, ge=1, le=12), year: int = Query(default=2026)):
+    """ストレステスト (リーマン/COVID/尖閣/ロシア/フラッシュクラッシュ)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        cache_key = f"stress_{year}_{month}"
+        result = await loop.run_in_executor(
+            None, lambda: _get_cached(cache_key, lambda: _full_mc_engine.stress_test_scenarios(month, year))
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/counterparty-credit")
+async def get_counterparty_credit():
+    """カウンターパーティ信用リスク (CVA/PFE/WWR)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        result = _full_mc_engine.counterparty_credit_risk()
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/dynamic-rebalance")
+async def get_dynamic_rebalance(
+    current_ratio: float = Query(default=0.5, ge=0, le=1),
+    effectiveness: float = Query(default=95, ge=0, le=200),
+    fx_change: float = Query(default=0.0, ge=-0.5, le=0.5),
+):
+    """動的ヘッジリバランス推奨"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        result = _full_mc_engine.dynamic_hedge_rebalance(current_ratio, effectiveness, fx_change)
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/hedge-discontinuation")
 async def check_discontinuation(
     effectiveness: str = "[95, 98, 102]",

@@ -512,6 +512,124 @@ class FullMCEngine:
                          f"無効 (比率={avg_effectiveness:.0f}%, R²={r_squared:.2f})",
         }
 
+    def stress_test_scenarios(self, month=4, year=2026):
+        """ストレステスト (リーマン級/COVID級/尖閣級/金融危機級)"""
+        base = self.run([f"{year}/{month:02d}"], "ALL")["median"][0]
+        scenarios = {
+            "2008_lehman": {"fx_shock": -0.25, "geo_shock": -15, "gdp_shock": -0.04, "name": "2008年リーマン危機"},
+            "2020_covid": {"fx_shock": -0.10, "geo_shock": -5, "gdp_shock": -0.08, "demand_shock": -0.90, "name": "2020年COVID-19"},
+            "2012_senkaku": {"fx_shock": 0.05, "geo_shock": -45, "gdp_shock": 0.00, "name": "2012年尖閣危機(CN特化)"},
+            "2022_russia": {"fx_shock": -0.15, "geo_shock": -10, "gdp_shock": -0.03, "name": "2022年ロシア侵攻"},
+            "flash_crash": {"fx_shock": -0.35, "geo_shock": 0, "gdp_shock": -0.02, "name": "フラッシュクラッシュ"},
+        }
+        results = []
+        for key, s in scenarios.items():
+            # 各ショックを適用したストレス値
+            fx_impact = 1 + s["fx_shock"] * 1.1  # FX: 円安(+)で需要増、円高(-)で需要減
+            gdp_impact = 1 + s.get("gdp_shock", 0) * 1.24
+            demand_impact = 1 + s.get("demand_shock", 0)
+            geo_impact = float(np.exp(-0.038 * (-s["geo_shock"])))  # geo_shock<0で需要減
+            stressed_value = base * fx_impact * gdp_impact * demand_impact * geo_impact
+            loss_jpy = max(0, (base - stressed_value) * 150000)  # 消費額換算
+            results.append({
+                "scenario": s["name"], "key": key,
+                "base_visitors": int(base),
+                "stressed_visitors": int(max(stressed_value, 0)),
+                "visitor_decline_pct": round((stressed_value - base) / base * 100, 1),
+                "estimated_loss_jpy": int(loss_jpy),
+                "estimated_loss_oku": round(loss_jpy / 1e8, 1),
+                "shocks": s,
+            })
+        worst = min(results, key=lambda x: x["visitor_decline_pct"])
+        return {
+            "month": f"{year}/{month:02d}",
+            "scenarios": results,
+            "worst_case": worst["scenario"],
+            "worst_case_loss_oku": worst["estimated_loss_oku"],
+            "average_loss_oku": round(sum(r["estimated_loss_oku"] for r in results) / len(results), 1),
+        }
+
+    def counterparty_credit_risk(self, counterparty_ratings=None):
+        """カウンターパーティ信用リスク (CVA/PFE/EE)"""
+        if counterparty_ratings is None:
+            counterparty_ratings = {
+                "MUFG": {"rating": "A+", "cds_bp": 35, "exposure_jpy": 800e8, "utilization_pct": 60},
+                "SMBC": {"rating": "A+", "cds_bp": 32, "exposure_jpy": 600e8, "utilization_pct": 45},
+                "MS_JP": {"rating": "A", "cds_bp": 48, "exposure_jpy": 400e8, "utilization_pct": 70},
+                "Citi_JP": {"rating": "A", "cds_bp": 52, "exposure_jpy": 300e8, "utilization_pct": 80},
+            }
+        results = []
+        total_cva = 0
+        for cp_name, cp in counterparty_ratings.items():
+            # CVA = EAD × PD × LGD (simplified)
+            # PD from CDS: CDS bp / (1-recovery 40%) / 10000 / year
+            pd_annual = cp["cds_bp"] / 6000  # CDS spread / LGD / bps
+            pd_tenor = pd_annual * 0.25  # 3M tenor
+            lgd = 0.60  # 40% recovery assumption
+            ead = cp["exposure_jpy"]  # Expected Exposure
+            pfe = ead * 1.65  # 95th percentile future exposure (simplified)
+            cva = ead * pd_tenor * lgd
+            total_cva += cva
+            # WWR (Wrong-Way Risk): 観光業とFXリスクの相関が高い場合
+            wwr_flag = cp["utilization_pct"] > 75
+            results.append({
+                "counterparty": cp_name, "rating": cp["rating"],
+                "cds_bp": cp["cds_bp"],
+                "exposure_jpy": int(ead), "pfe_jpy": int(pfe),
+                "pd_annual_pct": round(pd_annual * 100, 3),
+                "cva_jpy": int(cva), "cva_bp": round(cva / ead * 10000, 1),
+                "utilization_pct": cp["utilization_pct"],
+                "wwr_flag": wwr_flag,
+                "credit_limit_breach": cp["utilization_pct"] > 95,
+            })
+        return {
+            "total_exposure_jpy": int(sum(r["exposure_jpy"] for r in results)),
+            "total_cva_jpy": int(total_cva),
+            "total_cva_oku": round(total_cva / 1e8, 2),
+            "counterparties": results,
+            "portfolio_health": "GOOD" if total_cva / sum(r["exposure_jpy"] for r in results) < 0.01 else "REVIEW",
+        }
+
+    def dynamic_hedge_rebalance(self, current_hedge_ratio, current_effectiveness, recent_fx_change):
+        """動的ヘッジリバランス推奨 (ルールベース)"""
+        adjustments = []
+        new_ratio = current_hedge_ratio
+        # Rule 1: 有効性劣化対応
+        if current_effectiveness < 85:
+            new_ratio = min(current_hedge_ratio + 0.05, 0.70)
+            adjustments.append({
+                "trigger": "効率低下", "old": current_hedge_ratio, "new": new_ratio,
+                "reason": f"有効性{current_effectiveness}% → ヘッジ比率+5%で補正",
+            })
+        elif current_effectiveness > 120:
+            new_ratio = max(current_hedge_ratio - 0.05, 0.30)
+            adjustments.append({
+                "trigger": "過剰ヘッジ", "old": current_hedge_ratio, "new": new_ratio,
+                "reason": f"有効性{current_effectiveness}% → ヘッジ比率-5%で調整",
+            })
+        # Rule 2: 大幅FX変動対応
+        if abs(recent_fx_change) > 0.05:
+            if recent_fx_change < 0:  # 円高
+                new_ratio = min(new_ratio + 0.10, 0.70)
+                adjustments.append({
+                    "trigger": "円高加速", "old": current_hedge_ratio, "new": new_ratio,
+                    "reason": f"為替{recent_fx_change*100:.1f}% → ヘッジ比率+10%で防御",
+                })
+            else:  # 円安
+                new_ratio = max(new_ratio - 0.05, 0.30)
+                adjustments.append({
+                    "trigger": "円安進行", "old": current_hedge_ratio, "new": new_ratio,
+                    "reason": f"為替+{recent_fx_change*100:.1f}% → ヘッジ比率-5%で機会活用",
+                })
+        return {
+            "current_ratio": current_hedge_ratio,
+            "recommended_ratio": round(new_ratio, 2),
+            "change": round(new_ratio - current_hedge_ratio, 2),
+            "rebalance_required": abs(new_ratio - current_hedge_ratio) >= 0.05,
+            "adjustments": adjustments,
+            "within_policy": 0.30 <= new_ratio <= 0.70,
+        }
+
     def detect_discontinuation(self, effectiveness_history, r_squared_history, correlation_sign_history):
         """ヘッジ会計中止条件検出 (IFRS 9 6.5.6)"""
         triggers = []
