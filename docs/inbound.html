@@ -492,6 +492,19 @@ body {
   background: #22c55e;
 }
 .freshness-dot.stale { background: #eab308; }
+
+/* アラートバナー */
+.alert-banner {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.alert-critical { background: rgba(239,68,68,0.15); color: #f87171; border-bottom: 1px solid rgba(239,68,68,0.2); }
+.alert-warning { background: rgba(234,179,8,0.15); color: #facc15; border-bottom: 1px solid rgba(234,179,8,0.2); }
+.alert-info { background: rgba(59,130,246,0.15); color: #93c5fd; border-bottom: 1px solid rgba(59,130,246,0.2); }
 </style>
 </head>
 <body>
@@ -504,6 +517,8 @@ body {
     <span id="clock">--:-- JST</span>
   </span>
 </div>
+
+<div id="risk-alerts" style="display:none;"></div>
 
 <div class="page-content">
   <!-- 全国サマリー -->
@@ -568,14 +583,14 @@ body {
 
 /* 国別データ: base/p10/p90は万人単位 */
 var COUNTRY_DATA = {
-  KR: {code:'KR', name:'韓国', flag:'\uD83C\uDDF0\uD83C\uDDF7', base:84.1, p10:65.5, p90:105.4, risk:'為替・韓国景気'},
-  CN: {code:'CN', name:'中国', flag:'\uD83C\uDDE8\uD83C\uDDF3', base:44.9, p10:34.6, p90:58.2, risk:'日中関係'},
-  TW: {code:'TW', name:'台湾', flag:'\uD83C\uDDF9\uD83C\uDDFC', base:48.9, p10:41.5, p90:57.2, risk:'台湾海峡'},
-  US: {code:'US', name:'米国', flag:'\uD83C\uDDFA\uD83C\uDDF8', base:35.3, p10:27.2, p90:45.1, risk:'米国景気'},
-  HK: {code:'HK', name:'香港', flag:'\uD83C\uDDED\uD83C\uDDF0', base:18.2, p10:12.8, p90:22.5, risk:'日中関係'},
-  TH: {code:'TH', name:'タイ', flag:'\uD83C\uDDF9\uD83C\uDDED', base:14.8, p10:11.5, p90:18.6, risk:'バーツ安'},
-  AU: {code:'AU', name:'豪州', flag:'\uD83C\uDDE6\uD83C\uDDFA', base:7.2, p10:5.5, p90:9.8, risk:'豪ドル・季節'},
-  SG: {code:'SG', name:'シンガポール', flag:'\uD83C\uDDF8\uD83C\uDDEC', base:5.2, p10:4.2, p90:6.5, risk:'アジア景気'},
+  KR: {code:'KR', name:'韓国', flag:'\uD83C\uDDF0\uD83C\uDDF7', base:83.1, p10:61.3, p90:114.4, risk:'為替・韓国景気'},
+  CN: {code:'CN', name:'中国', flag:'\uD83C\uDDE8\uD83C\uDDF3', base:43.5, p10:24.4, p90:84.3, risk:'日中関係'},
+  TW: {code:'TW', name:'台湾', flag:'\uD83C\uDDF9\uD83C\uDDFC', base:48.3, p10:32.2, p90:73.5, risk:'台湾海峡'},
+  US: {code:'US', name:'米国', flag:'\uD83C\uDDFA\uD83C\uDDF8', base:35.0, p10:27.8, p90:44.2, risk:'米国景気'},
+  HK: {code:'HK', name:'香港', flag:'\uD83C\uDDED\uD83C\uDDF0', base:12.2, p10:6.9, p90:22.7, risk:'日中関係'},
+  TH: {code:'TH', name:'タイ', flag:'\uD83C\uDDF9\uD83C\uDDED', base:4.3, p10:2.9, p90:6.9, risk:'バーツ安'},
+  AU: {code:'AU', name:'豪州', flag:'\uD83C\uDDE6\uD83C\uDDFA', base:5.4, p10:4.2, p90:6.5, risk:'豪ドル・季節'},
+  SG: {code:'SG', name:'シンガポール', flag:'\uD83C\uDDF8\uD83C\uDDEC', base:5.2, p10:4.4, p90:6.0, risk:'アジア景気'},
   PH: {code:'PH', name:'フィリピン', flag:'\uD83C\uDDF5\uD83C\uDDED', base:8.5, p10:6.8, p90:10.8, risk:'ペソ安'},
   VN: {code:'VN', name:'ベトナム', flag:'\uD83C\uDDFB\uD83C\uDDF3', base:6.3, p10:4.8, p90:8.2, risk:'ビザ・為替'},
   ID: {code:'ID', name:'インドネシア', flag:'\uD83C\uDDEE\uD83C\uDDE9', base:4.8, p10:3.5, p90:6.5, risk:'ルピア安'},
@@ -648,9 +663,9 @@ var FORECAST_LABELS = [
   '2027/04','2027/05','2027/06','2027/07','2027/08','2027/09',
   '2027/10','2027/11','2027/12'
 ];
-var FORECAST_BASE = [242,268,251,264,272,248,285,262,245,218,205,240,250,275,258,270,280,255,295,270,252];
-var FORECAST_P10 =  [213,232,215,226,233,211,243,223,208,183,171,202,210,232,217,228,237,215,250,228,212];
-var FORECAST_P90 =  [275,308,291,306,316,288,332,305,286,257,243,282,294,322,303,318,328,299,345,316,296];
+var FORECAST_BASE = [243,245,220,273,276,214,280,211,211,204,152,226,247,247,217,272,278,212,286,213,214];
+var FORECAST_P10 =  [196,188,174,218,225,166,214,163,168,163,125,180,196,187,173,220,224,169,215,165,167];
+var FORECAST_P90 =  [323,330,287,349,349,285,389,280,278,259,189,296,313,330,281,343,355,279,387,282,283];
 
 
 /* =============================================================
@@ -1628,6 +1643,68 @@ function renderScenarioCompare() {
 }
 
 /* =============================================================
+   リスクアラートバナー
+   ============================================================= */
+function renderAlerts() {
+  var container = document.getElementById('risk-alerts');
+  if (!container) return;
+  var alerts = [];
+  var keys = Object.keys(COUNTRY_DATA);
+  var i, c, bandPct, yoyGrowth;
+
+  for (i = 0; i < keys.length; i++) {
+    c = COUNTRY_DATA[keys[i]];
+    bandPct = (c.p90 - c.p10) / c.base * 100;
+
+    /* CRITICAL: bandPct > 50% */
+    if (bandPct > 50) {
+      alerts.push({
+        level: 'critical',
+        icon: '\u26A0',
+        msg: '\u9AD8\u30DC\u30E9\u30C6\u30A3\u30EA\u30C6\u30A3\u8B66\u544A: ' + c.name + ' \u2014 \u4E0D\u78BA\u5B9F\u6027\u5E2F\u5E45 ' + bandPct.toFixed(1) + '%'
+      });
+    }
+
+    /* WARNING: CN political risk (bandPct > 45%) */
+    if (keys[i] === 'CN' && bandPct > 45) {
+      alerts.push({
+        level: 'warning',
+        icon: '\u26A0',
+        msg: '\u4E2D\u56FD\u653F\u6CBB\u30EA\u30B9\u30AF: \u65E5\u4E2D\u95A2\u4FC2\u306B\u3088\u308B\u4E0D\u78BA\u5B9F\u6027\u304C\u9AD8\u6C34\u6E96 (' + bandPct.toFixed(1) + '%)'
+      });
+    }
+
+    /* INFO: YoY growth > 15% */
+    if (YOY_DATA && YOY_DATA[keys[i]]) {
+      yoyGrowth = (c.base - YOY_DATA[keys[i]]) / YOY_DATA[keys[i]] * 100;
+      if (yoyGrowth > 15) {
+        alerts.push({
+          level: 'info',
+          icon: '\u2197',
+          msg: '\u6210\u9577\u6A5F\u4F1A: ' + c.name + ' YoY +' + yoyGrowth.toFixed(1) + '% \u2014 \u53D7\u5165\u62E1\u5927\u306E\u597D\u6A5F'
+        });
+      }
+    }
+  }
+
+  if (alerts.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  var html = '';
+  for (i = 0; i < alerts.length; i++) {
+    var a = alerts[i];
+    html += '<div class="alert-banner alert-' + a.level + '">';
+    html += '<span>' + a.icon + '</span>';
+    html += '<span>' + a.msg + '</span>';
+    html += '</div>';
+  }
+  container.innerHTML = html;
+  container.style.display = 'block';
+}
+
+/* =============================================================
    初期化
    ============================================================= */
 function init() {
@@ -1644,6 +1721,7 @@ function init() {
     renderJapanMap();
     renderPrefTable();
     renderStatusBar();
+    renderAlerts();
   } catch(e) { console.error('init:', e); }
 }
 

@@ -361,6 +361,12 @@ body {
     <div id="risk-cards"></div>
   </div>
 
+  <!-- What-If シナリオシミュ��ーター -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">What-If シナリオシミュレーター</div>
+    <div id="whatif-panel"></div>
+  </div>
+
   <!-- 下段全幅: 都道府県配分 -->
   <div class="panel pref-panel">
     <div class="panel-title">都道府県別配分</div>
@@ -844,6 +850,70 @@ function renderRiskCards(profile) {
   } catch(e) { console.error('renderRiskCards:', e); }
 }
 
+function renderWhatIf(profile) {
+  try {
+    var container = document.getElementById('whatif-panel');
+    /* ドライバー変数ごとのスライダーを生成 */
+    var sliders = [
+      {id:'fx', name:'為替変動', min:-30, max:30, step:1, unit:'%', def:0},
+      {id:'gdp', name:'GDP成長', min:-3, max:3, step:0.5, unit:'%pt', def:0},
+      {id:'geo', name:'政治リスク', min:-30, max:15, step:1, unit:'pt', def:0},
+      {id:'flt', name:'フライト供給', min:-20, max:20, step:1, unit:'%', def:0}
+    ];
+    var html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;">';
+    var i;
+    for (i = 0; i < sliders.length; i++) {
+      var s = sliders[i];
+      html += '<div style="display:flex;align-items:center;gap:8px;">';
+      html += '<span style="color:#94a3b8;font-size:11px;width:80px;flex-shrink:0;">' + s.name + '</span>';
+      html += '<input type="range" id="wif_' + s.id + '" min="' + s.min + '" max="' + s.max + '" step="' + s.step + '" value="' + s.def + '" style="flex:1;accent-color:#3b82f6;" oninput="updateWhatIf()">';
+      html += '<span id="wif_v_' + s.id + '" style="color:#e2e8f0;font-family:SF Mono,monospace;font-size:11px;width:55px;text-align:right;">' + s.def + s.unit + '</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '<div style="margin-top:12px;padding:10px;background:rgba(59,130,246,0.08);border-radius:6px;border:1px solid rgba(59,130,246,0.15);">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+    html += '<span style="color:#64748b;font-size:11px;">推定来訪者数:</span>';
+    html += '<span id="wif_result" style="font-family:SF Mono,monospace;font-size:18px;font-weight:700;color:#3b82f6;">' + Math.round(profile.base/10000*10)/10 + '万人/月</span>';
+    html += '</div>';
+    html += '<div id="wif_change" style="text-align:right;font-size:11px;font-family:SF Mono,monospace;color:#64748b;">ベースライン</div>';
+    html += '</div>';
+    container.innerHTML = html;
+  } catch(e) { console.error('renderWhatIf:', e); }
+}
+
+function updateWhatIf() {
+  try {
+    var code = getCountryCode();
+    var profile = COUNTRY_PROFILES[code] || COUNTRY_PROFILES['CN'];
+    var base = profile.base;
+    var fxVal = parseFloat(document.getElementById('wif_fx').value);
+    var gdpVal = parseFloat(document.getElementById('wif_gdp').value);
+    var geoVal = parseFloat(document.getElementById('wif_geo').value);
+    var fltVal = parseFloat(document.getElementById('wif_flt').value);
+
+    document.getElementById('wif_v_fx').textContent = (fxVal>=0?'+':'') + fxVal + '%';
+    document.getElementById('wif_v_gdp').textContent = (gdpVal>=0?'+':'') + gdpVal + '%pt';
+    document.getElementById('wif_v_geo').textContent = (geoVal>=0?'+':'') + geoVal + 'pt';
+    document.getElementById('wif_v_flt').textContent = (fltVal>=0?'+':'') + fltVal + '%';
+
+    /* 簡易感度モデル (MCエンジンの弾性値ベース) */
+    var fxEla = -1.1;
+    var gdpEla = 1.24;
+    var geoCoef = -0.038;
+    var fltEla = 0.60;
+    var logImpact = -fxEla * Math.log(1 + fxVal/100) + gdpEla * Math.log(1 + gdpVal/100) + geoCoef * geoVal + fltEla * Math.log(1 + fltVal/100);
+    var newBase = base * Math.exp(logImpact);
+    var changePct = (newBase - base) / base * 100;
+    var changeSign = changePct >= 0 ? '+' : '';
+    var changeColor = changePct >= 0 ? '#4ade80' : '#f87171';
+
+    document.getElementById('wif_result').textContent = (newBase/10000).toFixed(1) + '万人/月';
+    document.getElementById('wif_result').style.color = changePct >= 0 ? '#3b82f6' : '#ef4444';
+    document.getElementById('wif_change').innerHTML = '<span style="color:' + changeColor + '">' + changeSign + changePct.toFixed(1) + '% (' + changeSign + Math.round((newBase-base)/10000*10)/10 + '万人)</span>';
+  } catch(e) {}
+}
+
 function renderPrefBars(profile) {
   try {
     var container = document.getElementById('pref-bars');
@@ -922,6 +992,7 @@ function init() {
     renderDriverBars(profile);
     renderCalendarChart(profile);
     renderRiskCards(profile);
+    renderWhatIf(profile);
     renderPrefBars(profile);
     renderStatusBar(profile);
   } catch(e) { console.error('init:', e); }
