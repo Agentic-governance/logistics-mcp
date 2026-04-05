@@ -549,6 +549,122 @@ body {
 }
 .collapsible-section.expanded .collapsible-body { display: block; }
 
+/* ===== モバイル最適化 (商用レベル) ===== */
+/* テーブルを横スクロールラッパーで保護 */
+.data-table { min-width: 0; }
+.table-section .data-table,
+.chart-section table.data-table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: nowrap;
+}
+.table-section .data-table thead,
+.table-section .data-table tbody,
+.chart-section table.data-table thead,
+.chart-section table.data-table tbody {
+  display: table;
+  width: 100%;
+  min-width: 640px;
+}
+
+/* タップターゲット 44px以上 (WCAG 2.1 AA/iOS HIG) */
+button, .toolbar-btn, .tab-nav-btn,
+.data-table th[onclick], .collapsible-header {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+.toolbar-btn { padding: 10px 14px; }
+
+/* モバイル専用レイアウト */
+@media (max-width: 640px) {
+  .page-content { padding: 12px 8px 60px; }
+  .tab-nav { padding: 0 8px; }
+  .tab-nav-btn { padding: 14px 12px; font-size: 12px; }
+  .hero-value { font-size: 22px !important; }
+  .hero-card.primary .hero-value { font-size: 28px !important; }
+  .chart-section, .table-section { padding: 14px 12px; }
+  .chart-section-title, .table-section-title { font-size: 12px; }
+  /* タブの強制コンパクト化 */
+  .tab-icon { display: none; }
+}
+
+/* prefers-reduced-motion: アニメーション抑制 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .live-dot { animation: none !important; opacity: 1 !important; }
+}
+
+/* フォーカスインジケータ (a11y) */
+button:focus-visible, a:focus-visible, th[onclick]:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* カード表示モバイル対応 (<=480px) */
+@media (max-width: 480px) {
+  .factors-grid { grid-template-columns: 1fr !important; }
+  .hero-grid { grid-template-columns: 1fr !important; }
+  .national-value { font-size: 24px !important; }
+}
+
+/* 地図凡例 */
+.map-legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(13,17,23,0.6);
+  border-radius: 4px;
+}
+.map-legend-item { display: flex; align-items: center; gap: 4px; }
+.map-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.map-legend-size { display: flex; gap: 3px; align-items: end; }
+.map-legend-size-circle {
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  background: rgba(59,130,246,0.2);
+}
+
+/* 次アクションCTA */
+.cta-bar {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e293b 100%);
+  border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.cta-text { color: #e2e8f0; font-size: 13px; flex: 1; min-width: 200px; }
+.cta-label { font-size: 10px; color: #60a5fa; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.cta-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.cta-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  font-family: inherit;
+}
+.cta-btn:hover { background: #2563eb; }
+.cta-btn.secondary { background: transparent; border: 1px solid rgba(59,130,246,0.5); color: #60a5fa; }
+
 /* ===== エクスポート・ツールバー ===== */
 .toolbar {
   display: flex;
@@ -687,6 +803,18 @@ body {
 <div id="risk-alerts" style="display:none;"></div>
 
 <div class="page-content">
+  <!-- 次アクションCTA (概要タブ固定) -->
+  <div class="cta-bar" id="next-action-cta" data-tab-group="overview">
+    <div class="cta-text">
+      <div class="cta-label">NEXT ACTION — 本日の推奨</div>
+      <div id="cta-message">データを確認中...</div>
+    </div>
+    <div class="cta-buttons">
+      <button class="cta-btn" onclick="switchTab('forecast')">予測を確認 →</button>
+      <button class="cta-btn secondary" onclick="switchTab('operations')">施設シミュ</button>
+    </div>
+  </div>
+
   <!-- 全国サマリー -->
   <div class="national-summary" id="national-summary"></div>
 
@@ -694,6 +822,20 @@ body {
   <div class="chart-section" id="world-map-section">
     <div class="chart-section-title">国別来訪者予測マップ</div>
     <div id="worldMap" style="position:relative; width:100%; height:400px; overflow:hidden;"></div>
+    <div class="map-legend" aria-label="地図凡例">
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:#22c55e;"></span>低リスク(帯幅&lt;30%)</div>
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:#eab308;"></span>中リスク(30-45%)</div>
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:#ef4444;"></span>高リスク(&gt;45%)</div>
+      <div class="map-legend-item">
+        <span>規模:</span>
+        <span class="map-legend-size">
+          <span class="map-legend-size-circle" style="width:8px;height:8px;"></span>
+          <span class="map-legend-size-circle" style="width:14px;height:14px;"></span>
+          <span class="map-legend-size-circle" style="width:22px;height:22px;"></span>
+        </span>
+        <span>小→大(来訪者数)</span>
+      </div>
+    </div>
   </div>
 
   <!-- 下振れ・上振れ要因 -->
@@ -718,6 +860,12 @@ body {
   <div class="chart-section" id="japan-map-section">
     <div class="chart-section-title">都道府県別インバウンド集中度</div>
     <div id="japanMap" style="position:relative; width:100%; height:420px; overflow:hidden;"></div>
+    <div class="map-legend" aria-label="日本地図凡例">
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:#3b82f6;"></span>安定(帯幅&lt;28%)</div>
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:#eab308;"></span>中リスク(28-35%)</div>
+      <div class="map-legend-item"><span class="map-legend-dot" style="background:#ef4444;"></span>高リスク(&gt;35%)</div>
+      <div class="map-legend-item"><span>バブルサイズ=来訪者規模</span></div>
+    </div>
   </div>
 
   <!-- 国別リスクテーブル -->
@@ -1914,6 +2062,7 @@ function renderMainChart() {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: { duration: 400 },
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: {
@@ -4427,6 +4576,30 @@ var TAB_MAP = {
 
 var currentTab = 'overview';
 
+function renderNextActionCTA() {
+  try {
+    var el = document.getElementById('cta-message');
+    if (!el) return;
+    var n = calcNational();
+    var highRiskCountries = 0;
+    var cKeys = Object.keys(COUNTRY_DATA);
+    for (var i = 0; i < cKeys.length; i++) {
+      var cd = COUNTRY_DATA[cKeys[i]];
+      var bw = (cd.p90 - cd.p10) / cd.base * 100;
+      if (bw >= 45) highRiskCountries++;
+    }
+    var msg;
+    if (highRiskCountries >= 2) {
+      msg = '<strong style="color:#ef4444;">⚠ 高ボラ通貨' + highRiskCountries + 'カ国あり</strong> — ヘッジ比率の見直しを推奨。CFOビューでVaR/最適ヘッジ率を確認。';
+    } else if (n.upsidePct > 15) {
+      msg = '<strong style="color:#22c55e;">成長機会</strong> — 上振れ+' + n.upsidePct.toFixed(1) + '%。業務タブで客室追加・人員増強を検討。';
+    } else {
+      msg = 'ベース予測' + n.base.toFixed(1) + '万人/月、帯幅' + n.bandPct.toFixed(1) + '%。通常運用継続。';
+    }
+    el.innerHTML = msg;
+  } catch(e) { console.warn('CTA:', e.message); }
+}
+
 function applyTabClassification() {
   try {
     /* 既存の全てのchart-section, table-section, collapsible, factors-gridにタブ属性を付与 */
@@ -4497,6 +4670,7 @@ function init() {
     renderHFPanel();
     renderStatusBar();
     renderAlerts();
+    renderNextActionCTA();
     applyTabClassification();
   } catch(e) { console.error('init:', e); }
 }
