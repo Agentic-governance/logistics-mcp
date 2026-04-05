@@ -12,7 +12,7 @@ body {
   color: #e2e8f0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   height: 100vh;
-  overflow: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -288,6 +288,39 @@ body {
 
 .up { color: #22c55e; }
 .down { color: #ef4444; }
+
+.csv-export-btn {
+  background: rgba(59,130,246,0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59,130,246,0.3);
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  cursor: pointer;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.csv-export-btn:hover {
+  background: rgba(59,130,246,0.25);
+}
+
+.freshness-indicator {
+  color: #22c55e;
+}
+
+@media (max-width: 768px) {
+  .main-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+  .forecast-panel { grid-column: 1; grid-row: auto; }
+  .driver-panel { grid-column: 1; grid-row: auto; }
+  .calendar-panel { grid-column: 1; grid-row: auto; }
+  .risk-panel { grid-column: 1; grid-row: auto; }
+  .pref-panel { grid-column: 1; grid-row: auto; }
+  .panel { min-height: 300px; }
+}
 </style>
 </head>
 <body>
@@ -301,7 +334,7 @@ body {
 <div class="main-grid">
   <!-- 左上: 予測チャート -->
   <div class="panel forecast-panel">
-    <div class="panel-title">月次来訪者予測</div>
+    <div class="panel-title" style="display:flex;align-items:center;">月次来訪者予測<button class="csv-export-btn" id="csv-export-btn" onclick="exportForecastCSV()">CSV出力</button></div>
     <div class="forecast-stats" id="forecast-stats"></div>
     <div class="chart-wrap">
       <canvas id="forecastChart"></canvas>
@@ -844,9 +877,35 @@ function renderStatusBar(profile) {
       '<span>\u5E2F\u5E45\u4FC2\u6570: ' + (profile.band * 100).toFixed(0) + '%</span>' +
       '<span>\u30D9\u30FC\u30B9: ' + (profile.base / 10000).toFixed(1) + '\u4E07\u4EBA/\u6708</span>' +
       '<span>model: full_mc_29vars</span>' +
-      '<span>N: 3,000</span>';
+      '<span>N: 3,000</span>' +
+      '<span class="freshness-indicator">\u6700\u7D42\u66F4\u65B0: 2026-04-05</span>';
     document.getElementById('status-bar').innerHTML = html;
   } catch(e) {}
+}
+
+/* ===== CSV出力 ===== */
+function exportForecastCSV() {
+  try {
+    var code = getCountryCode();
+    var profile = COUNTRY_PROFILES[code];
+    if (!profile) { profile = COUNTRY_PROFILES['CN']; }
+    var fc = generateForecast(profile);
+    var rows = ['\u5E74\u6708,p10(\u4E07\u4EBA),p50(\u4E07\u4EBA),p90(\u4E07\u4EBA)'];
+    var i;
+    for (i = 0; i < fc.labels.length; i++) {
+      rows.push(fc.labels[i] + ',' + fc.p10[i] + ',' + fc.base[i] + ',' + fc.p90[i]);
+    }
+    var bom = '\uFEFF';
+    var blob = new Blob([bom + rows.join('\n')], {type: 'text/csv;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'forecast_' + (profile.name || code) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) { console.error('exportForecastCSV:', e); }
 }
 
 /* ===== 初期化 ===== */

@@ -93,6 +93,32 @@ class FullMCEngine:
         log_impact += np.random.normal(0, p['idio']/np.sqrt(12), self.n_samples)
         return np.maximum(base * cal * np.exp(log_impact), 0)
 
+    def driver_sensitivity(self, iso2, month=4, year=2026):
+        """変数別の感度分析: 各変数を±1σ動かした時の来訪者変化率"""
+        from .variable_distributions import VAR_NAMES, SPECS
+        p = PARAMS[iso2]
+        base_vars = sample_all_vars(500)
+        base_visitors = np.median(self._compute_country(iso2, month, year, base_vars))
+        results = {}
+        for vi, vname in enumerate(VAR_NAMES):
+            # 関連する変数のみ計算
+            relevant = [p['fx'], p['gdp'], p['geo'], p['flt'], p['cci'], p['stk'], p['clt']]
+            if vname not in relevant:
+                continue
+            sp = SPECS[vname]
+            shocked = base_vars.copy()
+            shocked[:, vi] = sp.mu + sp.sigma  # +1σ
+            up = np.median(self._compute_country(iso2, month, year, shocked))
+            shocked[:, vi] = sp.mu - sp.sigma  # -1σ
+            down = np.median(self._compute_country(iso2, month, year, shocked))
+            results[vname] = {
+                "label": sp.name,
+                "up_pct": round(float((up - base_visitors) / max(base_visitors, 1) * 100), 2),
+                "down_pct": round(float((down - base_visitors) / max(base_visitors, 1) * 100), 2),
+                "total_range_pct": round(float(abs(up - down) / max(base_visitors, 1) * 100), 2),
+            }
+        return {"iso2": iso2, "base_visitors": int(base_visitors), "sensitivities": results}
+
     def run(self, months, source_country="ALL"):
         countries = ALL_COUNTRIES if source_country == "ALL" else [source_country]
         nm = len(months)

@@ -425,6 +425,73 @@ body {
 .status-item { white-space: nowrap; }
 .status-item .status-label { color: #334155; }
 .status-item .status-value { color: #64748b; }
+
+/* ===== エクスポート・ツールバー ===== */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.toolbar-btn {
+  background: rgba(59,130,246,0.1);
+  border: 1px solid rgba(59,130,246,0.2);
+  color: #3b82f6;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  transition: background 0.15s;
+}
+.toolbar-btn:hover { background: rgba(59,130,246,0.2); }
+.toolbar-btn.active {
+  background: rgba(59,130,246,0.25);
+  border-color: #3b82f6;
+}
+
+/* トレンド矢印 */
+.trend-up { color: #4ade80; font-size: 10px; }
+.trend-down { color: #f87171; font-size: 10px; }
+.trend-flat { color: #64748b; font-size: 10px; }
+
+/* YoY */
+.yoy-pos { color: #4ade80; font-family: 'SF Mono', monospace; font-size: 11px; }
+.yoy-neg { color: #f87171; font-family: 'SF Mono', monospace; font-size: 11px; }
+
+/* モバイル強化 */
+@media (max-width: 768px) {
+  .national-value { font-size: 28px; }
+  .chart-stats-row { gap: 16px; }
+  .chart-stat-value { font-size: 14px; }
+  .data-table { font-size: 11px; }
+  .data-table th, .data-table td { padding: 6px 6px; }
+  .factor-var { width: 120px; }
+  .factor-change { width: 70px; }
+  .toolbar-btn { font-size: 10px; padding: 3px 7px; }
+}
+@media (max-width: 480px) {
+  .page-content { padding: 12px 8px 30px; }
+  .national-value { font-size: 24px; }
+  .factors-grid { gap: 8px; }
+  .factor-row { flex-wrap: wrap; }
+}
+
+/* データ鮮度 */
+.freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #64748b;
+  margin-left: 12px;
+}
+.freshness-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+.freshness-dot.stale { background: #eab308; }
 </style>
 </head>
 <body>
@@ -442,8 +509,20 @@ body {
   <!-- 全国サマリー -->
   <div class="national-summary" id="national-summary"></div>
 
+  <!-- 世界地図バブルチャート -->
+  <div class="chart-section">
+    <div class="chart-section-title">国別来訪者予測マップ</div>
+    <div id="worldMap" style="position:relative; width:100%; height:320px; overflow:hidden;"></div>
+  </div>
+
   <!-- 下振れ・上振れ要因 -->
   <div class="factors-grid" id="factors-grid"></div>
+
+  <!-- シナリオ比較 -->
+  <div class="table-section" id="scenario-compare">
+    <div class="table-section-title">シナリオ比較 (2026年度合計)</div>
+    <table class="data-table" id="scenario-table"></table>
+  </div>
 
   <!-- 21ヶ月チャート -->
   <div class="chart-section">
@@ -454,15 +533,28 @@ body {
     </div>
   </div>
 
+  <!-- 日本地図ヒートマップ -->
+  <div class="chart-section">
+    <div class="chart-section-title">都道府県別インバウンド集中度</div>
+    <div id="japanMap" style="position:relative; width:100%; height:300px; overflow:hidden;"></div>
+  </div>
+
   <!-- 国別リスクテーブル -->
   <div class="table-section">
     <div class="table-section-title">国別リスク</div>
+    <div class="toolbar">
+      <button class="toolbar-btn" onclick="exportCountryCSV()">CSV</button>
+      <button class="toolbar-btn unit-toggle" onclick="toggleUnit()">実数表示</button>
+    </div>
     <table class="data-table" id="country-table"></table>
   </div>
 
   <!-- 都道府県別リスクテーブル -->
   <div class="table-section">
     <div class="table-section-title">都道府県別リスク</div>
+    <div class="toolbar">
+      <button class="toolbar-btn" onclick="exportPrefCSV()">CSV</button>
+    </div>
     <table class="data-table" id="pref-table"></table>
   </div>
 </div>
@@ -494,6 +586,16 @@ var COUNTRY_DATA = {
   MY: {code:'MY', name:'マレーシア', flag:'\uD83C\uDDF2\uD83C\uDDFE', base:4.2, p10:3.2, p90:5.5, risk:'リンギット'},
   IN: {code:'IN', name:'インド', flag:'\uD83C\uDDEE\uD83C\uDDF3', base:3.0, p10:2.1, p90:4.2, risk:'ビザ・為替'}
 };
+
+/* 前年同月実績 (2025年4月, 万人) — JNTO速報値ベース */
+var YOY_DATA = {
+  KR: 78.2, CN: 38.5, TW: 44.1, US: 32.0, HK: 16.5,
+  TH: 13.2, AU: 6.1, SG: 4.6, PH: 7.5, VN: 5.4,
+  ID: 4.0, GB: 3.3, FR: 3.0, DE: 2.4, CA: 2.8, MY: 3.6, IN: 2.3
+};
+
+/* 単位モード: 'man'=万人, 'real'=実数 */
+var unitMode = 'man';
 
 /* 都道府県別の国別シェア */
 var PREF_SHARE = {
@@ -587,6 +689,86 @@ function fmtSign(v) {
   } catch(e) { return '-'; }
 }
 
+/* 単位切替 */
+function toggleUnit() {
+  try {
+    unitMode = unitMode === 'man' ? 'real' : 'man';
+    var btns = document.querySelectorAll('.unit-toggle');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].textContent = unitMode === 'man' ? '実数表示' : '万人表示';
+    }
+    renderNationalSummary();
+    renderCountryTable();
+    renderPrefTable();
+    renderChartStats();
+  } catch(e) {}
+}
+
+/* 数値フォーマット（単位モード対応） */
+function fmtUnit(manVal) {
+  try {
+    if (unitMode === 'real') {
+      var real = manVal * 10000;
+      if (real >= 1000000) return (real/10000).toFixed(0) + '万人';
+      return real.toLocaleString('ja-JP') + '人';
+    }
+    if (Math.abs(manVal) >= 100) return Math.round(manVal) + '万人';
+    if (Math.abs(manVal) >= 10) return manVal.toFixed(1) + '万人';
+    return manVal.toFixed(2) + '万人';
+  } catch(e) { return '-'; }
+}
+
+function fmtUnitShort(manVal) {
+  try {
+    if (unitMode === 'real') {
+      var real = manVal * 10000;
+      if (real >= 1000000) return (real/10000).toFixed(0) + '万';
+      return Math.round(real).toLocaleString('ja-JP');
+    }
+    if (Math.abs(manVal) >= 100) return Math.round(manVal) + '万';
+    if (Math.abs(manVal) >= 10) return manVal.toFixed(1) + '万';
+    return manVal.toFixed(2) + '万';
+  } catch(e) { return '-'; }
+}
+
+/* CSVエクスポート */
+function exportCountryCSV() {
+  try {
+    var keys = Object.keys(COUNTRY_DATA);
+    var lines = ['国コード,国名,ベース(万人),p10(万人),p90(万人),下振れ(万人),上振れ(万人),帯幅%,前年比%,主要リスク'];
+    for (var i = 0; i < keys.length; i++) {
+      var c = COUNTRY_DATA[keys[i]];
+      var yoy = YOY_DATA[keys[i]] || 0;
+      var yoyPct = yoy > 0 ? ((c.base - yoy) / yoy * 100).toFixed(1) : '-';
+      lines.push([c.code, c.name, c.base, c.p10, c.p90, (c.base-c.p10).toFixed(1), (c.p90-c.base).toFixed(1), ((c.p90-c.p10)/c.base*100).toFixed(1), yoyPct, c.risk].join(','));
+    }
+    downloadCSV(lines.join('\n'), 'inbound_country_forecast.csv');
+  } catch(e) { console.error('CSV export:', e); }
+}
+
+function exportPrefCSV() {
+  try {
+    var lines = ['都道府県,ベース(万人),p10(万人),p90(万人),下振れ(万人),上振れ(万人),帯幅%'];
+    for (var i = 0; i < PREF_LIST.length; i++) {
+      var p = calcPrefForecast(PREF_LIST[i]);
+      lines.push([p.name, p.base.toFixed(2), p.p10.toFixed(2), p.p90.toFixed(2), p.downside.toFixed(2), p.upside.toFixed(2), p.bandPct.toFixed(1)].join(','));
+    }
+    downloadCSV(lines.join('\n'), 'inbound_pref_forecast.csv');
+  } catch(e) { console.error('CSV export:', e); }
+}
+
+function downloadCSV(csv, filename) {
+  try {
+    var bom = '\uFEFF';
+    var blob = new Blob([bom + csv], {type:'text/csv;charset=utf-8;'});
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch(e) {}
+}
+
 /* 全国合計を計算 */
 function calcNational() {
   try {
@@ -665,16 +847,29 @@ function renderNationalSummary() {
     var downPct = n.downside / totalWidth * 100;
     var upPct = n.upside / totalWidth * 100;
 
+    /* YoY計算 */
+    var yoyTotal = 0;
+    var yoyKeys = Object.keys(YOY_DATA);
+    for (var yi = 0; yi < yoyKeys.length; yi++) { yoyTotal += YOY_DATA[yoyKeys[yi]]; }
+    var yoyPct = yoyTotal > 0 ? ((n.base - yoyTotal) / yoyTotal * 100) : 0;
+    var yoySign = yoyPct >= 0 ? '+' : '';
+    var yoyClass = yoyPct >= 0 ? 'yoy-pos' : 'yoy-neg';
+
     var html = '';
-    html += '<div class="national-headline">全国月次予測 (ベースケース)</div>';
-    html += '<div class="national-value">' + n.base.toFixed(1) + '<span class="unit">万人/月</span></div>';
+    html += '<div class="national-headline">全国月次予測 (ベースケース)';
+    html += '<span class="freshness"><span class="freshness-dot"></span>最終更新: 2026-04-05</span>';
+    html += '</div>';
+    html += '<div class="national-value">' + fmtUnit(n.base).replace(/[万人]/g, function(m){ return m; });
+    html += '<span class="unit"> /月</span>';
+    html += ' <span class="' + yoyClass + '" style="font-size:14px;">(' + yoySign + yoyPct.toFixed(1) + '% YoY)</span>';
+    html += '</div>';
 
     /* 非対称バー */
     html += '<div class="asymmetric-bar-container">';
     html += '<div class="asymmetric-bar-labels">';
-    html += '<span class="bar-label-left">p10: ' + n.p10.toFixed(1) + '万人</span>';
-    html += '<span class="bar-label-center">p50: ' + n.base.toFixed(1) + '万人</span>';
-    html += '<span class="bar-label-right">p90: ' + n.p90.toFixed(1) + '万人</span>';
+    html += '<span class="bar-label-left">p10: ' + fmtUnit(n.p10) + '</span>';
+    html += '<span class="bar-label-center">p50: ' + fmtUnit(n.base) + '</span>';
+    html += '<span class="bar-label-right">p90: ' + fmtUnit(n.p90) + '</span>';
     html += '</div>';
 
     html += '<div class="asymmetric-bar-track">';
@@ -695,6 +890,87 @@ function renderNationalSummary() {
 
     document.getElementById('national-summary').innerHTML = html;
   } catch(e) { console.error('renderNationalSummary:', e); }
+}
+
+
+/* =============================================================
+   世界地図バブルチャート
+   ============================================================= */
+var COUNTRY_COORDS = {
+  KR: {lat:37.5,lon:127.0}, CN: {lat:35.9,lon:104.2}, TW: {lat:23.7,lon:120.9},
+  US: {lat:38.0,lon:-97.0}, HK: {lat:22.3,lon:114.2}, TH: {lat:15.9,lon:100.5},
+  AU: {lat:-25.3,lon:133.8}, SG: {lat:1.35,lon:103.8}, PH: {lat:12.9,lon:121.8},
+  VN: {lat:14.1,lon:108.3}, ID: {lat:-0.8,lon:113.9}, GB: {lat:51.5,lon:-0.1},
+  FR: {lat:46.2,lon:2.2}, DE: {lat:51.2,lon:10.4}, CA: {lat:56.1,lon:-106.3},
+  MY: {lat:4.2,lon:101.9}, IN: {lat:20.6,lon:78.9}
+};
+/* 日本の座標(矢印の終点) */
+var JP_COORDS = {lat:36.2, lon:138.3};
+
+function renderWorldMap() {
+  try {
+    var container = document.getElementById('worldMap');
+    var W = container.offsetWidth;
+    var H = container.offsetHeight;
+    if (W < 50 || H < 50) return;
+
+    /* 簡易メルカトル変換 */
+    function toXY(lat, lon) {
+      var x = (lon + 180) / 360 * W;
+      var y = (1 - (Math.log(Math.tan(Math.PI/4 + lat * Math.PI/360)) / Math.PI)) / 2 * H;
+      return {x: x, y: y};
+    }
+
+    /* 日本の位置 */
+    var jpXY = toXY(JP_COORDS.lat, JP_COORDS.lon);
+
+    /* 全国ベース合計で最大バブルサイズ算出 */
+    var maxBase = 0;
+    var cKeys = Object.keys(COUNTRY_DATA);
+    var i;
+    for (i = 0; i < cKeys.length; i++) {
+      if (COUNTRY_DATA[cKeys[i]].base > maxBase) maxBase = COUNTRY_DATA[cKeys[i]].base;
+    }
+
+    var svg = '<svg width="' + W + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">';
+    /* 背景グリッド */
+    svg += '<rect width="' + W + '" height="' + H + '" fill="#080810" rx="6"/>';
+    var gx, gy;
+    for (gx = 0; gx < W; gx += W/12) {
+      svg += '<line x1="' + gx + '" y1="0" x2="' + gx + '" y2="' + H + '" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>';
+    }
+    for (gy = 0; gy < H; gy += H/6) {
+      svg += '<line x1="0" y1="' + gy + '" x2="' + W + '" y2="' + gy + '" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>';
+    }
+
+    /* 日本マーカー */
+    svg += '<circle cx="' + jpXY.x + '" cy="' + jpXY.y + '" r="5" fill="#ef4444" opacity="0.9"/>';
+    svg += '<text x="' + (jpXY.x+8) + '" y="' + (jpXY.y+4) + '" fill="#ef4444" font-size="10" font-family="SF Mono,monospace">JP</text>';
+
+    /* 各国バブル + 接続線 */
+    for (i = 0; i < cKeys.length; i++) {
+      var cc = cKeys[i];
+      var cd = COUNTRY_DATA[cc];
+      var coords = COUNTRY_COORDS[cc];
+      if (!coords) continue;
+
+      var pt = toXY(coords.lat, coords.lon);
+      var r = Math.max(6, Math.sqrt(cd.base / maxBase) * 28);
+      var bandPct = (cd.p90 - cd.p10) / cd.base * 100;
+      var color = bandPct >= 45 ? '#ef4444' : (bandPct >= 30 ? '#eab308' : '#22c55e');
+
+      /* 接続線 */
+      svg += '<line x1="' + pt.x + '" y1="' + pt.y + '" x2="' + jpXY.x + '" y2="' + jpXY.y + '" stroke="' + color + '" stroke-width="0.5" opacity="0.25"/>';
+      /* バブル */
+      svg += '<circle cx="' + pt.x + '" cy="' + pt.y + '" r="' + r + '" fill="' + color + '" opacity="0.25" stroke="' + color + '" stroke-width="1" stroke-opacity="0.5"/>';
+      /* ラベル */
+      svg += '<text x="' + pt.x + '" y="' + (pt.y - r - 3) + '" fill="#e2e8f0" font-size="9" font-family="SF Mono,monospace" text-anchor="middle">' + cd.flag + ' ' + cd.name + '</text>';
+      svg += '<text x="' + pt.x + '" y="' + (pt.y + 3) + '" fill="#ffffff" font-size="10" font-weight="600" font-family="SF Mono,monospace" text-anchor="middle">' + cd.base.toFixed(1) + '</text>';
+    }
+
+    svg += '</svg>';
+    container.innerHTML = svg;
+  } catch(e) { console.error('renderWorldMap:', e); }
 }
 
 
@@ -770,9 +1046,9 @@ function renderChartStats() {
     var bandWidth = ((curP90 - curP10) / curBase * 100).toFixed(1);
 
     var html = '';
-    html += '<div class="chart-stat"><span class="chart-stat-label">今月ベース</span><span class="chart-stat-value base-val">' + curBase + '万人</span></div>';
-    html += '<div class="chart-stat"><span class="chart-stat-label">悲観 (p10)</span><span class="chart-stat-value pessimistic-val">' + curP10 + '万人</span></div>';
-    html += '<div class="chart-stat"><span class="chart-stat-label">楽観 (p90)</span><span class="chart-stat-value optimistic-val">' + curP90 + '万人</span></div>';
+    html += '<div class="chart-stat"><span class="chart-stat-label">今月ベース</span><span class="chart-stat-value base-val">' + fmtUnit(curBase) + '</span></div>';
+    html += '<div class="chart-stat"><span class="chart-stat-label">悲観 (p10)</span><span class="chart-stat-value pessimistic-val">' + fmtUnit(curP10) + '</span></div>';
+    html += '<div class="chart-stat"><span class="chart-stat-label">楽観 (p90)</span><span class="chart-stat-value optimistic-val">' + fmtUnit(curP90) + '</span></div>';
     html += '<div class="chart-stat"><span class="chart-stat-label">帯幅</span><span class="chart-stat-value band-val">' + bandWidth + '%</span></div>';
     document.getElementById('chart-stats').innerHTML = html;
   } catch(e) { console.error('renderChartStats:', e); }
@@ -907,6 +1183,92 @@ function renderMainChart() {
 
 
 /* =============================================================
+   日本地図ヒートマップ
+   ============================================================= */
+var PREF_COORDS = {
+  '北海道':{lat:43.06,lon:141.35},'東京':{lat:35.68,lon:139.69},'大阪':{lat:34.69,lon:135.50},
+  '京都':{lat:35.01,lon:135.77},'福岡':{lat:33.59,lon:130.40},'沖縄':{lat:26.34,lon:127.80},
+  '千葉':{lat:35.60,lon:140.12},'愛知':{lat:35.18,lon:136.91},'神奈川':{lat:35.45,lon:139.64},
+  '広島':{lat:34.40,lon:132.46},'長崎':{lat:32.74,lon:129.87},'熊本':{lat:32.79,lon:130.74}
+};
+
+function renderJapanMap() {
+  try {
+    var container = document.getElementById('japanMap');
+    var W = container.offsetWidth;
+    var H = container.offsetHeight;
+    if (W < 50 || H < 50) return;
+
+    /* 日本の範囲 */
+    var minLat = 25.0, maxLat = 46.0;
+    var minLon = 127.0, maxLon = 146.0;
+
+    function toXY(lat, lon) {
+      var x = (lon - minLon) / (maxLon - minLon) * W * 0.85 + W * 0.08;
+      var y = (1 - (lat - minLat) / (maxLat - minLat)) * H * 0.85 + H * 0.08;
+      return {x: x, y: y};
+    }
+
+    /* 都道府県別の予測データ */
+    var prefData = [];
+    var maxBase = 0;
+    var pi;
+    for (pi = 0; pi < PREF_LIST.length; pi++) {
+      var pf = calcPrefForecast(PREF_LIST[pi]);
+      prefData.push(pf);
+      if (pf.base > maxBase) maxBase = pf.base;
+    }
+
+    var svg = '<svg width="' + W + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">';
+    svg += '<rect width="' + W + '" height="' + H + '" fill="#080810" rx="6"/>';
+
+    /* 日本列島の簡略アウトライン（ポリライン） */
+    var outline = [
+      {lat:45.5,lon:141.9},{lat:43.4,lon:145.5},{lat:42.0,lon:145.0},{lat:41.4,lon:141.0},
+      {lat:40.5,lon:139.9},{lat:39.7,lon:140.1},{lat:38.3,lon:139.5},{lat:37.9,lon:139.0},
+      {lat:37.0,lon:137.0},{lat:36.8,lon:137.2},{lat:36.2,lon:136.6},{lat:35.5,lon:135.2},
+      {lat:35.7,lon:136.0},{lat:35.0,lon:135.8},{lat:34.7,lon:135.4},{lat:34.3,lon:134.1},
+      {lat:33.8,lon:132.8},{lat:33.3,lon:132.0},{lat:33.0,lon:131.4},{lat:32.7,lon:131.0},
+      {lat:31.4,lon:131.3},{lat:33.2,lon:129.7},{lat:33.9,lon:130.9},{lat:34.4,lon:131.0},
+      {lat:35.4,lon:133.0},{lat:35.7,lon:134.2},{lat:35.5,lon:135.5},{lat:36.1,lon:136.2},
+      {lat:36.6,lon:136.8},{lat:37.0,lon:137.0},{lat:37.5,lon:138.5},{lat:38.9,lon:139.9},
+      {lat:40.0,lon:140.0},{lat:41.0,lon:140.5},{lat:41.5,lon:141.0}
+    ];
+    var pts = '';
+    for (pi = 0; pi < outline.length; pi++) {
+      var op = toXY(outline[pi].lat, outline[pi].lon);
+      pts += op.x.toFixed(0) + ',' + op.y.toFixed(0) + ' ';
+    }
+    svg += '<polyline points="' + pts + '" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>';
+
+    /* 沖縄アウトライン */
+    var okPt = toXY(26.5, 127.8);
+    svg += '<circle cx="' + okPt.x + '" cy="' + okPt.y + '" r="8" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>';
+
+    /* 都道府県バブル */
+    for (pi = 0; pi < prefData.length; pi++) {
+      var pd = prefData[pi];
+      var coords = PREF_COORDS[pd.name];
+      if (!coords) continue;
+      var pt = toXY(coords.lat, coords.lon);
+      var r = Math.max(8, Math.sqrt(pd.base / maxBase) * 32);
+
+      /* 帯幅でリスク色 */
+      var riskColor = pd.bandPct >= 35 ? '#ef4444' : (pd.bandPct >= 28 ? '#eab308' : '#3b82f6');
+      var intensity = Math.min(0.6, pd.base / maxBase * 0.8 + 0.15);
+
+      svg += '<circle cx="' + pt.x + '" cy="' + pt.y + '" r="' + r + '" fill="' + riskColor + '" opacity="' + intensity.toFixed(2) + '" stroke="' + riskColor + '" stroke-width="1" stroke-opacity="0.4"/>';
+      svg += '<text x="' + pt.x + '" y="' + (pt.y + 3) + '" fill="#ffffff" font-size="9" font-weight="600" font-family="SF Mono,monospace" text-anchor="middle">' + fmtUnitShort(pd.base) + '</text>';
+      svg += '<text x="' + pt.x + '" y="' + (pt.y - r - 2) + '" fill="#94a3b8" font-size="8" font-family="sans-serif" text-anchor="middle">' + pd.name + '</text>';
+    }
+
+    svg += '</svg>';
+    container.innerHTML = svg;
+  } catch(e) { console.error('renderJapanMap:', e); }
+}
+
+
+/* =============================================================
    ソート可能テーブル: 国別
    ============================================================= */
 var countrySortKey = 'base';
@@ -930,11 +1292,14 @@ function renderCountryTable() {
     var rows = [];
     for (var i = 0; i < keys.length; i++) {
       var c = COUNTRY_DATA[keys[i]];
+      var yoy = YOY_DATA[keys[i]] || 0;
+      var yoyPct = yoy > 0 ? ((c.base - yoy) / yoy * 100) : 0;
       rows.push({
         code: c.code,
         name: c.name,
         flag: c.flag,
         base: c.base,
+        yoyPct: yoyPct,
         downside: c.base - c.p10,
         upside: c.p90 - c.base,
         bandPct: (c.p90 - c.p10) / c.base * 100,
@@ -956,6 +1321,7 @@ function renderCountryTable() {
     var thCols = [
       {key:'name', label:'国'},
       {key:'base', label:'ベース'},
+      {key:'yoyPct', label:'前年比'},
       {key:'downside', label:'下振れ'},
       {key:'upside', label:'上振れ'},
       {key:'bandPct', label:'帯幅%'},
@@ -990,11 +1356,17 @@ function renderCountryTable() {
       var downW = maxBand > 0 ? (row.downside / maxBand * 60).toFixed(0) : 0;
       var upW = maxBand > 0 ? (row.upside / maxBand * 60).toFixed(0) : 0;
 
+      /* YoY表示 */
+      var yoySign = row.yoyPct >= 0 ? '+' : '';
+      var yoyClass = row.yoyPct >= 0 ? 'yoy-pos' : 'yoy-neg';
+      var trendIcon = row.yoyPct > 3 ? '<span class="trend-up">&#9650;</span>' : (row.yoyPct < -3 ? '<span class="trend-down">&#9660;</span>' : '<span class="trend-flat">&#9654;</span>');
+
       html += '<tr>';
       html += '<td class="td-name"><a href="inbound-detail.html?country=' + row.code + '">' + row.flag + ' ' + row.name + '</a></td>';
-      html += '<td class="td-mono">' + row.base.toFixed(1) + '万</td>';
-      html += '<td class="td-mono td-neg">-' + row.downside.toFixed(1) + '万</td>';
-      html += '<td class="td-mono td-pos">+' + row.upside.toFixed(1) + '万</td>';
+      html += '<td class="td-mono">' + fmtUnitShort(row.base) + '</td>';
+      html += '<td class="' + yoyClass + '">' + trendIcon + ' ' + yoySign + row.yoyPct.toFixed(1) + '%</td>';
+      html += '<td class="td-mono td-neg">-' + fmtUnitShort(row.downside) + '</td>';
+      html += '<td class="td-mono td-pos">+' + fmtUnitShort(row.upside) + '</td>';
       html += '<td class="td-mono"><span class="td-risk-tag ' + riskClass + '">' + row.bandPct.toFixed(1) + '%</span></td>';
       html += '<td><div class="mini-asym-bar">';
       html += '<div class="mini-bar-down" style="width:' + downW + 'px"></div>';
@@ -1083,9 +1455,9 @@ function renderPrefTable() {
 
       html += '<tr>';
       html += '<td class="td-name">' + row.name + '</td>';
-      html += '<td class="td-mono">' + row.base.toFixed(1) + '万</td>';
-      html += '<td class="td-mono td-neg">-' + row.downside.toFixed(1) + '万</td>';
-      html += '<td class="td-mono td-pos">+' + row.upside.toFixed(1) + '万</td>';
+      html += '<td class="td-mono">' + fmtUnitShort(row.base) + '</td>';
+      html += '<td class="td-mono td-neg">-' + fmtUnitShort(row.downside) + '</td>';
+      html += '<td class="td-mono td-pos">+' + fmtUnitShort(row.upside) + '</td>';
       html += '<td class="td-mono"><span class="td-risk-tag ' + riskClass + '">' + row.bandPct.toFixed(1) + '%</span></td>';
       html += '<td><div class="mini-asym-bar">';
       html += '<div class="mini-bar-down" style="width:' + downW + 'px"></div>';
@@ -1152,12 +1524,108 @@ function loadFromAPI() {
             }
             mainChartInstance.update();
           }
+          /* YoY実績データをAPIから上書き */
+          var yoyActuals = d.yoy_actuals || {};
+          var yoyKeys = Object.keys(yoyActuals);
+          for (var yi = 0; yi < yoyKeys.length; yi++) {
+            var yc = yoyKeys[yi];
+            if (YOY_DATA[yc] !== undefined) {
+              YOY_DATA[yc] = yoyActuals[yc] / 10000;  /* 実数→万人 */
+            }
+          }
+
+          /* by_countryデータで国別予測を更新 */
+          var byC = d.by_country || {};
+          var bcKeys = Object.keys(byC);
+          for (var bi = 0; bi < bcKeys.length; bi++) {
+            var bc = bcKeys[bi];
+            if (COUNTRY_DATA[bc]) {
+              var cd = byC[bc];
+              if (cd.median && cd.median[0]) COUNTRY_DATA[bc].base = Math.round(cd.median[0] / 10000 * 10) / 10;
+              if (cd.p10 && cd.p10[0]) COUNTRY_DATA[bc].p10 = Math.round(cd.p10[0] / 10000 * 10) / 10;
+              if (cd.p90 && cd.p90[0]) COUNTRY_DATA[bc].p90 = Math.round(cd.p90[0] / 10000 * 10) / 10;
+            }
+          }
+
+          /* テーブル再描画 */
+          renderNationalSummary();
+          renderCountryTable();
+          renderPrefTable();
+          renderChartStats();
+
         } catch(e) { console.warn('APIデータ処理:', e.message); }
       })
       .catch(function(e) { console.warn('API:', e.message); });
   } catch(e) { console.warn('API接続:', e.message); }
 }
 
+
+/* =============================================================
+   シナリオ比較テーブル
+   ============================================================= */
+function renderScenarioCompare() {
+  var tbl = document.getElementById('scenario-table');
+  if (!tbl) return;
+
+  var sumBase = 0, sumP10 = 0, sumP90 = 0;
+  var i;
+  for (i = 0; i < FORECAST_BASE.length; i++) {
+    sumBase += FORECAST_BASE[i];
+    sumP10  += FORECAST_P10[i];
+    sumP90  += FORECAST_P90[i];
+  }
+
+  var downside = sumBase - sumP10;
+  var upside   = sumP90 - sumBase;
+  var ratio    = downside > 0 ? (upside / downside) : 0;
+
+  function fmt(n) {
+    return n.toLocaleString('ja-JP');
+  }
+
+  var html = '<thead><tr>'
+    + '<th style="width:34%"></th>'
+    + '<th style="width:22%;text-align:right">悲観 (p10)</th>'
+    + '<th style="width:22%;text-align:right">ベース (p50)</th>'
+    + '<th style="width:22%;text-align:right">楽観 (p90)</th>'
+    + '</tr></thead><tbody>';
+
+  /* 来訪者数 */
+  html += '<tr>'
+    + '<td style="color:#94a3b8;font-weight:600">来訪者数 (万人)</td>'
+    + '<td style="text-align:right;color:#f87171;font-family:monospace">' + fmt(sumP10) + '</td>'
+    + '<td style="text-align:right;color:#3b82f6;font-family:monospace;font-weight:700">' + fmt(sumBase) + '</td>'
+    + '<td style="text-align:right;color:#22c55e;font-family:monospace">' + fmt(sumP90) + '</td>'
+    + '</tr>';
+
+  /* 下振れ幅 */
+  html += '<tr>'
+    + '<td style="color:#94a3b8;font-weight:600">下振れ幅</td>'
+    + '<td style="text-align:right;color:#f87171;font-family:monospace">-' + fmt(downside) + '</td>'
+    + '<td style="text-align:right;color:#64748b">&mdash;</td>'
+    + '<td style="text-align:right;color:#64748b">&mdash;</td>'
+    + '</tr>';
+
+  /* 上振れ幅 */
+  html += '<tr>'
+    + '<td style="color:#94a3b8;font-weight:600">上振れ幅</td>'
+    + '<td style="text-align:right;color:#64748b">&mdash;</td>'
+    + '<td style="text-align:right;color:#64748b">&mdash;</td>'
+    + '<td style="text-align:right;color:#22c55e;font-family:monospace">+' + fmt(upside) + '</td>'
+    + '</tr>';
+
+  /* 非対称比 */
+  html += '<tr>'
+    + '<td style="color:#94a3b8;font-weight:600">非対称比 (上振れ/下振れ)</td>'
+    + '<td style="text-align:right;color:#64748b">&mdash;</td>'
+    + '<td colspan="2" style="text-align:center;color:#e2e8f0;font-family:monospace;font-weight:700">'
+    + ratio.toFixed(2) + 'x'
+    + '</td>'
+    + '</tr>';
+
+  html += '</tbody>';
+  tbl.innerHTML = html;
+}
 
 /* =============================================================
    初期化
@@ -1167,10 +1635,13 @@ function init() {
     updateClock();
     setInterval(updateClock, 1000);
     renderNationalSummary();
+    renderWorldMap();
     renderFactors();
+    renderScenarioCompare();
     renderChartStats();
     renderMainChart();
     renderCountryTable();
+    renderJapanMap();
     renderPrefTable();
     renderStatusBar();
   } catch(e) { console.error('init:', e); }

@@ -201,6 +201,27 @@ def get_market_risk(
         raise HTTPException(status_code=500, detail="リスク評価中に内部エラーが発生しました")
 
 
+@router.get("/driver-sensitivity")
+async def get_driver_sensitivity(
+    source_country: str = Query(default="CN", description="国コード"),
+):
+    """変数別感度分析: 各ドライバー変数を±1σ動かした時の来訪者数への影響"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, lambda: _full_mc_engine.driver_sensitivity(source_country)
+        )
+        return {"status": "ok", **result}
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"未対応の国コード: {source_country}")
+    except Exception as e:
+        logger.error("driver-sensitivity エラー: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/market-ranking")
 async def get_market_ranking(
     top_n: int = Query(default=20, ge=1, le=50, description="評価市場数"),
@@ -1132,6 +1153,30 @@ async def get_three_scenarios(
             mc_result = await loop.run_in_executor(
                 None, lambda: _full_mc_engine.run(months, source_country)
             )
+            # YoY計算（前年同月DBから取得）
+            yoy_data = {}
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data/tourism_stats.db')
+                for row in conn.execute(
+                    "SELECT source_country, SUM(arrivals) as total FROM japan_inbound "
+                    "WHERE year=2025 AND month=4 GROUP BY source_country"
+                ).fetchall():
+                    yoy_data[row[0]] = row[1]
+                conn.close()
+            except Exception:
+                pass
+
+            # ドライバー変数の影響度
+            from features.tourism.variable_distributions import SPECS
+            driver_info = {}
+            for vname, spec in SPECS.items():
+                driver_info[vname] = {
+                    "label": spec.name,
+                    "sigma": spec.sigma,
+                    "range": [spec.lo, spec.hi],
+                }
+
             return {
                 "status": "ok",
                 "model": "full_mc_29vars",
@@ -1146,6 +1191,8 @@ async def get_three_scenarios(
                 },
                 "by_country": mc_result.get("by_country", {}),
                 "country_impacts": mc_result.get("by_country", {}),
+                "yoy_actuals": yoy_data,
+                "driver_variables": driver_info,
                 "asymmetry_by_month": mc_result.get("asymmetry_by_month", []),
                 "uncertainty_by_month": mc_result.get("uncertainty_by_month", []),
                 "model_note": f"29変数相関行列, N={_full_mc_engine.n_samples}",
