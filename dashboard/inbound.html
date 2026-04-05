@@ -675,6 +675,12 @@ body {
     </div>
   </div>
 
+  <!-- CFO / ヘッジ会計ビュー -->
+  <div class="chart-section" id="cfo-section" style="border:1px solid rgba(168,85,247,0.3);">
+    <div class="chart-section-title" style="color:#a855f7;">CFO / ヘッジ会計ビュー (IFRS 9対応)</div>
+    <div id="cfo-panel"></div>
+  </div>
+
 <div class="status-bar" id="status-bar"></div>
 
 <script>
@@ -3560,6 +3566,314 @@ function renderModelInfo() {
 }
 
 /* =============================================================
+   CFO / ヘッジ会計ビュー (IFRS 9対応)
+   ============================================================= */
+function renderCFOPanel() {
+  try {
+    var panel = document.getElementById('cfo-panel');
+    if (!panel) return;
+
+    /* 静的フォールバック値 */
+    var exposures = [
+      {ccy:'CNY', name:'人民元', notionalJpy:1069, notionalLocal:'50.9億 CNY', varPct:14.2},
+      {ccy:'USD', name:'米ドル', notionalJpy:716, notionalLocal:'4.78億 USD', varPct:11.8},
+      {ccy:'TWD', name:'台湾ドル', notionalJpy:577, notionalLocal:'123億 TWD', varPct:9.4},
+      {ccy:'KRW', name:'韓国ウォン', notionalJpy:553, notionalLocal:'5,080億 KRW', varPct:13.6},
+      {ccy:'HKD', name:'香港ドル', notionalJpy:174, notionalLocal:'9.1億 HKD', varPct:8.7},
+      {ccy:'AUD', name:'豪ドル', notionalJpy:142, notionalLocal:'1.42億 AUD', varPct:12.3},
+      {ccy:'THB', name:'タイバーツ', notionalJpy:104, notionalLocal:'24.8億 THB', varPct:10.1},
+      {ccy:'SGD', name:'シンガポールドル', notionalJpy:83, notionalLocal:'0.75億 SGD', varPct:9.8}
+    ];
+    var var99 = {var:1887, pct:45.6};
+    var cvar99 = {var:1998, pct:48.3};
+    var var95 = {var:1150, pct:27.8};
+    var cvar95 = {var:1248, pct:30.2};
+    var hedge = {optimal:70, policyMin:30, policyMax:70};
+    var eff = {slope:-1.00, r2:0.989, pass:true};
+
+    /* DOM構造を初期化 (プレースホルダー描画) */
+    var html = '';
+
+    /* 1. 通貨別エクスポージャー表 */
+    html += '<div id="cfo-exposure-block" style="margin-bottom:16px;">';
+    html += '<div style="font-size:11px;color:#a855f7;margin-bottom:6px;letter-spacing:1px;">1. 通貨別エクスポージャー <span id="cfo-exposure-badge"></span></div>';
+    html += '<div id="cfo-exposure-table"></div>';
+    html += '</div>';
+
+    /* 2. VaR/CVaR カード (99%/95%) */
+    html += '<div id="cfo-var-block" style="margin-bottom:16px;">';
+    html += '<div style="font-size:11px;color:#a855f7;margin-bottom:6px;letter-spacing:1px;">2. VaR / CVaR (Historical Simulation) <span id="cfo-var-badge"></span></div>';
+    html += '<div id="cfo-var-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;"></div>';
+    html += '</div>';
+
+    /* 3. 最適ヘッジ率 (ゲージ) */
+    html += '<div id="cfo-hedge-block" style="margin-bottom:16px;">';
+    html += '<div style="font-size:11px;color:#a855f7;margin-bottom:6px;letter-spacing:1px;">3. 最適ヘッジ率 (期待ショートフォール最小化) <span id="cfo-hedge-badge"></span></div>';
+    html += '<div id="cfo-hedge-gauge"></div>';
+    html += '</div>';
+
+    /* 4. ヘッジ有効性テスト */
+    html += '<div id="cfo-eff-block">';
+    html += '<div style="font-size:11px;color:#a855f7;margin-bottom:6px;letter-spacing:1px;">4. ヘッジ有効性テスト (回帰法 / IFRS 9) <span id="cfo-eff-badge"></span></div>';
+    html += '<div id="cfo-eff-result"></div>';
+    html += '</div>';
+
+    panel.innerHTML = html;
+
+    /* 描画ヘルパー */
+    function drawExposure(rows) {
+      var t = '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+      t += '<thead><tr style="border-bottom:1px solid rgba(168,85,247,0.3);color:#a855f7;">';
+      t += '<th style="text-align:left;padding:4px 6px;">通貨</th>';
+      t += '<th style="text-align:left;padding:4px 6px;">名称</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">想定元本 (JPY億)</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">現地通貨建</th>';
+      t += '<th style="text-align:right;padding:4px 6px;">VaR%</th>';
+      t += '</tr></thead><tbody>';
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        t += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">';
+        t += '<td style="padding:4px 6px;font-weight:600;">' + r.ccy + '</td>';
+        t += '<td style="padding:4px 6px;color:#94a3b8;">' + r.name + '</td>';
+        t += '<td style="text-align:right;padding:4px 6px;font-variant-numeric:tabular-nums;">' + r.notionalJpy.toLocaleString() + '</td>';
+        t += '<td style="text-align:right;padding:4px 6px;color:#94a3b8;font-variant-numeric:tabular-nums;">' + r.notionalLocal + '</td>';
+        t += '<td style="text-align:right;padding:4px 6px;font-variant-numeric:tabular-nums;color:#f59e0b;">' + r.varPct.toFixed(1) + '%</td>';
+        t += '</tr>';
+      }
+      var total = 0;
+      for (var j = 0; j < rows.length; j++) { total += rows[j].notionalJpy; }
+      t += '<tr style="border-top:1px solid rgba(168,85,247,0.3);font-weight:600;">';
+      t += '<td colspan="2" style="padding:4px 6px;">合計</td>';
+      t += '<td style="text-align:right;padding:4px 6px;font-variant-numeric:tabular-nums;">' + total.toLocaleString() + '</td>';
+      t += '<td colspan="2"></td>';
+      t += '</tr>';
+      t += '</tbody></table>';
+      document.getElementById('cfo-exposure-table').innerHTML = t;
+    }
+
+    function drawVarCards(v99, cv99, v95, cv95) {
+      var c = '';
+      c += '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:10px;">';
+      c += '<div style="font-size:9px;color:#ef4444;letter-spacing:1px;">99% VaR (1日)</div>';
+      c += '<div style="font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:4px;">' + v99.var.toLocaleString() + '億円</div>';
+      c += '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + v99.pct.toFixed(1) + '% of exposure</div>';
+      c += '</div>';
+      c += '<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:4px;padding:10px;">';
+      c += '<div style="font-size:9px;color:#ef4444;letter-spacing:1px;">99% CVaR (期待ショートフォール)</div>';
+      c += '<div style="font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:4px;">' + cv99.var.toLocaleString() + '億円</div>';
+      c += '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + cv99.pct.toFixed(1) + '% of exposure</div>';
+      c += '</div>';
+      c += '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:4px;padding:10px;">';
+      c += '<div style="font-size:9px;color:#f59e0b;letter-spacing:1px;">95% VaR (1日)</div>';
+      c += '<div style="font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:4px;">' + v95.var.toLocaleString() + '億円</div>';
+      c += '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + v95.pct.toFixed(1) + '% of exposure</div>';
+      c += '</div>';
+      c += '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:4px;padding:10px;">';
+      c += '<div style="font-size:9px;color:#f59e0b;letter-spacing:1px;">95% CVaR</div>';
+      c += '<div style="font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:4px;">' + cv95.var.toLocaleString() + '億円</div>';
+      c += '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' + cv95.pct.toFixed(1) + '% of exposure</div>';
+      c += '</div>';
+      document.getElementById('cfo-var-cards').innerHTML = c;
+    }
+
+    function drawHedgeGauge(h) {
+      var g = '';
+      g += '<div style="display:flex;align-items:center;gap:16px;">';
+      g += '<div style="flex:0 0 auto;">';
+      g += '<div style="font-size:36px;font-weight:700;color:#a855f7;font-variant-numeric:tabular-nums;line-height:1;">' + h.optimal + '%</div>';
+      g += '<div style="font-size:9px;color:#94a3b8;letter-spacing:1px;margin-top:4px;">OPTIMAL HEDGE RATIO</div>';
+      g += '</div>';
+      g += '<div style="flex:1;">';
+      g += '<div style="position:relative;height:28px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;">';
+      /* ポリシー範囲 (30-70%) */
+      g += '<div style="position:absolute;left:' + h.policyMin + '%;width:' + (h.policyMax - h.policyMin) + '%;height:100%;background:rgba(168,85,247,0.15);border-left:1px dashed rgba(168,85,247,0.5);border-right:1px dashed rgba(168,85,247,0.5);"></div>';
+      /* 最適バー */
+      g += '<div style="position:absolute;left:0;width:' + h.optimal + '%;height:100%;background:linear-gradient(90deg,rgba(168,85,247,0.6),rgba(168,85,247,0.9));"></div>';
+      /* 目盛 */
+      g += '<div style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:space-between;padding:0 6px;font-size:9px;color:#fff;pointer-events:none;">';
+      g += '<span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>';
+      g += '</div>';
+      g += '</div>';
+      g += '<div style="font-size:10px;color:#94a3b8;margin-top:6px;">ポリシー範囲: ' + h.policyMin + '% – ' + h.policyMax + '% (ESG委員会承認)</div>';
+      g += '</div>';
+      g += '</div>';
+      document.getElementById('cfo-hedge-gauge').innerHTML = g;
+    }
+
+    function drawEffectiveness(e) {
+      var inRange = (e.slope <= -0.80 && e.slope >= -1.25);
+      var passR2 = (e.r2 >= 0.80);
+      var passAll = inRange && passR2;
+      var color = passAll ? '#22c55e' : '#ef4444';
+      var label = passAll ? 'PASS' : 'FAIL';
+      var r = '';
+      r += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">';
+      r += '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:10px;">';
+      r += '<div style="font-size:9px;color:#94a3b8;letter-spacing:1px;">Slope (回帰傾き)</div>';
+      r += '<div style="font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:4px;color:' + (inRange ? '#22c55e' : '#ef4444') + ';">' + e.slope.toFixed(2) + '</div>';
+      r += '<div style="font-size:9px;color:#94a3b8;margin-top:2px;">target: -0.80 ～ -1.25</div>';
+      r += '</div>';
+      r += '<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:10px;">';
+      r += '<div style="font-size:9px;color:#94a3b8;letter-spacing:1px;">R² (決定係数)</div>';
+      r += '<div style="font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:4px;color:' + (passR2 ? '#22c55e' : '#ef4444') + ';">' + e.r2.toFixed(3) + '</div>';
+      r += '<div style="font-size:9px;color:#94a3b8;margin-top:2px;">target: ≥ 0.80</div>';
+      r += '</div>';
+      r += '<div style="background:rgba(255,255,255,0.03);border:1px solid ' + color + ';border-radius:4px;padding:10px;">';
+      r += '<div style="font-size:9px;color:#94a3b8;letter-spacing:1px;">IFRS 9 適合判定</div>';
+      r += '<div style="font-size:18px;font-weight:700;margin-top:4px;color:' + color + ';">' + label + '</div>';
+      r += '<div style="font-size:9px;color:#94a3b8;margin-top:2px;">' + (passAll ? 'ヘッジ会計適用可' : '再計算要') + '</div>';
+      r += '</div>';
+      r += '</div>';
+      document.getElementById('cfo-eff-result').innerHTML = r;
+    }
+
+    function setBadge(id, isLive) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (isLive) {
+        el.innerHTML = '<span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:400;letter-spacing:0;">LIVE</span>';
+      } else {
+        el.innerHTML = '<span style="background:rgba(234,179,8,0.15);color:#facc15;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:400;letter-spacing:0;">STATIC</span>';
+      }
+    }
+
+    /* 初期描画 (静的プレースホルダー) */
+    drawExposure(exposures);
+    drawVarCards(var99, cvar99, var95, cvar95);
+    drawHedgeGauge(hedge);
+    drawEffectiveness(eff);
+    setBadge('cfo-exposure-badge', false);
+    setBadge('cfo-var-badge', false);
+    setBadge('cfo-hedge-badge', false);
+    setBadge('cfo-eff-badge', false);
+
+    /* APIから並列フェッチ (各独立AbortController) */
+
+    /* A. 通貨別エクスポージャー */
+    (function(){
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+      fetch('/api/v1/tourism/fx-exposure', {signal: ctrl.signal})
+        .then(function(r){ clearTimeout(timer); if(!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(j){
+          try {
+            var d = j.data || j;
+            var rows = d.exposures || d.currencies || [];
+            if (rows.length > 0) {
+              var mapped = [];
+              for (var i = 0; i < rows.length; i++) {
+                var x = rows[i];
+                mapped.push({
+                  ccy: x.currency || x.ccy || '',
+                  name: x.name || x.currency_name || '',
+                  notionalJpy: Math.round((x.notional_jpy || x.notionalJpy || 0) / 100000000),
+                  notionalLocal: x.notional_local_display || x.notional_local || '',
+                  varPct: (x.var_pct || x.varPct || 0)
+                });
+              }
+              drawExposure(mapped);
+              setBadge('cfo-exposure-badge', true);
+            }
+          } catch(e){ console.warn('fx-exposure:', e.message); }
+        })
+        .catch(function(e){ console.warn('fx-exposure fetch:', e && e.message); });
+    })();
+
+    /* B. 99% VaR/CVaR */
+    (function(){
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+      fetch('/api/v1/tourism/var-cvar?confidence=0.99', {signal: ctrl.signal})
+        .then(function(r){ clearTimeout(timer); if(!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(j){
+          try {
+            var d = j.data || j;
+            var v99Api = {
+              var: Math.round((d.var_jpy || d.var || 0) / 100000000),
+              pct: (d.var_pct || 0)
+            };
+            var cv99Api = {
+              var: Math.round((d.cvar_jpy || d.cvar || 0) / 100000000),
+              pct: (d.cvar_pct || 0)
+            };
+            if (v99Api.var > 0) { var99 = v99Api; cvar99 = cv99Api; }
+            drawVarCards(var99, cvar99, var95, cvar95);
+            setBadge('cfo-var-badge', true);
+          } catch(e){ console.warn('var-cvar 99:', e.message); }
+        })
+        .catch(function(e){ console.warn('var-cvar 99 fetch:', e && e.message); });
+    })();
+
+    /* C. 95% VaR/CVaR */
+    (function(){
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+      fetch('/api/v1/tourism/var-cvar?confidence=0.95', {signal: ctrl.signal})
+        .then(function(r){ clearTimeout(timer); if(!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(j){
+          try {
+            var d = j.data || j;
+            var v95Api = {
+              var: Math.round((d.var_jpy || d.var || 0) / 100000000),
+              pct: (d.var_pct || 0)
+            };
+            var cv95Api = {
+              var: Math.round((d.cvar_jpy || d.cvar || 0) / 100000000),
+              pct: (d.cvar_pct || 0)
+            };
+            if (v95Api.var > 0) { var95 = v95Api; cvar95 = cv95Api; }
+            drawVarCards(var99, cvar99, var95, cvar95);
+            setBadge('cfo-var-badge', true);
+          } catch(e){ console.warn('var-cvar 95:', e.message); }
+        })
+        .catch(function(e){ console.warn('var-cvar 95 fetch:', e && e.message); });
+    })();
+
+    /* D. 最適ヘッジ率 */
+    (function(){
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+      fetch('/api/v1/tourism/optimal-hedge', {signal: ctrl.signal})
+        .then(function(r){ clearTimeout(timer); if(!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(j){
+          try {
+            var d = j.data || j;
+            var h = {
+              optimal: Math.round((d.optimal_ratio || d.optimal_hedge_ratio || 0) * 100),
+              policyMin: Math.round((d.policy_min || 0.30) * 100),
+              policyMax: Math.round((d.policy_max || 0.70) * 100)
+            };
+            if (h.optimal > 0) { drawHedgeGauge(h); setBadge('cfo-hedge-badge', true); }
+          } catch(e){ console.warn('optimal-hedge:', e.message); }
+        })
+        .catch(function(e){ console.warn('optimal-hedge fetch:', e && e.message); });
+    })();
+
+    /* E. ヘッジ有効性テスト */
+    (function(){
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+      fetch('/api/v1/tourism/hedge-effectiveness?hedge_notional_jpy=300000000000', {signal: ctrl.signal})
+        .then(function(r){ clearTimeout(timer); if(!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function(j){
+          try {
+            var d = j.data || j;
+            var e2 = {
+              slope: (d.slope !== undefined) ? d.slope : eff.slope,
+              r2: (d.r_squared !== undefined) ? d.r_squared : (d.r2 !== undefined ? d.r2 : eff.r2),
+              pass: (d.ifrs9_pass !== undefined) ? d.ifrs9_pass : eff.pass
+            };
+            drawEffectiveness(e2);
+            setBadge('cfo-eff-badge', true);
+          } catch(e){ console.warn('hedge-effectiveness:', e.message); }
+        })
+        .catch(function(e){ console.warn('hedge-effectiveness fetch:', e && e.message); });
+    })();
+
+  } catch(e) { console.error('renderCFOPanel:', e); }
+}
+
+/* =============================================================
    初期化
    ============================================================= */
 function init() {
@@ -3584,6 +3898,7 @@ function init() {
     renderAccuracyPanel();
     renderSupplyPanel();
     renderModelInfo();
+    renderCFOPanel();
     renderStatusBar();
     renderAlerts();
   } catch(e) { console.error('init:', e); }

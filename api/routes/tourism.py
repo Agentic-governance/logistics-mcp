@@ -1577,6 +1577,44 @@ async def get_hedge_effectiveness(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/hedge-documentation")
+async def create_hedge_doc(
+    hedged_item: str = "外貨建てインバウンド売上",
+    hedging_instrument: str = "為替フォワード売り (USD/JPY, KRW/JPY他)",
+    hedge_ratio: float = 0.7,
+    risk_objective: str = "為替変動リスクの低減",
+    designated_by: str = "treasury@company.com",
+):
+    """IFRS 9ヘッジ指定文書作成 (監査対応)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        doc = _full_mc_engine.create_hedge_documentation(
+            hedged_item, hedging_instrument, hedge_ratio, risk_objective, designated_by=designated_by
+        )
+        return {"status": "ok", "document": doc}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/dollar-offset-test")
+async def dollar_offset(
+    hedged_item_pnl: str = "[-120,150,-80,90,-40,60,-100,120,-70,80,-30,50]",
+    hedging_instrument_pnl: str = "[115,-145,78,-88,38,-58,98,-118,68,-78,29,-48]",
+):
+    """Dollar Offset累積相殺テスト (IFRS 9 B6.4.4.b)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import json
+        h_pnl = json.loads(hedged_item_pnl)
+        hi_pnl = json.loads(hedging_instrument_pnl)
+        result = _full_mc_engine.dollar_offset_test(h_pnl, hi_pnl)
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/auto-calibrate")
 async def get_auto_calibrate():
     """バックテスト結果に基づくidioパラメータ自動校正"""

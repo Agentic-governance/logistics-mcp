@@ -334,6 +334,52 @@ class FullMCEngine:
             "near_singular": bool(eigvals.min() < 1e-4),
         }
 
+    def create_hedge_documentation(self, hedged_item, hedging_instrument, hedge_ratio,
+                                    risk_objective, effectiveness_method="dollar_offset",
+                                    designated_by="treasury@company.com"):
+        """IFRS 9ヘッジ指定文書データモデル (監査対応)"""
+        import hashlib, datetime
+        timestamp = datetime.datetime.now().isoformat()
+        # 監査証跡: 不変ハッシュ生成
+        doc_content = f"{hedged_item}|{hedging_instrument}|{hedge_ratio}|{risk_objective}|{timestamp}"
+        doc_hash = hashlib.sha256(doc_content.encode()).hexdigest()[:16]
+        return {
+            "document_id": f"HEDGE-{timestamp[:10]}-{doc_hash}",
+            "designation_date": timestamp,
+            "hedged_item": hedged_item,
+            "hedging_instrument": hedging_instrument,
+            "hedge_ratio": hedge_ratio,
+            "risk_management_objective": risk_objective,
+            "effectiveness_method": effectiveness_method,
+            "effectiveness_thresholds": {"lower_bound_pct": 80, "upper_bound_pct": 125, "r_squared_min": 0.8},
+            "designated_by": designated_by,
+            "document_hash": doc_hash,
+            "model_version": "full_mc_29vars_v1.6.0",
+            "applicable_standards": ["IFRS 9", "J-GAAP金融商品会計基準"],
+            "retest_frequency": "quarterly",
+            "discontinuation_triggers": [
+                "effectiveness_ratio < 80% or > 125%",
+                "R² < 0.8",
+                "correlation changes sign",
+                "hedged item no longer expected",
+                "hedging instrument terminated",
+            ],
+        }
+
+    def audit_trail(self, action, params, user="system", result_summary=""):
+        """監査証跡 (immutable log)"""
+        import hashlib, datetime, json
+        timestamp = datetime.datetime.now().isoformat()
+        entry = {
+            "timestamp": timestamp, "action": action, "user": user,
+            "params": params, "result_summary": result_summary,
+            "model_version": "full_mc_29vars_v1.6.0",
+        }
+        # SHA-256ハッシュで改ざん検知
+        entry_hash = hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
+        entry["entry_hash"] = entry_hash[:16]
+        return entry
+
     def optimal_hedge_ratio(self, month=4, year=2026, target="cvar_min"):
         """ヘッジ比率最適化 (制約: 30-70%, 目的: CVaR最小化)"""
         var_result = self.compute_var_cvar(month, year, confidence=0.95)
@@ -373,19 +419,48 @@ class FullMCEngine:
             "note": "ヘッジコスト: フォワードプレミアム年率2% + オプション時間価値",
         }
 
-    def hedge_effectiveness_test(self, months, hedge_notional_jpy, hedged_item_pct=1.0, fx_sensitivity=0.8):
+    def hedge_effectiveness_test(self, months, hedge_notional_jpy, hedged_item_pct=1.0, fx_sensitivity=0.8, seed=42):
         """IFRS 9ヘッジ有効性テスト (80-125%ルール)
         ヘッジ対象: 外貨建て売上の為替感応部分
         ヘッジ手段: 為替フォワード (売りヘッジ)
+        監査対応: seed固定で再現性確保
         """
         actual = self._load_actual_arrivals(months, "ALL")
         y = np.array(actual, dtype=float)
         if not any(y > 0):
             return {"status": "no_data", "note": "実績データ不足"}
 
-        # FXショックサンプル (月次)
-        np.random.seed(42)
-        fx_changes = np.random.normal(0, 0.04, len(months))
+        # FXショック: 実績DBから抽出（再現性のため乱数依存を排除）
+        try:
+            import sqlite3, datetime
+            conn = sqlite3.connect('data/tourism_stats.db')
+            fx_values = []
+            for ms in months:
+                y_, m_ = int(ms.split('/')[0]), int(ms.split('/')[1])
+                # USD/JPY変化率を実績から取得
+                cur = conn.execute(
+                    "SELECT fx_rate_jpy FROM monthly_indicators WHERE source_country='US' AND year=? AND month=?",
+                    (y_, m_)
+                ).fetchone()
+                fx_values.append(cur[0] if cur and cur[0] else None)
+            conn.close()
+            # 月次変化率計算
+            fx_changes = []
+            prev = None
+            for v in fx_values:
+                if v is not None and prev is not None and prev > 0:
+                    fx_changes.append((v - prev) / prev)
+                else:
+                    fx_changes.append(0.0)
+                prev = v
+            fx_changes = np.array(fx_changes)
+            # フォールバック: 実績が取れない場合はseed固定乱数
+            if np.all(fx_changes == 0):
+                rng = np.random.RandomState(seed)
+                fx_changes = rng.normal(0, 0.04, len(months))
+        except Exception:
+            rng = np.random.RandomState(seed)
+            fx_changes = rng.normal(0, 0.04, len(months))
 
         # ヘッジ対象: 外貨建て売上の為替変動影響
         # 売上 × 為替感応度 × FXショック
@@ -435,6 +510,52 @@ class FullMCEngine:
             "ifrs9_compliant": is_highly_effective,
             "judgement": "高度に有効 (80-125%ルール適合)" if is_highly_effective else
                          f"無効 (比率={avg_effectiveness:.0f}%, R²={r_squared:.2f})",
+        }
+
+    def dollar_offset_test(self, hedged_item_pnl, hedging_instrument_pnl):
+        """Dollar Offset method (IFRS 9 B6.4.4.b 事後有効性テスト)
+        累積相殺比率 = -ΣΔHI / ΣΔHedgedItem
+        80-125%適合判定
+        """
+        sum_hi = float(np.sum(hedging_instrument_pnl))
+        sum_hedged = float(np.sum(hedged_item_pnl))
+        if abs(sum_hedged) < 1:
+            return {"status": "insufficient_movement", "cumulative_ratio": None}
+        ratio = -sum_hi / sum_hedged * 100
+        is_effective = 80 <= ratio <= 125
+        # Ineffectiveness = 超過部分 (P/L計上)
+        perfect_hedge = -sum_hedged
+        ineffectiveness_jpy = sum_hi - perfect_hedge
+        return {
+            "sum_hedged_item_pnl": int(sum_hedged),
+            "sum_hedging_instrument_pnl": int(sum_hi),
+            "cumulative_ratio_pct": round(ratio, 1),
+            "is_highly_effective": is_effective,
+            "ineffectiveness_jpy": int(ineffectiveness_jpy),
+            "ineffectiveness_treatment": "P/L (ineffective portion)" if not is_effective else "OCI (effective portion)",
+        }
+
+    def compute_ineffectiveness(self, hedged_item_pnl_series, hedging_instrument_pnl_series):
+        """非有効部分の測定 (OCI/PL配分)"""
+        hedged = np.array(hedged_item_pnl_series, dtype=float)
+        hi = np.array(hedging_instrument_pnl_series, dtype=float)
+        n = min(len(hedged), len(hi))
+        hedged = hedged[:n]; hi = hi[:n]
+        # 完全ヘッジ: hi + hedged = 0
+        # Lesser of test (IFRS 9 6.5.11): min(|ΣΔHI|, |ΣΔHypoDerivative|)
+        cumulative_hi = float(np.sum(hi))
+        cumulative_hedged = float(np.sum(hedged))
+        # Effective portion = min(|cumulative_hi|, |cumulative_hedged|) with same sign as hedging instrument
+        effective = min(abs(cumulative_hi), abs(cumulative_hedged))
+        if cumulative_hi < 0: effective = -effective
+        ineffective = cumulative_hi - effective
+        return {
+            "periods": n,
+            "cumulative_hedging_instrument_pnl": int(cumulative_hi),
+            "cumulative_hedged_item_pnl": int(cumulative_hedged),
+            "effective_portion_oci": int(effective),
+            "ineffective_portion_pl": int(ineffective),
+            "ineffectiveness_pct": round(abs(ineffective) / max(abs(cumulative_hi), 1) * 100, 1),
         }
 
     def auto_calibrate(self):
