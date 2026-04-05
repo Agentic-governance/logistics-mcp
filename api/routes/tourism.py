@@ -253,6 +253,32 @@ async def get_market_opportunity():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/backtest")
+async def get_backtest(
+    source_country: str = Query(default="ALL"),
+    start_year: int = Query(default=2024),
+    end_year: int = Query(default=2025),
+):
+    """バックテスト: 過去予測のMAPE + p10-p90カバー率"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        months = []
+        for y in range(start_year, end_year + 1):
+            for m in range(1, 13):
+                months.append(f"{y}/{m:02d}")
+        loop = asyncio.get_event_loop()
+        cache_key = f"backtest_{source_country}_{start_year}_{end_year}"
+        result = await loop.run_in_executor(
+            None, lambda: _get_cached(cache_key, lambda: _full_mc_engine.backtest(months, source_country))
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        logger.error("backtest エラー: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/spending-forecast")
 async def get_spending_forecast(
     month: int = Query(default=4, ge=1, le=12),

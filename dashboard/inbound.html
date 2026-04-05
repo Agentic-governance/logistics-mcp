@@ -2621,6 +2621,57 @@ function loadFromAPI() {
 
 
 /* =============================================================
+   バックテストデータ動的取得
+   ============================================================= */
+function loadBacktestData() {
+  try {
+    var ctrl2 = new AbortController();
+    var timer2 = setTimeout(function(){ ctrl2.abort(); }, 5000);
+    fetch('/api/v1/tourism/backtest?source_country=ALL&start_year=2024&end_year=2024', {signal: ctrl2.signal})
+      .then(function(r) { clearTimeout(timer2); if(!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(json) {
+        try {
+          var d = json.data || json;
+          /* MAPE表示を動的更新 */
+          var panel = document.getElementById('accuracy-panel');
+          if (panel && d.mape != null) {
+            var liveHtml = '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;">';
+            liveHtml += '<div style="background:#0d1117;border:1px solid rgba(34,197,94,0.3);border-radius:6px;padding:10px 16px;text-align:center;">';
+            liveHtml += '<div style="font-size:9px;color:#22c55e;text-transform:uppercase;">LIVE MAPE (2024)</div>';
+            liveHtml += '<div style="font-family:SF Mono,monospace;font-size:22px;font-weight:700;color:#22c55e;">' + d.mape.toFixed(1) + '%</div></div>';
+            liveHtml += '<div style="background:#0d1117;border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:10px 16px;text-align:center;">';
+            liveHtml += '<div style="font-size:9px;color:#3b82f6;text-transform:uppercase;">wMAPE</div>';
+            liveHtml += '<div style="font-family:SF Mono,monospace;font-size:22px;font-weight:700;color:#3b82f6;">' + (d.wmape||0).toFixed(1) + '%</div></div>';
+            liveHtml += '<div style="background:#0d1117;border:1px solid rgba(234,179,8,0.3);border-radius:6px;padding:10px 16px;text-align:center;">';
+            liveHtml += '<div style="font-size:9px;color:#eab308;text-transform:uppercase;">p10-p90 Coverage</div>';
+            liveHtml += '<div style="font-family:SF Mono,monospace;font-size:22px;font-weight:700;color:#eab308;">' + (d.coverage_p10_p90||0).toFixed(0) + '%</div>';
+            liveHtml += '<div style="font-size:9px;color:#64748b;">target: 80%</div></div>';
+            liveHtml += '</div>';
+            /* 月別詳細 */
+            if (d.by_month && d.by_month.length > 0) {
+              liveHtml += '<div style="font-size:10px;color:#64748b;margin-bottom:4px;">月別バックテスト (N=' + d.n_months_with_data + ')</div>';
+              liveHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:4px;">';
+              for (var mi = 0; mi < d.by_month.length; mi++) {
+                var bm = d.by_month[mi];
+                var errColor = bm.error_pct < 10 ? '#22c55e' : (bm.error_pct < 20 ? '#eab308' : '#ef4444');
+                liveHtml += '<div style="background:#0d1117;border:1px solid rgba(255,255,255,0.06);border-radius:4px;padding:4px 6px;text-align:center;">';
+                liveHtml += '<div style="font-size:9px;color:#64748b;">' + bm.month + '</div>';
+                liveHtml += '<div style="font-family:SF Mono,monospace;font-size:11px;color:' + errColor + ';">' + bm.error_pct + '%</div>';
+                liveHtml += '<div style="font-size:8px;color:' + (bm.in_band ? '#22c55e' : '#ef4444') + ';">' + (bm.in_band ? 'IN' : 'OUT') + '</div>';
+                liveHtml += '</div>';
+              }
+              liveHtml += '</div>';
+            }
+            panel.innerHTML = liveHtml;
+          }
+        } catch(e) { console.warn('Backtest処理:', e.message); }
+      })
+      .catch(function(e) { console.warn('Backtest:', e.message); });
+  } catch(e) {}
+}
+
+
+/* =============================================================
    シナリオ比較テーブル
    ============================================================= */
 function renderScenarioCompare() {
@@ -2964,10 +3015,11 @@ function init() {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', function(){ init(); loadFromAPI(); });
+  document.addEventListener('DOMContentLoaded', function(){ init(); loadFromAPI(); loadBacktestData(); });
 } else {
   init();
   loadFromAPI();
+  loadBacktestData();
 }
 </script>
 </body>

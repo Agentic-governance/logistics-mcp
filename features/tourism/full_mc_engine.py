@@ -34,6 +34,10 @@ PARAMS = {
 }
 ALL_COUNTRIES = list(PARAMS.keys())
 
+# ISO2→ISO3マッピング (japan_inboundテーブルはISO3)
+ISO2_TO_ISO3 = {"KR":"KOR","CN":"CHN","TW":"TWN","US":"USA","AU":"AUS","TH":"THA","HK":"HKG","SG":"SGP"}
+ISO3_TO_ISO2 = {v:k for k,v in ISO2_TO_ISO3.items()}
+
 def _load_db_actuals():
     cache = {}
     try:
@@ -159,38 +163,121 @@ class FullMCEngine:
             }
         return {"month": f"{year}/{month:02d}", "scores": scores}
 
-    # 国別1人1回あたり消費額 (円, 観光庁2024年調査)
-    SPENDING_PER_VISITOR = {
-        "KR": 72000, "CN": 210000, "TW": 125000, "US": 230000,
-        "AU": 280000, "TH": 105000, "HK": 155000, "SG": 165000,
+    # 国別1人1回あたり消費額 (mean, CV) — 観光庁2024年調査
+    SPENDING_PARAMS = {
+        "KR": (72000, 0.35), "CN": (210000, 0.45), "TW": (125000, 0.30),
+        "US": (230000, 0.40), "AU": (280000, 0.35), "TH": (105000, 0.40),
+        "HK": (155000, 0.35), "SG": (165000, 0.30),
     }
 
     def spending_forecast(self, month=4, year=2026):
-        """国別消費額予測（月次）"""
+        """国別消費額予測（月次）— 消費単価の不確実性も伝播"""
         months = [f"{year}/{month:02d}"]
         result = self.run(months, "ALL")
+        n = min(self.n_samples, 1000)
         spending = {}
-        total_p10 = 0; total_p50 = 0; total_p90 = 0
+        all_totals = np.zeros(n)
         for iso2 in ALL_COUNTRIES:
             bc = result["by_country"][iso2]
-            spv = self.SPENDING_PER_VISITOR.get(iso2, 120000)
-            s_p10 = bc["p10"][0] * spv
-            s_p50 = bc["median"][0] * spv
-            s_p90 = bc["p90"][0] * spv
+            mean_spv, cv = self.SPENDING_PARAMS.get(iso2, (120000, 0.35))
+            # 対数正規分布で消費単価をサンプリング
+            sigma_ln = np.sqrt(np.log(1 + cv**2))
+            mu_ln = np.log(mean_spv) - 0.5 * sigma_ln**2
+            spv_samples = np.random.lognormal(mu_ln, sigma_ln, n)
+            # 来訪者数のp10/p50/p90からサンプル生成（簡易正規近似）
+            v_med = bc["median"][0]
+            v_std = (bc["p90"][0] - bc["p10"][0]) / 2.56  # 80%区間→σ
+            v_samples = np.maximum(np.random.normal(v_med, v_std, n), 0)
+            # 消費額 = 来訪者 × 単価
+            spend_samples = v_samples * spv_samples
+            all_totals += spend_samples
             spending[iso2] = {
                 "visitors_p50": bc["median"][0],
-                "spending_per_visitor": spv,
-                "monthly_spending_p10": round(s_p10),
-                "monthly_spending_p50": round(s_p50),
-                "monthly_spending_p90": round(s_p90),
+                "spending_per_visitor_mean": int(mean_spv),
+                "spending_per_visitor_cv": cv,
+                "monthly_spending_p10": int(np.percentile(spend_samples, 10)),
+                "monthly_spending_p50": int(np.percentile(spend_samples, 50)),
+                "monthly_spending_p90": int(np.percentile(spend_samples, 90)),
             }
-            total_p10 += s_p10; total_p50 += s_p50; total_p90 += s_p90
         return {
             "month": f"{year}/{month:02d}",
             "by_country": spending,
-            "total_p10_oku": round(total_p10 / 1e8, 1),
-            "total_p50_oku": round(total_p50 / 1e8, 1),
-            "total_p90_oku": round(total_p90 / 1e8, 1),
+            "total_p10_oku": round(float(np.percentile(all_totals, 10)) / 1e8, 1),
+            "total_p50_oku": round(float(np.percentile(all_totals, 50)) / 1e8, 1),
+            "total_p90_oku": round(float(np.percentile(all_totals, 90)) / 1e8, 1),
+        }
+
+    def correlation_health(self):
+        """相関行列の健全性チェック"""
+        from .variable_distributions import CORR, VAR_NAMES
+        eigvals = np.linalg.eigvalsh(CORR)
+        return {
+            "n_vars": len(VAR_NAMES),
+            "min_eigenvalue": round(float(eigvals.min()), 6),
+            "max_eigenvalue": round(float(eigvals.max()), 3),
+            "condition_number": round(float(eigvals.max() / max(eigvals.min(), 1e-10)), 1),
+            "is_positive_definite": bool(eigvals.min() > 0),
+            "near_singular": bool(eigvals.min() < 1e-4),
+        }
+
+    def _load_actual_arrivals(self, months, source_country="ALL"):
+        """DBから実績来訪者数を取得 (ISO3→ISO2変換付き)"""
+        countries = ALL_COUNTRIES if source_country == "ALL" else [source_country]
+        try:
+            conn = sqlite3.connect('data/tourism_stats.db')
+            totals = []
+            for ms in months:
+                year, month = int(ms.split('/')[0]), int(ms.split('/')[1])
+                total = 0
+                for iso2 in countries:
+                    iso3 = ISO2_TO_ISO3.get(iso2, iso2)
+                    row = conn.execute(
+                        "SELECT arrivals FROM japan_inbound WHERE source_country=? AND year=? AND month=?",
+                        (iso3, year, month)
+                    ).fetchone()
+                    if row and row[0]: total += row[0]
+                totals.append(total)
+            conn.close()
+            return totals
+        except Exception:
+            return [0] * len(months)
+
+    def backtest(self, months, source_country="ALL"):
+        """バックテスト: 過去予測のMAPE + p10-p90カバー率"""
+        pred = self.run(months, source_country)
+        actual = self._load_actual_arrivals(months, source_country)
+        yhat = np.array(pred["median"], dtype=float)
+        y = np.array(actual, dtype=float)
+        p10 = np.array(pred["p10"], dtype=float)
+        p90 = np.array(pred["p90"], dtype=float)
+
+        mask = y > 0
+        if not mask.any():
+            return {"months": months, "mape": None, "wmape": None, "coverage_p10_p90": None,
+                    "note": "実績データなし"}
+
+        errors = np.abs(yhat[mask] - y[mask])
+        mape = float(np.mean(errors / y[mask]) * 100)
+        wmape = float(np.sum(errors) / np.sum(y[mask]) * 100)
+        coverage = float(np.mean((y[mask] >= p10[mask]) & (y[mask] <= p90[mask])))
+
+        by_month = []
+        for i, ms in enumerate(months):
+            if y[i] > 0:
+                by_month.append({
+                    "month": ms, "actual": int(y[i]), "predicted": int(yhat[i]),
+                    "p10": int(p10[i]), "p90": int(p90[i]),
+                    "error_pct": round(abs(yhat[i]-y[i])/y[i]*100, 1),
+                    "in_band": bool(y[i] >= p10[i] and y[i] <= p90[i])
+                })
+
+        return {
+            "months": months, "source_country": source_country,
+            "mape": round(mape, 1), "wmape": round(wmape, 1),
+            "coverage_p10_p90": round(coverage * 100, 1),
+            "target_coverage": 80.0,
+            "n_months_with_data": int(mask.sum()),
+            "by_month": by_month,
         }
 
     def run(self, months, source_country="ALL"):
