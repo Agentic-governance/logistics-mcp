@@ -512,6 +512,97 @@ class FullMCEngine:
                          f"無効 (比率={avg_effectiveness:.0f}%, R²={r_squared:.2f})",
         }
 
+    def detect_discontinuation(self, effectiveness_history, r_squared_history, correlation_sign_history):
+        """ヘッジ会計中止条件検出 (IFRS 9 6.5.6)"""
+        triggers = []
+        latest_eff = effectiveness_history[-1] if effectiveness_history else None
+        latest_r2 = r_squared_history[-1] if r_squared_history else None
+        latest_corr_sign = correlation_sign_history[-1] if correlation_sign_history else None
+        # Trigger 1: 80-125%範囲逸脱
+        if latest_eff is not None and (latest_eff < 80 or latest_eff > 125):
+            triggers.append({
+                "trigger": "effectiveness_out_of_range",
+                "value": latest_eff, "threshold": "80-125%",
+                "action_required": "ヘッジ会計中止、以降は時価評価",
+            })
+        # Trigger 2: R²<0.8
+        if latest_r2 is not None and latest_r2 < 0.8:
+            triggers.append({
+                "trigger": "r_squared_below_threshold",
+                "value": latest_r2, "threshold": 0.8,
+                "action_required": "再テスト実施、改善しなければ中止",
+            })
+        # Trigger 3: 相関符号反転
+        if latest_corr_sign is not None and latest_corr_sign > 0:
+            triggers.append({
+                "trigger": "correlation_sign_reversal",
+                "value": latest_corr_sign, "threshold": "<0 (売りヘッジ)",
+                "action_required": "即時ヘッジ会計中止、ineffectiveness全額P/L",
+            })
+        # Trigger 4: 連続2期間の劣化傾向
+        if len(effectiveness_history) >= 3:
+            recent = effectiveness_history[-3:]
+            if all(e < 80 or e > 125 for e in recent[-2:]):
+                triggers.append({
+                    "trigger": "consecutive_deterioration",
+                    "value": recent, "threshold": "2期間連続逸脱",
+                    "action_required": "ヘッジ会計中止確定",
+                })
+        return {
+            "discontinuation_required": len(triggers) > 0,
+            "triggers": triggers,
+            "recommendation": "ヘッジ会計中止手続き開始" if triggers else "ヘッジ会計継続",
+        }
+
+    def generate_journal_entries(self, hedge_type, effective_amount_jpy, ineffective_amount_jpy, standard="IFRS"):
+        """ヘッジ会計仕訳自動生成 (IFRS 9 / J-GAAP両対応)"""
+        entries = []
+        if standard == "IFRS":
+            # IFRS 9: Cash Flow Hedge
+            if hedge_type == "cash_flow":
+                entries.append({
+                    "date": "月末",
+                    "debit": "デリバティブ資産/負債 (時価変動)",
+                    "credit": "OCI (その他包括利益) — Effective Portion",
+                    "amount": abs(effective_amount_jpy),
+                    "description": f"CFヘッジ有効部分のOCI振替 ({effective_amount_jpy:+,}円)",
+                })
+                if abs(ineffective_amount_jpy) > 0:
+                    entries.append({
+                        "date": "月末",
+                        "debit": "為替差損 (P/L)" if ineffective_amount_jpy < 0 else "デリバティブ資産",
+                        "credit": "デリバティブ負債" if ineffective_amount_jpy < 0 else "為替差益 (P/L)",
+                        "amount": abs(ineffective_amount_jpy),
+                        "description": f"ヘッジ非有効部分のP/L計上 ({ineffective_amount_jpy:+,}円)",
+                    })
+            elif hedge_type == "fair_value":
+                entries.append({
+                    "date": "月末",
+                    "debit": "ヘッジ対象 (時価変動)",
+                    "credit": "為替差益 (P/L)",
+                    "amount": abs(effective_amount_jpy),
+                    "description": "FVヘッジ対象の時価評価",
+                })
+        elif standard == "JGAAP":
+            # J-GAAP金融商品会計基準: 繰延ヘッジが原則
+            entries.append({
+                "date": "月末",
+                "debit": "デリバティブ資産/負債",
+                "credit": "繰延ヘッジ損益 (純資産直入)",
+                "amount": abs(effective_amount_jpy),
+                "description": f"繰延ヘッジ処理 ({effective_amount_jpy:+,}円)",
+            })
+        return {
+            "standard": standard,
+            "hedge_type": hedge_type,
+            "total_entries": len(entries),
+            "entries": entries,
+            "disclosure_notes": [
+                "有価証券報告書: ヘッジ手段の公正価値、ヘッジ対象、有効性評価結果を開示",
+                "注記: 80-125%ルール適合判定、回帰R²、ineffectiveness金額を明示",
+            ],
+        }
+
     def dollar_offset_test(self, hedged_item_pnl, hedging_instrument_pnl):
         """Dollar Offset method (IFRS 9 B6.4.4.b 事後有効性テスト)
         累積相殺比率 = -ΣΔHI / ΣΔHedgedItem

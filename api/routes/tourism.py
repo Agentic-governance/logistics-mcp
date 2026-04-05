@@ -1638,6 +1638,45 @@ async def get_rolling_corr(country_a: str = "KR", country_b: str = "TW", window:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/hedge-discontinuation")
+async def check_discontinuation(
+    effectiveness: str = "[95, 98, 102]",
+    r_squared: str = "[0.92, 0.89, 0.91]",
+    correlation_sign: str = "[-0.95, -0.94, -0.95]",
+):
+    """ヘッジ会計中止条件検出 (IFRS 9 6.5.6)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import json
+        eff = json.loads(effectiveness)
+        r2 = json.loads(r_squared)
+        corr = json.loads(correlation_sign)
+        result = _full_mc_engine.detect_discontinuation(eff, r2, corr)
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/journal-entries")
+async def generate_journals(
+    hedge_type: str = "cash_flow",
+    effective_amount_jpy: float = 80e8,
+    ineffective_amount_jpy: float = -5e8,
+    standard: str = "IFRS",
+):
+    """ヘッジ会計仕訳自動生成"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        result = _full_mc_engine.generate_journal_entries(
+            hedge_type, effective_amount_jpy, ineffective_amount_jpy, standard
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/basis-risk")
 async def get_basis_risk():
     """ベーシスリスク分析 (JNTO vs 自社実績)"""
