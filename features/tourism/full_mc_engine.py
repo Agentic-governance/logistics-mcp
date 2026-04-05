@@ -718,8 +718,8 @@ class FullMCEngine:
         from .variable_distributions import SPECS
         fx_var = f"fx_{currency.lower()}"
         if fx_var in SPECS:
-            monthly_sigma = SPECS[fx_var].sigma
-            realized_vol_annual = monthly_sigma * np.sqrt(12)
+            # SPECS.sigmaは年次変化率の標準偏差
+            realized_vol_annual = float(SPECS[fx_var].sigma)
         else:
             realized_vol_annual = 0.10
         # Implied vol approximation (market typically ~10-15%)
