@@ -2658,26 +2658,24 @@ function loadFromAPI() {
       })
       .catch(function(e) { console.warn('API:', e.message); });
 
-    /* 消費額データもAPI取得 */
+    /* 消費額データもAPI取得 (独立AbortController) */
     try {
-      fetch('/api/v1/tourism/spending-forecast?month=4&year=2026', {signal: ctrl.signal})
-        .then(function(r) { return r.json(); })
+      var ctrl3 = new AbortController();
+      var timer3 = setTimeout(function(){ ctrl3.abort(); }, 6000);
+      fetch('/api/v1/tourism/spending-forecast?month=4&year=2026', {signal: ctrl3.signal})
+        .then(function(r) { clearTimeout(timer3); if(!r.ok) throw new Error(r.status); return r.json(); })
         .then(function(json) {
           try {
             var sd = json.data || json;
             if (sd.total_p50_oku) {
-              var sp = document.getElementById('spending-panel');
-              if (sp) {
-                var note = sp.querySelector('div:last-child');
-                if (note) note.innerHTML = '<span style="color:#22c55e;">LIVE</span> ' + note.textContent;
-              }
               renderDataSource('spending-section', true);
             }
-          } catch(e) {}
-        }).catch(function(){
+          } catch(e) { console.warn('Spending処理:', e.message); }
+        }).catch(function(e){
+          console.warn('Spending API:', e.message);
           renderDataSource('spending-section', false);
         });
-    } catch(e) {}
+    } catch(e) { console.warn('Spending接続:', e.message); }
 
   } catch(e) { console.warn('API接続:', e.message); }
 }
@@ -3049,6 +3047,137 @@ function renderFxCostPanel() {
 }
 
 /* =============================================================
+   モデル情報パネル
+   ============================================================= */
+var modelInfoVisible = false;
+function toggleModelInfo() {
+  var panel = document.getElementById('model-info-panel');
+  var toggle = document.getElementById('model-info-toggle');
+  modelInfoVisible = !modelInfoVisible;
+  panel.style.display = modelInfoVisible ? 'block' : 'none';
+  toggle.textContent = modelInfoVisible ? '[ - 折りたたむ ]' : '[ + 展開 ]';
+}
+
+function renderModelInfo() {
+  try {
+    var mono = "'SF Mono','Fira Code','Consolas',monospace";
+    var sectionStyle = 'margin-bottom:14px;';
+    var labelStyle = 'font-size:11px; color:#3b82f6; font-weight:600; letter-spacing:0.05em; margin-bottom:4px;';
+    var valueStyle = 'font-size:12px; color:#94a3b8; line-height:1.7; font-family:' + mono + ';';
+    var refStyle = 'font-size:11px; color:#64748b; line-height:1.8; padding-left:12px; border-left:2px solid rgba(59,130,246,0.2);';
+    var noteStyle = 'font-size:11px; color:#f59e0b; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.15); border-radius:4px; padding:8px 12px; margin-top:8px;';
+
+    var html = '';
+
+    /* アーキテクチャ */
+    html += '<div style="' + sectionStyle + '">';
+    html += '<div style="' + labelStyle + '">MODEL ARCHITECTURE</div>';
+    html += '<div style="' + valueStyle + '">29変数相関モンテカルロシミュレーション (Cholesky分解)</div>';
+    html += '</div>';
+
+    /* サンプルサイズ */
+    html += '<div style="' + sectionStyle + '">';
+    html += '<div style="' + labelStyle + '">SAMPLE SIZE</div>';
+    html += '<div style="' + valueStyle + '">N = 3,000 paths per scenario</div>';
+    html += '</div>';
+
+    /* 相関行列 */
+    html += '<div style="' + sectionStyle + '">';
+    html += '<div style="' + labelStyle + '">CORRELATION MATRIX</div>';
+    html += '<div style="' + valueStyle + '">Higham (2002) nearest correlation matrix法で正定値化</div>';
+    html += '</div>';
+
+    /* 弾性値 */
+    html += '<div style="' + sectionStyle + '">';
+    html += '<div style="' + labelStyle + '">ELASTICITY SOURCES</div>';
+    html += '<div style="' + valueStyle + '">';
+    html += 'FX弾性値: 国別 (-1.05 ～ -1.22)<br>';
+    html += 'GDP弾性値: 1.24<br>';
+    html += 'フライト弾性値: 0.60';
+    html += '</div>';
+    html += '</div>';
+
+    /* 地政学係数 */
+    html += '<div style="' + sectionStyle + '">';
+    html += '<div style="' + labelStyle + '">GEOPOLITICAL COEFFICIENT</div>';
+    html += '<div style="' + valueStyle + '">GEO_COEF = -0.038 (1pt悪化 → 需要3.8%減)</div>';
+    html += '</div>';
+
+    /* データソース */
+    html += '<div style="' + sectionStyle + '">';
+    html += '<div style="' + labelStyle + '">DATA SOURCES</div>';
+    html += '<div style="' + valueStyle + '">JNTO月次統計, 観光庁消費動向調査, OECD, IMF, Yahoo Finance</div>';
+    html += '</div>';
+
+    /* 更新頻度 */
+    html += '<div style="' + sectionStyle + '">';
+    html += '<div style="' + labelStyle + '">UPDATE FREQUENCY</div>';
+    html += '<div style="' + valueStyle + '">';
+    html += 'MC: リアルタイム (ブラウザ側)<br>';
+    html += 'DB: 日次 (API経由)<br>';
+    html += '相関行列: 静的 (ハードコード)';
+    html += '</div>';
+    html += '</div>';
+
+    /* 参考文献 */
+    html += '<div style="' + sectionStyle + '">';
+    html += '<div style="' + labelStyle + '">KEY REFERENCES</div>';
+    html += '<div style="' + refStyle + '">';
+    html += 'Santos Silva &amp; Tenreyro (2006) "The Log of Gravity" — PPML推定法<br>';
+    html += 'Higham, N.J. (2002) "Computing the Nearest Correlation Matrix" — 相関行列正定値化<br>';
+    html += 'Crouch, G.I. (1994) "The Study of International Tourism Demand" — 観光需要弾性値';
+    html += '</div>';
+    html += '</div>';
+
+    /* バックテスト結果 */
+    html += '<div style="' + sectionStyle + '" id="model-backtest-slot">';
+    html += '<div style="' + labelStyle + '">BACKTEST RESULTS</div>';
+    html += '<div style="' + valueStyle + '" id="model-backtest-content">読込中...</div>';
+    html += '</div>';
+
+    /* 制限事項 */
+    html += '<div style="' + noteStyle + '">';
+    html += '<strong style="color:#f59e0b;">制限事項:</strong> ';
+    html += '消費単価のCV推定は観光庁全国平均ベース、個別施設への適用には追加校正が必要';
+    html += '</div>';
+
+    document.getElementById('model-info-panel').innerHTML = html;
+
+    /* バックテスト結果をAPIから取得試行 */
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'http://localhost:8000/api/inbound/backtest', true);
+      xhr.timeout = 5000;
+      xhr.onload = function() {
+        if (xhr.status === 200) {
+          var data = JSON.parse(xhr.responseText);
+          var bt = '';
+          if (data.mape !== undefined) { bt += 'MAPE: ' + (data.mape * 100).toFixed(1) + '%'; }
+          if (data.coverage !== undefined) { bt += (bt ? ' | ' : '') + 'CI Coverage: ' + (data.coverage * 100).toFixed(1) + '%'; }
+          if (data.period) { bt += (bt ? ' | ' : '') + '検証期間: ' + data.period; }
+          if (bt) {
+            document.getElementById('model-backtest-content').textContent = bt;
+          } else {
+            document.getElementById('model-backtest-content').textContent = 'APIレスポンスにデータなし';
+          }
+        } else {
+          document.getElementById('model-backtest-content').textContent = 'API未接続 (ステータス: ' + xhr.status + ')';
+        }
+      };
+      xhr.onerror = function() {
+        document.getElementById('model-backtest-content').textContent = 'API未接続 (オフライン)';
+      };
+      xhr.ontimeout = function() {
+        document.getElementById('model-backtest-content').textContent = 'API未接続 (タイムアウト)';
+      };
+      xhr.send();
+    } catch(e2) {
+      document.getElementById('model-backtest-content').textContent = 'API未接続';
+    }
+  } catch(e) { console.error('renderModelInfo:', e); }
+}
+
+/* =============================================================
    初期化
    ============================================================= */
 function init() {
@@ -3072,6 +3201,7 @@ function init() {
     renderRippleEffect();
     renderAccuracyPanel();
     renderSupplyPanel();
+    renderModelInfo();
     renderStatusBar();
     renderAlerts();
   } catch(e) { console.error('init:', e); }
