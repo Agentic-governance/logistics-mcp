@@ -598,6 +598,12 @@ body {
     <table class="data-table" id="pref-table"></table>
   </div>
 
+  <!-- 為替コスト影響パネル -->
+  <div class="chart-section" id="fx-cost-section">
+    <div class="chart-section-title">為替変動の収益影響 (仕入コスト側)</div>
+    <div id="fx-cost-panel"></div>
+  </div>
+
   <!-- 宿泊施設シミュレーター -->
   <div class="chart-section" id="facility-sim-section">
     <div class="chart-section-title">宿泊施設シミュレーター (RevPAR予測)</div>
@@ -1653,6 +1659,25 @@ var COUNTRY_LEAD_TIME = {
   PH:20, VN:18, ID:22, GB:90, FR:85, DE:80, CA:65, MY:25, IN:30
 };
 
+var PEAK_HOLIDAYS_2026 = {
+  KR: [
+    {name:'旧正月', start:'2026/02/16', end:'2026/02/18', impact:'+35%'},
+    {name:'秋夕(チュソク)', start:'2026/10/03', end:'2026/10/05', impact:'+40%'},
+    {name:'子供の日連休', start:'2026/05/02', end:'2026/05/05', impact:'+20%'},
+    {name:'ハングルの日', start:'2026/10/09', end:'2026/10/11', impact:'+15%'}
+  ],
+  CN: [
+    {name:'春節', start:'2026/02/16', end:'2026/02/22', impact:'+80%'},
+    {name:'国慶節', start:'2026/10/01', end:'2026/10/07', impact:'+120%'},
+    {name:'労働節', start:'2026/05/01', end:'2026/05/05', impact:'+60%'},
+    {name:'清明節', start:'2026/04/04', end:'2026/04/06', impact:'+25%'}
+  ],
+  TW: [
+    {name:'旧正月', start:'2026/02/14', end:'2026/02/18', impact:'+45%'},
+    {name:'国慶日', start:'2026/10/10', end:'2026/10/12', impact:'+20%'}
+  ]
+};
+
 function renderFacilitySim() {
   try {
     var container = document.getElementById('facility-sim');
@@ -2036,6 +2061,129 @@ function renderAlerts() {
 }
 
 /* =============================================================
+   為替コスト影響パネル
+   ============================================================= */
+function renderFxCostPanel() {
+  try {
+    var container = document.getElementById('fx-cost-panel');
+    if (!container) return;
+
+    var baseRate = 155;
+    var pessRate = Math.round(baseRate * 1.10);
+    var optimRate = Math.round(baseRate * 0.90);
+
+    /* 仕入カテゴリ: name, importRatio */
+    var categories = [
+      {name: '食材', importRatio: 0.30},
+      {name: 'アメニティ', importRatio: 0.60},
+      {name: 'エネルギー', importRatio: 0.95}
+    ];
+
+    /* 為替変動率 */
+    var scenarios = [
+      {label: '悲観', fxChange: 0.10, rate: pessRate, color: '#ef4444'},
+      {label: 'ベース', fxChange: 0.00, rate: baseRate, color: '#3b82f6'},
+      {label: '楽観', fxChange: -0.10, rate: optimRate, color: '#22c55e'}
+    ];
+
+    /* 訪日客数変動の想定(収益側) */
+    var revenueChange = {pessim: -0.05, base: 0.08, optim: 0.15};
+
+    var html = '';
+
+    /* USD/JPY前提表示 */
+    html += '<div style="margin-bottom:16px;padding:10px 14px;background:#0d1117;border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-size:12px;">';
+    html += '<span style="color:#64748b;">USD/JPY 前提: </span>';
+    html += '<span style="color:#22c55e;">' + optimRate + '</span>';
+    html += '<span style="color:#64748b;"> / </span>';
+    html += '<span style="color:#3b82f6;font-weight:700;">' + baseRate + '</span>';
+    html += '<span style="color:#64748b;"> / </span>';
+    html += '<span style="color:#ef4444;">' + pessRate + '</span>';
+    html += '<span style="color:#475569;margin-left:8px;">(楽観/ベース/悲観 = base \u00b110%)</span>';
+    html += '</div>';
+
+    /* テーブル */
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.08);">';
+    html += '<th style="text-align:left;padding:6px 8px;color:#64748b;font-weight:500;">カテゴリ</th>';
+    html += '<th style="text-align:center;padding:6px 8px;color:#64748b;font-weight:500;">輸入比率</th>';
+    html += '<th style="text-align:center;padding:6px 8px;color:#ef4444;font-weight:500;">悲観</th>';
+    html += '<th style="text-align:center;padding:6px 8px;color:#3b82f6;font-weight:500;">ベース</th>';
+    html += '<th style="text-align:center;padding:6px 8px;color:#22c55e;font-weight:500;">楽観</th>';
+    html += '</tr></thead><tbody>';
+
+    var totalCostImpact = {pessim: 0, base: 0, optim: 0};
+    for (var i = 0; i < categories.length; i++) {
+      var cat = categories[i];
+      var pessImpact = (cat.importRatio * scenarios[0].fxChange * 100);
+      var baseImpact = (cat.importRatio * scenarios[1].fxChange * 100);
+      var optimImpact = (cat.importRatio * scenarios[2].fxChange * 100);
+
+      totalCostImpact.pessim += pessImpact;
+      totalCostImpact.base += baseImpact;
+      totalCostImpact.optim += optimImpact;
+
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+      html += '<td style="padding:6px 8px;color:#e2e8f0;">' + cat.name + '</td>';
+      html += '<td style="padding:6px 8px;text-align:center;color:#94a3b8;">' + (cat.importRatio * 100).toFixed(0) + '%</td>';
+      html += '<td style="padding:6px 8px;text-align:center;color:#ef4444;">+' + pessImpact.toFixed(1) + '%</td>';
+      html += '<td style="padding:6px 8px;text-align:center;color:#3b82f6;">' + (baseImpact >= 0 ? '+' : '') + baseImpact.toFixed(1) + '%</td>';
+      html += '<td style="padding:6px 8px;text-align:center;color:#22c55e;">' + optimImpact.toFixed(1) + '%</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    /* 収益 vs コストの純影響 */
+    html += '<div style="margin-top:16px;padding:12px 14px;background:#0d1117;border:1px solid rgba(255,255,255,0.06);border-radius:6px;">';
+    html += '<div style="font-size:11px;color:#64748b;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">純損益影響 (収益変動 - コスト変動)</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    html += '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.08);">';
+    html += '<th style="text-align:left;padding:4px 8px;color:#64748b;"></th>';
+    html += '<th style="text-align:center;padding:4px 8px;color:#ef4444;">悲観</th>';
+    html += '<th style="text-align:center;padding:4px 8px;color:#3b82f6;">ベース</th>';
+    html += '<th style="text-align:center;padding:4px 8px;color:#22c55e;">楽観</th>';
+    html += '</tr></thead><tbody>';
+
+    var avgCostPessim = totalCostImpact.pessim / categories.length;
+    var avgCostBase = totalCostImpact.base / categories.length;
+    var avgCostOptim = totalCostImpact.optim / categories.length;
+
+    /* 収益行 */
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+    html += '<td style="padding:4px 8px;color:#94a3b8;">収益変動 (訪日客数)</td>';
+    html += '<td style="padding:4px 8px;text-align:center;color:#ef4444;">' + (revenueChange.pessim * 100).toFixed(1) + '%</td>';
+    html += '<td style="padding:4px 8px;text-align:center;color:#3b82f6;">+' + (revenueChange.base * 100).toFixed(1) + '%</td>';
+    html += '<td style="padding:4px 8px;text-align:center;color:#22c55e;">+' + (revenueChange.optim * 100).toFixed(1) + '%</td>';
+    html += '</tr>';
+
+    /* コスト行 */
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+    html += '<td style="padding:4px 8px;color:#94a3b8;">コスト変動 (為替平均)</td>';
+    html += '<td style="padding:4px 8px;text-align:center;color:#ef4444;">+' + avgCostPessim.toFixed(1) + '%</td>';
+    html += '<td style="padding:4px 8px;text-align:center;color:#3b82f6;">' + (avgCostBase >= 0 ? '+' : '') + avgCostBase.toFixed(1) + '%</td>';
+    html += '<td style="padding:4px 8px;text-align:center;color:#22c55e;">' + avgCostOptim.toFixed(1) + '%</td>';
+    html += '</tr>';
+
+    /* 純影響行 */
+    var netPessim = (revenueChange.pessim * 100) - avgCostPessim;
+    var netBase = (revenueChange.base * 100) - avgCostBase;
+    var netOptim = (revenueChange.optim * 100) - avgCostOptim;
+
+    html += '<tr style="border-top:2px solid rgba(255,255,255,0.12);font-weight:700;">';
+    html += '<td style="padding:6px 8px;color:#e2e8f0;">純 P/L 影響</td>';
+    html += '<td style="padding:6px 8px;text-align:center;color:' + (netPessim >= 0 ? '#22c55e' : '#ef4444') + ';">' + (netPessim >= 0 ? '+' : '') + netPessim.toFixed(1) + '%</td>';
+    html += '<td style="padding:6px 8px;text-align:center;color:' + (netBase >= 0 ? '#22c55e' : '#ef4444') + ';">' + (netBase >= 0 ? '+' : '') + netBase.toFixed(1) + '%</td>';
+    html += '<td style="padding:6px 8px;text-align:center;color:' + (netOptim >= 0 ? '#22c55e' : '#ef4444') + ';">' + (netOptim >= 0 ? '+' : '') + netOptim.toFixed(1) + '%</td>';
+    html += '</tr>';
+
+    html += '</tbody></table>';
+    html += '</div>';
+
+    container.innerHTML = html;
+  } catch(e) { console.error('renderFxCostPanel:', e); }
+}
+
+/* =============================================================
    初期化
    ============================================================= */
 function init() {
@@ -2051,6 +2199,7 @@ function init() {
     renderCountryTable();
     renderJapanMap();
     renderPrefTable();
+    renderFxCostPanel();
     renderFacilitySim();
     renderStatusBar();
     renderAlerts();

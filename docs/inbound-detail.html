@@ -367,6 +367,12 @@ body {
     <div id="whatif-panel"></div>
   </div>
 
+  <!-- 人員配置シミュレーター -->
+  <div class="panel" style="grid-column: 1 / -1;">
+    <div class="panel-title">人員配置シミュレーター</div>
+    <div id="staffing-panel"></div>
+  </div>
+
   <!-- 下段全幅: 都道府県配分 -->
   <div class="panel pref-panel">
     <div class="panel-title">都道府県別配分</div>
@@ -914,6 +920,87 @@ function updateWhatIf() {
   } catch(e) {}
 }
 
+/* 人員配置シミュレーター */
+function renderStaffingPanel(profile) {
+  try {
+    var container = document.getElementById('staffing-panel');
+    var base = profile.base;
+    var band = profile.band;
+    var baseP10 = base * (1 - band/2);
+    var baseP90 = base * (1 + band/2);
+
+    /* 来訪者数から必要人員を逆算 */
+    /* 30室旅館の場合: フロント2名/シフト、清掃は10室/人、調理は20食/人 */
+    var roomsDefault = 30;
+    var avgLOS = 4.5;
+    var guestsPerRoom = 1.8;
+
+    function calcStaff(visitors, rooms) {
+      var roomNights = visitors * avgLOS / guestsPerRoom / 30;
+      var occ = Math.min(roomNights / rooms, 1.0);
+      var occupiedRooms = Math.round(rooms * occ);
+      var guests = Math.round(occupiedRooms * guestsPerRoom);
+      return {
+        occ: (occ * 100).toFixed(0),
+        rooms: occupiedRooms,
+        guests: guests,
+        front: Math.max(2, Math.ceil(guests / 15)),
+        clean: Math.max(1, Math.ceil(occupiedRooms / 10)),
+        cook: Math.max(1, Math.ceil(guests * 0.7 / 20)),
+        lang: Math.max(1, Math.ceil(guests * 0.6 / 25))
+      };
+    }
+
+    var sBase = calcStaff(base / 10000, roomsDefault);
+    var sP10 = calcStaff(baseP10 / 10000, roomsDefault);
+    var sP90 = calcStaff(baseP90 / 10000, roomsDefault);
+
+    var html = '<div style="font-size:11px;color:#64748b;margin-bottom:8px;">前提: 客室30室 | LOS=' + avgLOS.toFixed(1) + '泊 | 1室' + guestsPerRoom + '名</div>';
+    html += '<table class="data-table" style="font-size:12px;"><thead><tr>';
+    html += '<th style="width:140px;">職種</th><th style="text-align:right;">悲観</th><th style="text-align:right;">ベース</th><th style="text-align:right;">楽観</th><th style="text-align:right;">基準</th>';
+    html += '</tr></thead><tbody>';
+
+    var roles = [
+      {name:'フロント', key:'front', unit:'名/シフト', basis:'15名/1人'},
+      {name:'清掃', key:'clean', unit:'名', basis:'10室/1人'},
+      {name:'調理', key:'cook', unit:'名', basis:'20食/1人'},
+      {name:'多言語スタッフ', key:'lang', unit:'名', basis:'25名/1人'}
+    ];
+
+    for (var ri = 0; ri < roles.length; ri++) {
+      var r = roles[ri];
+      html += '<tr>';
+      html += '<td style="color:#94a3b8;font-weight:600;">' + r.name + '</td>';
+      html += '<td style="text-align:right;" class="td-mono td-neg">' + sP10[r.key] + r.unit + '</td>';
+      html += '<td style="text-align:right;" class="td-mono">' + sBase[r.key] + r.unit + '</td>';
+      html += '<td style="text-align:right;" class="td-mono td-pos">' + sP90[r.key] + r.unit + '</td>';
+      html += '<td style="text-align:right;color:#475569;font-size:10px;">' + r.basis + '</td>';
+      html += '</tr>';
+    }
+
+    html += '<tr style="border-top:1px solid rgba(255,255,255,0.08);">';
+    html += '<td style="color:#e2e8f0;font-weight:700;">合計人員</td>';
+    var totalP10 = sP10.front + sP10.clean + sP10.cook + sP10.lang;
+    var totalBase = sBase.front + sBase.clean + sBase.cook + sBase.lang;
+    var totalP90 = sP90.front + sP90.clean + sP90.cook + sP90.lang;
+    html += '<td style="text-align:right;" class="td-mono td-neg">' + totalP10 + '名</td>';
+    html += '<td style="text-align:right;" class="td-mono" style="color:#3b82f6;font-weight:700;">' + totalBase + '名</td>';
+    html += '<td style="text-align:right;" class="td-mono td-pos">' + totalP90 + '名</td>';
+    html += '<td></td></tr>';
+
+    html += '<tr>';
+    html += '<td style="color:#94a3b8;font-weight:600;">推定稼働率</td>';
+    html += '<td style="text-align:right;" class="td-mono td-neg">' + sP10.occ + '%</td>';
+    html += '<td style="text-align:right;" class="td-mono">' + sBase.occ + '%</td>';
+    html += '<td style="text-align:right;" class="td-mono td-pos">' + sP90.occ + '%</td>';
+    html += '<td></td></tr>';
+
+    html += '</tbody></table>';
+
+    container.innerHTML = html;
+  } catch(e) { console.error('renderStaffingPanel:', e); }
+}
+
 function renderPrefBars(profile) {
   try {
     var container = document.getElementById('pref-bars');
@@ -993,6 +1080,7 @@ function init() {
     renderCalendarChart(profile);
     renderRiskCards(profile);
     renderWhatIf(profile);
+    renderStaffingPanel(profile);
     renderPrefBars(profile);
     renderStatusBar(profile);
   } catch(e) { console.error('init:', e); }
