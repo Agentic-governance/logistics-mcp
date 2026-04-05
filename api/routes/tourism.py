@@ -1577,6 +1577,101 @@ async def get_hedge_effectiveness(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/fx-forward")
+async def get_fx_forward(currency: str = "USD", tenor_months: int = 3):
+    """FXフォワード理論価格 (IRP)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        return {"status": "ok", **_full_mc_engine.fx_forward_price(currency, tenor_months)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/fx-option")
+async def get_fx_option(currency: str = "USD", tenor_months: int = 3, strike_pct: float = 1.0, is_call: bool = False, iv: float = 0.10):
+    """Black-Scholes FXオプション価格"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        return {"status": "ok", **_full_mc_engine.fx_option_price_bs(currency, tenor_months, strike_pct, is_call, iv)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/fx-vol")
+async def get_fx_vol(currency: str = "USD"):
+    """IV vs RV分析"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        return {"status": "ok", **_full_mc_engine.fx_vol_analysis(currency)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pair-trading")
+async def get_pair_trading(country_a: str = "KR", country_b: str = "TW", window: int = 24):
+    """ペアトレード信号 (z-score, half-life)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: _full_mc_engine.pair_trading_signal(country_a, country_b, window))
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/rolling-correlation")
+async def get_rolling_corr(country_a: str = "KR", country_b: str = "TW", window: int = 12):
+    """時変相関 (レジーム変化検出)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, lambda: _full_mc_engine.rolling_correlation(country_a, country_b, window))
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/basis-risk")
+async def get_basis_risk():
+    """ベーシスリスク分析 (JNTO vs 自社実績)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, _full_mc_engine.basis_risk_analysis)
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/customer-hedge")
+async def get_customer_hedge(
+    usd_jpy: float = Query(default=1e8),
+    krw_jpy: float = Query(default=2e8),
+    cny_jpy: float = Query(default=5e8),
+    twd_jpy: float = Query(default=3e8),
+    aud_jpy: float = Query(default=5e7),
+):
+    """顧客別ヘッジ推奨 (地銀RM向け)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        breakdown = {"USD": usd_jpy, "KRW": krw_jpy, "CNY": cny_jpy, "TWD": twd_jpy, "AUD": aud_jpy}
+        breakdown = {k:v for k,v in breakdown.items() if v >= 1e7}
+        result = _full_mc_engine.customer_hedge_recommendation(breakdown)
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/hedge-documentation")
 async def create_hedge_doc(
     hedged_item: str = "外貨建てインバウンド売上",

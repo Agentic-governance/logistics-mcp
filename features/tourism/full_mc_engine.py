@@ -558,6 +558,261 @@ class FullMCEngine:
             "ineffectiveness_pct": round(abs(ineffective) / max(abs(cumulative_hi), 1) * 100, 1),
         }
 
+    def pair_trading_signal(self, country_a="KR", country_b="TW", window=24):
+        """ペアトレード信号 (z-score, half-life, spread分析)"""
+        # Get actual arrivals for both countries (24 months)
+        import datetime
+        months = []
+        year, month = 2023, 1
+        for _ in range(window):
+            months.append(f"{year}/{month:02d}")
+            month += 1
+            if month > 12: month = 1; year += 1
+        a_data = self._load_actual_arrivals(months, country_a)
+        b_data = self._load_actual_arrivals(months, country_b)
+        a = np.array(a_data, dtype=float)
+        b = np.array(b_data, dtype=float)
+        mask = (a > 0) & (b > 0)
+        if mask.sum() < 12:
+            return {"status": "insufficient_data"}
+        a, b = a[mask], b[mask]
+        # log ratio spread
+        log_a = np.log(a); log_b = np.log(b)
+        spread = log_a - log_b
+        mean_spread = float(np.mean(spread))
+        std_spread = float(np.std(spread))
+        current_spread = float(spread[-1])
+        z_score = (current_spread - mean_spread) / max(std_spread, 1e-9)
+        # Half-life (OU process estimation): dX_t = -theta*(X_t - mu)*dt
+        # Using OLS: d_spread = -theta * (spread_{t-1} - mu) + e
+        if len(spread) > 3:
+            d_spread = np.diff(spread)
+            lag_spread = spread[:-1] - mean_spread
+            if np.var(lag_spread) > 0:
+                theta = -float(np.cov(d_spread, lag_spread)[0,1] / np.var(lag_spread))
+                half_life = float(np.log(2) / theta) if theta > 0 else float('inf')
+            else:
+                half_life = float('inf')
+        else:
+            half_life = float('inf')
+        # Signal
+        if z_score > 2:
+            signal = "SHORT_A_LONG_B"  # A is rich, B is cheap
+        elif z_score < -2:
+            signal = "LONG_A_SHORT_B"
+        else:
+            signal = "NEUTRAL"
+        return {
+            "pair": f"{country_a}/{country_b}",
+            "current_spread": round(current_spread, 4),
+            "mean_spread": round(mean_spread, 4),
+            "std_spread": round(std_spread, 4),
+            "z_score": round(z_score, 2),
+            "half_life_months": round(half_life, 1) if half_life != float('inf') else None,
+            "signal": signal,
+            "window_months": window,
+            "statistical_significance": "HIGH" if abs(z_score) > 2 else ("MEDIUM" if abs(z_score) > 1 else "LOW"),
+        }
+
+    def rolling_correlation(self, country_a="KR", country_b="TW", window=12):
+        """時変相関 (Rolling correlation) — レジーム変化検出"""
+        months = []
+        year, month = 2022, 1
+        for _ in range(36):
+            months.append(f"{year}/{month:02d}")
+            month += 1
+            if month > 12: month = 1; year += 1
+        a_data = self._load_actual_arrivals(months, country_a)
+        b_data = self._load_actual_arrivals(months, country_b)
+        a = np.array(a_data, dtype=float); b = np.array(b_data, dtype=float)
+        mask = (a > 0) & (b > 0)
+        a, b = a[mask], b[mask]
+        if len(a) < window + 1:
+            return {"status": "insufficient_data"}
+        # Log returns
+        ret_a = np.diff(np.log(a)); ret_b = np.diff(np.log(b))
+        rolling_corrs = []
+        for i in range(window, len(ret_a)):
+            window_a = ret_a[i-window:i]; window_b = ret_b[i-window:i]
+            if np.std(window_a) > 0 and np.std(window_b) > 0:
+                rolling_corrs.append(float(np.corrcoef(window_a, window_b)[0,1]))
+        if not rolling_corrs: return {"status": "insufficient_data"}
+        current_corr = rolling_corrs[-1]
+        mean_corr = float(np.mean(rolling_corrs))
+        std_corr = float(np.std(rolling_corrs))
+        # Regime change detection (2-sigma deviation)
+        regime_change = abs(current_corr - mean_corr) > 2 * std_corr
+        return {
+            "pair": f"{country_a}/{country_b}",
+            "window_months": window,
+            "current_correlation": round(current_corr, 3),
+            "mean_correlation": round(mean_corr, 3),
+            "std_correlation": round(std_corr, 3),
+            "min_correlation": round(min(rolling_corrs), 3),
+            "max_correlation": round(max(rolling_corrs), 3),
+            "regime_change_detected": bool(regime_change),
+            "series": [round(c, 3) for c in rolling_corrs],
+        }
+
+    # 金利前提 (年率, 2026/04時点)
+    INTEREST_RATES = {
+        "JPY": 0.005, "USD": 0.0475, "KRW": 0.0325, "CNY": 0.0285,
+        "TWD": 0.0175, "AUD": 0.0435, "THB": 0.0225, "HKD": 0.0475, "SGD": 0.0345,
+    }
+
+    def fx_forward_price(self, currency="USD", tenor_months=3):
+        """FXフォワード理論価格 (Interest Rate Parity)"""
+        spot = self.FX_RATES.get(currency, 100.0)
+        r_jpy = self.INTEREST_RATES.get("JPY", 0.005)
+        r_foreign = self.INTEREST_RATES.get(currency, 0.02)
+        T = tenor_months / 12.0
+        # F = S * (1 + r_JPY*T) / (1 + r_foreign*T)
+        forward = spot * (1 + r_jpy * T) / (1 + r_foreign * T)
+        forward_premium_pct = (forward - spot) / spot * 100
+        annualized_premium = forward_premium_pct / T
+        return {
+            "currency": currency,
+            "tenor_months": tenor_months,
+            "spot_rate": round(spot, 4),
+            "forward_rate": round(forward, 4),
+            "forward_points": round((forward - spot) * 10000, 1),
+            "forward_premium_pct": round(forward_premium_pct, 3),
+            "annualized_premium_pct": round(annualized_premium, 3),
+            "r_domestic_jpy": r_jpy,
+            "r_foreign": r_foreign,
+        }
+
+    def fx_option_price_bs(self, currency="USD", tenor_months=3, strike_pct=1.0, is_call=False, iv=0.10):
+        """Black-Scholes Garman-Kohlhagen FXオプション価格"""
+        from math import log, sqrt, exp, erf
+        spot = self.FX_RATES.get(currency, 100.0)
+        strike = spot * strike_pct
+        r_jpy = self.INTEREST_RATES.get("JPY", 0.005)
+        r_foreign = self.INTEREST_RATES.get(currency, 0.02)
+        T = tenor_months / 12.0
+        if T <= 0 or iv <= 0:
+            return {"error": "invalid_params"}
+        def N(x): return 0.5 * (1 + erf(x / sqrt(2)))
+        d1 = (log(spot/strike) + (r_jpy - r_foreign + 0.5*iv**2)*T) / (iv*sqrt(T))
+        d2 = d1 - iv*sqrt(T)
+        if is_call:
+            price = spot * exp(-r_foreign*T) * N(d1) - strike * exp(-r_jpy*T) * N(d2)
+            delta = exp(-r_foreign*T) * N(d1)
+        else:
+            price = strike * exp(-r_jpy*T) * N(-d2) - spot * exp(-r_foreign*T) * N(-d1)
+            delta = -exp(-r_foreign*T) * N(-d1)
+        premium_pct = price / spot * 100
+        return {
+            "currency": currency, "option_type": "CALL" if is_call else "PUT",
+            "tenor_months": tenor_months, "strike": round(strike, 4),
+            "strike_pct_of_spot": strike_pct,
+            "spot": round(spot, 4), "iv_annual": iv,
+            "premium_per_unit": round(price, 4),
+            "premium_pct_of_spot": round(premium_pct, 3),
+            "delta": round(delta, 4),
+        }
+
+    def fx_vol_analysis(self, currency="USD"):
+        """FXボラティリティ分析 (Implied vs Realized)"""
+        # Realized vol from sigma of FX shock spec
+        from .variable_distributions import SPECS
+        fx_var = f"fx_{currency.lower()}"
+        if fx_var in SPECS:
+            monthly_sigma = SPECS[fx_var].sigma
+            realized_vol_annual = monthly_sigma * np.sqrt(12)
+        else:
+            realized_vol_annual = 0.10
+        # Implied vol approximation (market typically ~10-15%)
+        implied_vol_annual = {
+            "USD": 0.095, "KRW": 0.115, "CNY": 0.065, "TWD": 0.075,
+            "AUD": 0.125, "THB": 0.095, "HKD": 0.020, "SGD": 0.080,
+        }.get(currency, 0.10)
+        iv_rv_spread = implied_vol_annual - realized_vol_annual
+        return {
+            "currency": currency,
+            "realized_vol_annual": round(realized_vol_annual, 4),
+            "implied_vol_annual": round(implied_vol_annual, 4),
+            "iv_rv_spread": round(iv_rv_spread, 4),
+            "iv_rv_ratio": round(implied_vol_annual / max(realized_vol_annual, 0.01), 2),
+            "signal": "SELL_VOL" if iv_rv_spread > 0.02 else ("BUY_VOL" if iv_rv_spread < -0.02 else "NEUTRAL"),
+        }
+
+    def basis_risk_analysis(self, company_revenue_monthly=None, months=None):
+        """ベーシスリスク定量化 (JNTO見込み vs 自社実績)"""
+        if months is None:
+            months = [f"2024/{m:02d}" for m in range(1, 13)]
+        jnto_actuals = np.array(self._load_actual_arrivals(months, "ALL"), dtype=float)
+        if company_revenue_monthly is None:
+            company_revenue_monthly = jnto_actuals * 150000 * 0.01
+        company_revenue = np.array(company_revenue_monthly, dtype=float)
+        mask = (jnto_actuals > 0) & (company_revenue > 0)
+        if mask.sum() < 3: return {"status": "insufficient_data"}
+        jnto_growth = np.diff(np.log(jnto_actuals[mask]))
+        rev_growth = np.diff(np.log(company_revenue[mask]))
+        if len(jnto_growth) < 2: return {"status": "insufficient_data"}
+        correlation = float(np.corrcoef(jnto_growth, rev_growth)[0, 1])
+        slope = float(np.cov(jnto_growth, rev_growth)[0, 1] / max(np.var(jnto_growth), 1e-9))
+        r_squared = correlation ** 2
+        residuals = rev_growth - slope * jnto_growth
+        basis_vol = float(np.std(residuals))
+        return {
+            "months": months,
+            "correlation": round(correlation, 3),
+            "r_squared": round(r_squared, 3),
+            "beta_to_jnto": round(slope, 3),
+            "basis_volatility_monthly": round(basis_vol, 4),
+            "tracking_error_annual": round(basis_vol * np.sqrt(12), 4),
+            "hedge_quality": "HIGH" if r_squared > 0.7 else ("MEDIUM" if r_squared > 0.4 else "LOW"),
+        }
+
+    def customer_hedge_recommendation(self, revenue_ccy_breakdown):
+        """顧客別ヘッジ推奨 (地銀RM向け)"""
+        total_revenue = sum(revenue_ccy_breakdown.values())
+        recommendations = []
+        high_vol_currencies = ["KRW", "CNY", "TWD", "THB", "AUD"]
+        for ccy, notional in revenue_ccy_breakdown.items():
+            if notional < 1e7: continue
+            is_high_vol = ccy in high_vol_currencies
+            if notional >= 1e9:
+                product = "通貨スワップ (長期) + 為替予約 (短期)"
+                hedge_ratio = 0.60
+                reason = "大口・長期: 金利リスクも考慮しスワップ併用"
+            elif is_high_vol and notional >= 1e8:
+                product = "通貨オプション (プット買い)"
+                hedge_ratio = 0.50
+                reason = "高ボラ通貨: 下落保険でアップサイド維持"
+            elif notional >= 1e8:
+                product = "為替予約 (3-6ヶ月ロール)"
+                hedge_ratio = 0.70
+                reason = "中規模・安定通貨: シンプルな為替予約"
+            else:
+                product = "為替予約 (3ヶ月)"
+                hedge_ratio = 0.50
+                reason = "小口: 短期予約で柔軟性確保"
+            recommendations.append({
+                "currency": ccy, "notional_jpy": int(notional),
+                "pct_of_total": round(notional / total_revenue * 100, 1),
+                "recommended_product": product,
+                "recommended_hedge_ratio": hedge_ratio,
+                "annual_hedge_cost_jpy": int(notional * hedge_ratio * 0.015),
+                "risk_category": "HIGH_VOL" if is_high_vol else "STABLE",
+                "rationale": reason,
+            })
+        weighted_hr = sum(r["recommended_hedge_ratio"] * r["notional_jpy"] for r in recommendations) / max(total_revenue, 1)
+        total_cost = sum(r["annual_hedge_cost_jpy"] for r in recommendations)
+        return {
+            "total_fx_exposure_jpy": int(total_revenue),
+            "portfolio_hedge_ratio": round(weighted_hr, 3),
+            "total_annual_hedge_cost_jpy": int(total_cost),
+            "cost_as_pct_of_revenue": round(total_cost / max(total_revenue, 1) * 100, 3),
+            "recommendations": recommendations,
+            "suitability_check": {
+                "within_30_70_policy": 0.3 <= weighted_hr <= 0.7,
+                "cost_reasonable": total_cost / max(total_revenue, 1) < 0.02,
+                "currency_diversified": len(recommendations) >= 2,
+            },
+        }
+
     def auto_calibrate(self):
         """バックテスト結果に基づくidioパラメータ自動校正"""
         months_2024 = [f"2024/{m:02d}" for m in range(1, 13)]
