@@ -597,6 +597,12 @@ body {
     </div>
     <table class="data-table" id="pref-table"></table>
   </div>
+
+  <!-- 宿泊施設シミュレーター -->
+  <div class="chart-section" id="facility-sim-section">
+    <div class="chart-section-title">宿泊施設シミュレーター (RevPAR予測)</div>
+    <div id="facility-sim"></div>
+  </div>
 </div>
 
 <div class="status-bar" id="status-bar"></div>
@@ -1620,6 +1626,202 @@ function renderPrefTable() {
 /* =============================================================
    ステータスバー
    ============================================================= */
+/* =============================================================
+   宿泊施設シミュレーター
+   ============================================================= */
+var PREF_ROOM_SUPPLY = {
+  '東京':168000, '大阪':78000, '京都':32000, '北海道':45000, '沖縄':28000,
+  '福岡':25000, '千葉':22000, '愛知':20000, '神奈川':18000, '広島':12000,
+  '長崎':8000, '熊本':7000
+};
+
+/* 国別平均泊数(LOS) */
+var COUNTRY_LOS = {
+  KR:2.8, CN:5.2, TW:4.5, US:7.5, HK:4.0, TH:5.0, AU:8.5, SG:5.5,
+  PH:4.0, VN:3.5, ID:4.5, GB:9.0, FR:8.5, DE:8.0, CA:7.0, MY:4.5, IN:5.0
+};
+
+/* 国別ADR指数(全国平均=1.0) */
+var COUNTRY_ADR_INDEX = {
+  KR:0.75, CN:0.90, TW:0.85, US:1.45, HK:1.10, TH:0.80, AU:1.50, SG:1.20,
+  PH:0.65, VN:0.60, ID:0.65, GB:1.55, FR:1.50, DE:1.40, CA:1.35, MY:0.70, IN:0.70
+};
+
+/* 国別予約リードタイム(日) */
+var COUNTRY_LEAD_TIME = {
+  KR:14, CN:30, TW:28, US:60, HK:21, TH:25, AU:75, SG:35,
+  PH:20, VN:18, ID:22, GB:90, FR:85, DE:80, CA:65, MY:25, IN:30
+};
+
+function renderFacilitySim() {
+  try {
+    var container = document.getElementById('facility-sim');
+    var html = '';
+
+    /* 設定パネル */
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">';
+    html += '<div><label style="color:#64748b;font-size:10px;text-transform:uppercase;">都道府県</label>';
+    html += '<select id="fsim_pref" onchange="updateFacilitySim()" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 8px;font-size:12px;font-family:SF Mono,monospace;">';
+    for (var pi = 0; pi < PREF_LIST.length; pi++) {
+      html += '<option value="' + PREF_LIST[pi] + '">' + PREF_LIST[pi] + '</option>';
+    }
+    html += '</select></div>';
+    html += '<div><label style="color:#64748b;font-size:10px;text-transform:uppercase;">客室数</label>';
+    html += '<input type="number" id="fsim_rooms" value="30" min="1" max="1000" onchange="updateFacilitySim()" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 8px;font-size:12px;font-family:SF Mono,monospace;"></div>';
+    html += '<div><label style="color:#64748b;font-size:10px;text-transform:uppercase;">インバウンド比率</label>';
+    html += '<input type="range" id="fsim_inbound_ratio" min="10" max="100" value="60" oninput="updateFacilitySim()" style="width:100%;accent-color:#3b82f6;">';
+    html += '<span id="fsim_inbound_label" style="color:#94a3b8;font-size:11px;font-family:SF Mono,monospace;">60%</span></div>';
+    html += '<div><label style="color:#64748b;font-size:10px;text-transform:uppercase;">基準ADR (円)</label>';
+    html += '<input type="number" id="fsim_adr" value="25000" min="3000" max="200000" step="1000" onchange="updateFacilitySim()" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:4px 8px;font-size:12px;font-family:SF Mono,monospace;"></div>';
+    html += '</div>';
+
+    /* 結果テーブル */
+    html += '<div id="fsim_results"></div>';
+
+    /* リードタイムテーブル */
+    html += '<div style="margin-top:16px;">';
+    html += '<div style="color:#64748b;font-size:11px;font-weight:600;margin-bottom:8px;">国別予約リードタイム & 平均泊数</div>';
+    html += '<div id="fsim_leadtime"></div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+    updateFacilitySim();
+  } catch(e) { console.error('renderFacilitySim:', e); }
+}
+
+function updateFacilitySim() {
+  try {
+    var pref = document.getElementById('fsim_pref').value;
+    var rooms = parseInt(document.getElementById('fsim_rooms').value) || 30;
+    var inboundRatio = parseInt(document.getElementById('fsim_inbound_ratio').value) / 100;
+    var baseADR = parseInt(document.getElementById('fsim_adr').value) || 25000;
+
+    document.getElementById('fsim_inbound_label').textContent = Math.round(inboundRatio * 100) + '%';
+
+    /* 都道府県の予測データ取得 */
+    var prefFc = calcPrefForecast(pref);
+    var totalSupply = PREF_ROOM_SUPPLY[pref] || 20000;
+    var myShare = rooms / totalSupply;
+
+    /* 自施設の推定宿泊者数 (万人 → 人) */
+    var monthlyVisitors = prefFc.base * 10000;
+    var monthlyVisitorsP10 = prefFc.p10 * 10000;
+    var monthlyVisitorsP90 = prefFc.p90 * 10000;
+
+    /* 平均泊数(加重平均) */
+    var avgLOS = 0;
+    var totalWeight = 0;
+    var cKeys = Object.keys(COUNTRY_DATA);
+    for (var ci = 0; ci < cKeys.length; ci++) {
+      var cc = cKeys[ci];
+      var share = (PREF_SHARE[cc] || {})[pref] || 0.02;
+      var los = COUNTRY_LOS[cc] || 4.0;
+      avgLOS += los * share * COUNTRY_DATA[cc].base;
+      totalWeight += share * COUNTRY_DATA[cc].base;
+    }
+    avgLOS = totalWeight > 0 ? avgLOS / totalWeight : 4.0;
+
+    /* 宿泊室数 = 来訪者数 × 平均泊数 × 自施設シェア / 平均1室あたり人数(1.8) */
+    var guestsPerRoom = 1.8;
+    var myRoomNights = monthlyVisitors * avgLOS * myShare / guestsPerRoom * inboundRatio;
+    var myRoomNightsP10 = monthlyVisitorsP10 * avgLOS * myShare / guestsPerRoom * inboundRatio;
+    var myRoomNightsP90 = monthlyVisitorsP90 * avgLOS * myShare / guestsPerRoom * inboundRatio;
+
+    /* 国内客の分を追加 */
+    var domesticFactor = (1 - inboundRatio) / inboundRatio;
+    myRoomNights *= (1 + domesticFactor);
+    myRoomNightsP10 *= (1 + domesticFactor);
+    myRoomNightsP90 *= (1 + domesticFactor);
+
+    /* 稼働率 */
+    var capacity = rooms * 30;
+    var occBase = Math.min(myRoomNights / capacity * 100, 100);
+    var occP10 = Math.min(myRoomNightsP10 / capacity * 100, 100);
+    var occP90 = Math.min(myRoomNightsP90 / capacity * 100, 100);
+
+    /* 加重ADR (国別ADR指数) */
+    var wADR = 0;
+    var wTotal = 0;
+    for (var ai = 0; ai < cKeys.length; ai++) {
+      var ac = cKeys[ai];
+      var aShare = (PREF_SHARE[ac] || {})[pref] || 0.02;
+      var adrIdx = COUNTRY_ADR_INDEX[ac] || 1.0;
+      wADR += baseADR * adrIdx * aShare * COUNTRY_DATA[ac].base;
+      wTotal += aShare * COUNTRY_DATA[ac].base;
+    }
+    wADR = wTotal > 0 ? wADR / wTotal : baseADR;
+
+    /* RevPAR */
+    var revpar = wADR * occBase / 100;
+    var revparP10 = wADR * occP10 / 100;
+    var revparP90 = wADR * occP90 / 100;
+
+    /* 月間売上 */
+    var revenue = revpar * rooms * 30;
+    var revenueP10 = revparP10 * rooms * 30;
+    var revenueP90 = revparP90 * rooms * 30;
+
+    /* 結果表示 */
+    var rhtml = '<table class="data-table" style="font-size:12px;">';
+    rhtml += '<thead><tr><th style="width:180px;">指標</th><th style="text-align:right;">悲観(p10)</th><th style="text-align:right;">ベース(p50)</th><th style="text-align:right;">楽観(p90)</th></tr></thead>';
+    rhtml += '<tbody>';
+    rhtml += '<tr><td style="color:#94a3b8;font-weight:600;">推定稼働率</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono td-neg">' + occP10.toFixed(1) + '%</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono" style="color:#3b82f6;">' + occBase.toFixed(1) + '%</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono td-pos">' + occP90.toFixed(1) + '%</td></tr>';
+
+    rhtml += '<tr><td style="color:#94a3b8;font-weight:600;">加重ADR</td>';
+    rhtml += '<td colspan="3" style="text-align:center;" class="td-mono">' + Math.round(wADR).toLocaleString('ja-JP') + '円</td></tr>';
+
+    rhtml += '<tr><td style="color:#94a3b8;font-weight:600;">RevPAR</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono td-neg">' + Math.round(revparP10).toLocaleString('ja-JP') + '円</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono" style="color:#3b82f6;">' + Math.round(revpar).toLocaleString('ja-JP') + '円</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono td-pos">' + Math.round(revparP90).toLocaleString('ja-JP') + '円</td></tr>';
+
+    rhtml += '<tr><td style="color:#94a3b8;font-weight:600;">月間売上推計</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono td-neg">' + (revenueP10/10000).toFixed(0) + '万円</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono" style="color:#3b82f6;">' + (revenue/10000).toFixed(0) + '万円</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono td-pos">' + (revenueP90/10000).toFixed(0) + '万円</td></tr>';
+
+    rhtml += '<tr><td style="color:#94a3b8;font-weight:600;">室泊数/月</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono td-neg">' + Math.round(myRoomNightsP10) + '泊</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono">' + Math.round(myRoomNights) + '泊</td>';
+    rhtml += '<td style="text-align:right;" class="td-mono td-pos">' + Math.round(myRoomNightsP90) + '泊</td></tr>';
+
+    rhtml += '<tr><td style="color:#94a3b8;font-weight:600;">平均泊数(LOS)</td>';
+    rhtml += '<td colspan="3" style="text-align:center;" class="td-mono">' + avgLOS.toFixed(1) + '泊</td></tr>';
+
+    rhtml += '</tbody></table>';
+
+    /* 注釈 */
+    rhtml += '<div style="margin-top:8px;font-size:10px;color:#475569;">';
+    rhtml += pref + '全体の客室供給: ' + totalSupply.toLocaleString('ja-JP') + '室 | 自施設シェア: ' + (myShare*100).toFixed(3) + '% | 国別加重ADR (国籍別単価指数反映)';
+    rhtml += '</div>';
+
+    document.getElementById('fsim_results').innerHTML = rhtml;
+
+    /* リードタイムテーブル */
+    var ltHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:4px;">';
+    var topCountries = ['KR','CN','TW','US','AU','HK','TH','SG'];
+    for (var li = 0; li < topCountries.length; li++) {
+      var lc = topCountries[li];
+      var cd = COUNTRY_DATA[lc];
+      if (!cd) continue;
+      var lt = COUNTRY_LEAD_TIME[lc] || 30;
+      var los = COUNTRY_LOS[lc] || 4.0;
+      ltHtml += '<div style="background:#0d1117;border:1px solid rgba(255,255,255,0.06);border-radius:4px;padding:6px 8px;text-align:center;">';
+      ltHtml += '<div style="font-size:10px;color:#64748b;">' + cd.flag + ' ' + cd.name + '</div>';
+      ltHtml += '<div style="font-family:SF Mono,monospace;font-size:13px;color:#3b82f6;font-weight:600;">' + lt + '日前</div>';
+      ltHtml += '<div style="font-size:9px;color:#475569;">LOS: ' + los.toFixed(1) + '泊</div>';
+      ltHtml += '</div>';
+    }
+    ltHtml += '</div>';
+    document.getElementById('fsim_leadtime').innerHTML = ltHtml;
+
+  } catch(e) { console.error('updateFacilitySim:', e); }
+}
+
+
 function renderStatusBar() {
   try {
     var n = calcNational();
@@ -1849,6 +2051,7 @@ function init() {
     renderCountryTable();
     renderJapanMap();
     renderPrefTable();
+    renderFacilitySim();
     renderStatusBar();
     renderAlerts();
   } catch(e) { console.error('init:', e); }
