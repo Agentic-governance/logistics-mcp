@@ -1495,6 +1495,88 @@ async def get_three_scenarios(
     }
 
 
+@router.get("/fx-exposure")
+async def get_fx_exposure(
+    month: int = Query(default=4, ge=1, le=12),
+    year: int = Query(default=2026),
+):
+    """通貨別FXエクスポージャー台帳 (IFRS 9対応)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        cache_key = f"fx_exp_{year}_{month}"
+        result = await loop.run_in_executor(
+            None, lambda: _get_cached(cache_key, lambda: _full_mc_engine.fx_exposure(month, year))
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/var-cvar")
+async def get_var_cvar(
+    month: int = Query(default=4, ge=1, le=12),
+    year: int = Query(default=2026),
+    confidence: float = Query(default=0.99, ge=0.90, le=0.999),
+):
+    """VaR/CVaR計算 (モンテカルロ法)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        cache_key = f"var_{year}_{month}_{confidence}"
+        result = await loop.run_in_executor(
+            None, lambda: _get_cached(cache_key, lambda: _full_mc_engine.compute_var_cvar(month, year, confidence))
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/optimal-hedge")
+async def get_optimal_hedge(
+    month: int = Query(default=4, ge=1, le=12),
+    year: int = Query(default=2026),
+):
+    """ヘッジ比率最適化 (policy制約30-70%)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        cache_key = f"opt_hedge_{year}_{month}"
+        result = await loop.run_in_executor(
+            None, lambda: _get_cached(cache_key, lambda: _full_mc_engine.optimal_hedge_ratio(month, year))
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hedge-effectiveness")
+async def get_hedge_effectiveness(
+    hedge_notional_jpy: float = Query(default=3000e8, gt=0),
+    hedged_item_pct: float = Query(default=1.0, gt=0, le=1.0),
+    fx_sensitivity: float = Query(default=0.8, gt=0, le=2.0),
+):
+    """IFRS 9ヘッジ有効性テスト (80-125%ルール)"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        months = [f"2024/{m:02d}" for m in range(1, 13)]
+        result = await loop.run_in_executor(
+            None, lambda: _full_mc_engine.hedge_effectiveness_test(months, hedge_notional_jpy, hedged_item_pct, fx_sensitivity)
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/auto-calibrate")
 async def get_auto_calibrate():
     """バックテスト結果に基づくidioパラメータ自動校正"""

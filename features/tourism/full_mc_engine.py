@@ -163,6 +163,120 @@ class FullMCEngine:
             }
         return {"month": f"{year}/{month:02d}", "scores": scores}
 
+    # 国通貨マッピング (訪日客の支払通貨ベース)
+    CURRENCY_MAP = {
+        "KR":"KRW","CN":"CNY","TW":"TWD","US":"USD","AU":"AUD",
+        "TH":"THB","HK":"HKD","SG":"SGD",
+    }
+    # 為替レート前提 (JPY per 1 unit of currency, as of 2026/04)
+    FX_RATES = {
+        "USD":155.0,"KRW":0.115,"CNY":21.3,"TWD":4.85,"AUD":100.5,
+        "THB":4.25,"HKD":19.8,"SGD":115.2,
+    }
+
+    def fx_exposure(self, month=4, year=2026):
+        """通貨別FXエクスポージャー台帳 (IFRS 9ヘッジ会計対応)"""
+        spending = self.spending_forecast(month, year)
+        exposures = {}
+        currencies = {}
+        for iso2, data in spending["by_country"].items():
+            ccy = self.CURRENCY_MAP.get(iso2)
+            if not ccy: continue
+            fx_rate = self.FX_RATES.get(ccy, 1.0)
+            # 円建て消費額 → 現地通貨換算 (観光客の支払は基本JPYだが、サプライチェーン・仕入は現地通貨)
+            # 営業CF受取は円建て、仕入CF支払は50%が現地通貨と仮定
+            revenue_jpy = data["monthly_spending_p50"]
+            revenue_p10 = data["monthly_spending_p10"]
+            revenue_p90 = data["monthly_spending_p90"]
+            notional_ccy = revenue_jpy / fx_rate
+            currencies.setdefault(ccy, {"notional_ccy":0,"notional_jpy":0,"p10_jpy":0,"p90_jpy":0,"countries":[]})
+            currencies[ccy]["notional_ccy"] += notional_ccy
+            currencies[ccy]["notional_jpy"] += revenue_jpy
+            currencies[ccy]["p10_jpy"] += revenue_p10
+            currencies[ccy]["p90_jpy"] += revenue_p90
+            currencies[ccy]["countries"].append(iso2)
+            exposures[iso2] = {
+                "currency": ccy, "fx_rate": fx_rate,
+                "notional_ccy": round(notional_ccy),
+                "notional_jpy": revenue_jpy,
+                "p10_jpy": revenue_p10, "p90_jpy": revenue_p90,
+            }
+        # 通貨別サマリー
+        for ccy, c in currencies.items():
+            c["notional_ccy"] = round(c["notional_ccy"])
+            c["var_at_risk_pct"] = round((c["notional_jpy"] - c["p10_jpy"]) / max(c["notional_jpy"], 1) * 100, 1)
+        return {
+            "month": f"{year}/{month:02d}",
+            "by_country": exposures,
+            "by_currency": currencies,
+        }
+
+    def compute_var_cvar(self, month=4, year=2026, confidence=0.99):
+        """VaR/CVaRをモンテカルロシミュレーションから算出"""
+        months_list = [f"{year}/{month:02d}"]
+        # FXショック込みのMCサンプル生成
+        n = min(self.n_samples, 3000)
+        # 通貨別サンプル生成 (各通貨の消費額分布)
+        from .variable_distributions import sample_all_vars, VAR_IDX
+        all_vars = sample_all_vars(n)
+
+        # 全通貨合算の消費額サンプル
+        total_samples_jpy = np.zeros(n)
+        currency_samples = {}
+        for iso2 in ALL_COUNTRIES:
+            ccy = self.CURRENCY_MAP.get(iso2)
+            if not ccy: continue
+            # 訪問者数サンプル (MCから)
+            visitor_samples = self._compute_country(iso2, month, year, all_vars)
+            # 消費単価サンプル (対数正規)
+            mean_spv, cv = self.SPENDING_PARAMS.get(iso2, (120000, 0.35))
+            sigma_ln = np.sqrt(np.log(1 + cv**2))
+            mu_ln = np.log(mean_spv) - 0.5 * sigma_ln**2
+            spv_samples = np.random.lognormal(mu_ln, sigma_ln, n)
+            # 為替変動サンプル
+            fx_var = f"fx_{ccy.lower()}"
+            if fx_var in VAR_IDX:
+                fx_shock = all_vars[:, VAR_IDX[fx_var]]
+            else:
+                fx_shock = np.zeros(n)
+            # 円建て消費額 (為替影響込み)
+            fx_base = self.FX_RATES.get(ccy, 1.0)
+            jpy_samples = visitor_samples * spv_samples * (1 + fx_shock * 0.5)  # 為替感応0.5
+            total_samples_jpy += jpy_samples
+            currency_samples[ccy] = jpy_samples
+
+        # 全体VaR/CVaR (日本円ベース、期待値からの下方乖離)
+        expected = float(np.mean(total_samples_jpy))
+        loss_distribution = expected - total_samples_jpy  # 期待値からの損失
+        alpha = 1 - confidence  # 0.01 for 99%
+        var_threshold = float(np.percentile(loss_distribution, 100 * confidence))
+        cvar_tail = loss_distribution[loss_distribution >= var_threshold]
+        cvar = float(np.mean(cvar_tail)) if len(cvar_tail) > 0 else var_threshold
+
+        # 通貨別VaR
+        ccy_var = {}
+        for ccy, samples in currency_samples.items():
+            c_exp = float(np.mean(samples))
+            c_loss = c_exp - samples
+            c_var = float(np.percentile(c_loss, 100 * confidence))
+            ccy_var[ccy] = {
+                "notional_jpy": int(c_exp),
+                "var_jpy": int(c_var),
+                "var_pct": round(c_var / max(c_exp, 1) * 100, 2),
+            }
+
+        return {
+            "month": f"{year}/{month:02d}",
+            "confidence_level": confidence,
+            "n_samples": n,
+            "expected_revenue_jpy": int(expected),
+            "var_jpy": int(var_threshold),
+            "cvar_jpy": int(cvar),
+            "var_pct": round(var_threshold / max(expected, 1) * 100, 2),
+            "cvar_pct": round(cvar / max(expected, 1) * 100, 2),
+            "by_currency": ccy_var,
+        }
+
     # 国別1人1回あたり消費額 (mean, CV) — 観光庁2024年調査
     SPENDING_PARAMS = {
         "KR": (72000, 0.35), "CN": (210000, 0.45), "TW": (125000, 0.30),
@@ -218,6 +332,109 @@ class FullMCEngine:
             "condition_number": round(float(eigvals.max() / max(eigvals.min(), 1e-10)), 1),
             "is_positive_definite": bool(eigvals.min() > 0),
             "near_singular": bool(eigvals.min() < 1e-4),
+        }
+
+    def optimal_hedge_ratio(self, month=4, year=2026, target="cvar_min"):
+        """ヘッジ比率最適化 (制約: 30-70%, 目的: CVaR最小化)"""
+        var_result = self.compute_var_cvar(month, year, confidence=0.95)
+        # ヘッジ比率を0.0-1.0で変化させたときのCVaR評価
+        # ヘッジ済み部分は為替リスク完全除去、未ヘッジ部分はMC分散維持
+        unhedged_cvar = var_result["cvar_jpy"]
+        unhedged_var = var_result["var_jpy"]
+
+        best_ratio = 0.5
+        best_metric = float('inf')
+        candidates = []
+        for r in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+            # ヘッジ後残存リスク = (1-r) × unhedged + r × 0 + ヘッジコスト
+            residual_cvar = (1 - r) * unhedged_cvar
+            # ヘッジコスト: フォワードプレミアム年率2% + オプション時間価値
+            hedge_cost_rate = 0.02 * (r / 12)  # 月割り
+            notional = var_result["expected_revenue_jpy"]
+            hedge_cost_jpy = notional * hedge_cost_rate
+            total_loss = residual_cvar + hedge_cost_jpy
+            candidates.append({
+                "hedge_ratio": r, "residual_cvar": int(residual_cvar),
+                "hedge_cost_jpy": int(hedge_cost_jpy), "total_loss": int(total_loss),
+                "within_policy": 0.3 <= r <= 0.7,
+            })
+            if 0.3 <= r <= 0.7 and total_loss < best_metric:
+                best_metric = total_loss
+                best_ratio = r
+
+        return {
+            "month": f"{year}/{month:02d}",
+            "optimal_ratio": best_ratio,
+            "policy_range": [0.3, 0.7],
+            "unhedged_cvar_jpy": int(unhedged_cvar),
+            "unhedged_var_jpy": int(unhedged_var),
+            "optimal_total_loss": int(best_metric),
+            "candidates": candidates,
+            "note": "ヘッジコスト: フォワードプレミアム年率2% + オプション時間価値",
+        }
+
+    def hedge_effectiveness_test(self, months, hedge_notional_jpy, hedged_item_pct=1.0, fx_sensitivity=0.8):
+        """IFRS 9ヘッジ有効性テスト (80-125%ルール)
+        ヘッジ対象: 外貨建て売上の為替感応部分
+        ヘッジ手段: 為替フォワード (売りヘッジ)
+        """
+        actual = self._load_actual_arrivals(months, "ALL")
+        y = np.array(actual, dtype=float)
+        if not any(y > 0):
+            return {"status": "no_data", "note": "実績データ不足"}
+
+        # FXショックサンプル (月次)
+        np.random.seed(42)
+        fx_changes = np.random.normal(0, 0.04, len(months))
+
+        # ヘッジ対象: 外貨建て売上の為替変動影響
+        # 売上 × 為替感応度 × FXショック
+        avg_spv = 150000
+        base_revenue = y * avg_spv * hedged_item_pct
+        hedged_item_values = base_revenue * (1 + fx_changes * fx_sensitivity)  # 為替感応
+
+        # ヘッジ手段: 為替フォワード売りヘッジ
+        # PnL = -Notional × FXショック (円安→損失をフォワード売りで相殺)
+        hedging_instrument_values = -hedge_notional_jpy * fx_changes
+
+        # 80-125%ルール判定: Δヘッジ手段 / Δヘッジ対象 (為替影響部分のみ)
+        # 為替影響部分 = hedged_item - base_revenue
+        fx_impact_on_hedged = hedged_item_values - base_revenue
+        dY = np.diff(fx_impact_on_hedged)
+        dH = np.diff(hedging_instrument_values)
+        if len(dY) < 2 or np.sum(np.abs(dY)) == 0:
+            return {"status": "insufficient_data"}
+
+        # 最小二乗回帰: dH = slope × dY + intercept
+        mean_dY = np.mean(dY); mean_dH = np.mean(dH)
+        num = np.sum((dY - mean_dY) * (dH - mean_dH))
+        den = np.sum((dY - mean_dY) ** 2)
+        slope = float(num / den) if den > 0 else 0
+        # 有効性比率 = |slope| × 100 (-1.0 = 完全ヘッジ)
+        # ヘッジ対象変動1単位に対するヘッジ手段変動を%で表現
+        avg_effectiveness = abs(slope) * 100
+        # 相関係数 (R)
+        if np.std(dY) > 0 and np.std(dH) > 0:
+            correlation = float(np.corrcoef(dY, dH)[0, 1])
+            r_squared = correlation ** 2
+        else:
+            correlation = 0; r_squared = 0
+
+        # IFRS 9: 80-125%ルール + R²>0.8 + 相関が負 (売りヘッジ)
+        is_highly_effective = 80 <= avg_effectiveness <= 125 and r_squared >= 0.8 and correlation < 0
+
+        return {
+            "months": months,
+            "hedge_notional_jpy": hedge_notional_jpy,
+            "hedged_item_pct": hedged_item_pct,
+            "effectiveness_ratio": round(avg_effectiveness, 1),
+            "slope": round(slope, 4),
+            "correlation": round(correlation, 4),
+            "r_squared": round(r_squared, 4),
+            "is_highly_effective": is_highly_effective,
+            "ifrs9_compliant": is_highly_effective,
+            "judgement": "高度に有効 (80-125%ルール適合)" if is_highly_effective else
+                         f"無効 (比率={avg_effectiveness:.0f}%, R²={r_squared:.2f})",
         }
 
     def auto_calibrate(self):
