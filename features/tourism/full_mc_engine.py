@@ -366,8 +366,24 @@ class FullMCEngine:
             ],
         }
 
-    def audit_trail(self, action, params, user="system", result_summary="", persist=True):
-        """監査証跡 (チェーン化された不変ログ、永続化対応)"""
+    # 監査ログパス (環境変数で設定可能)
+    AUDIT_LOG_PATH = None  # 遅延初期化
+
+    @classmethod
+    def _get_audit_path(cls):
+        """監査ログパス取得 (環境変数SCRI_AUDIT_LOG優先)"""
+        import os
+        if cls.AUDIT_LOG_PATH:
+            return cls.AUDIT_LOG_PATH
+        env_path = os.environ.get("SCRI_AUDIT_LOG")
+        if env_path:
+            return env_path
+        return os.path.expanduser("~/supply-chain-risk/data/audit_trail.jsonl")
+
+    def audit_trail(self, action, params, user="system", result_summary="", persist=True, strict=False):
+        """監査証跡 (チェーン化された不変ログ、永続化対応)
+        strict=True: 書き込み失敗時にIOError送出 (fail-fast)
+        """
         import hashlib, datetime, json, os
         timestamp = datetime.datetime.now().isoformat()
         prev_hash = self._get_last_audit_hash() if persist else "GENESIS"
@@ -381,18 +397,23 @@ class FullMCEngine:
         entry_hash = hashlib.sha256(entry_str.encode('utf-8')).hexdigest()
         entry["entry_hash"] = entry_hash
         if persist:
-            audit_dir = os.path.expanduser("~/supply-chain-risk/data")
+            audit_path = self._get_audit_path()
             try:
-                os.makedirs(audit_dir, exist_ok=True)
-                audit_path = os.path.join(audit_dir, "audit_trail.jsonl")
+                os.makedirs(os.path.dirname(audit_path), exist_ok=True)
                 with open(audit_path, 'a', encoding='utf-8') as f:
                     f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-            except Exception: pass
+                entry["persisted"] = True
+                entry["persist_path"] = audit_path
+            except Exception as e:
+                entry["persisted"] = False
+                entry["persist_error"] = str(e)
+                if strict:
+                    raise IOError(f"監査ログ書き込み失敗: {e}")
         return entry
 
     def _get_last_audit_hash(self):
         import os, json
-        audit_path = os.path.expanduser("~/supply-chain-risk/data/audit_trail.jsonl")
+        audit_path = self._get_audit_path()
         if not os.path.exists(audit_path): return "GENESIS"
         try:
             with open(audit_path, 'r', encoding='utf-8') as f:
@@ -404,7 +425,7 @@ class FullMCEngine:
     def verify_audit_chain(self):
         """監査証跡チェーンの整合性検証 (改ざん検知)"""
         import os, json, hashlib
-        audit_path = os.path.expanduser("~/supply-chain-risk/data/audit_trail.jsonl")
+        audit_path = self._get_audit_path()
         if not os.path.exists(audit_path):
             return {"status": "empty", "entries": 0, "chain_valid": True}
         entries = []

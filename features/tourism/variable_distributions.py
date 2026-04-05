@@ -78,26 +78,27 @@ def _build_corr():
     s("clt_us","gdp_us",+0.35)
     s("flt_cn","gdp_cn",+0.30); s("flt_kr","gdp_kr",+0.20)
     # Higham (2002) nearest correlation matrix（対角1を保持しつつ正定値に）
-    # Broadcasting matmul (np.diag回避) + ridge regularization
+    # 事前にridge正則化して数値安定性確保
+    ridge_alpha = 0.005
+    C = (1 - ridge_alpha) * C + ridge_alpha * np.eye(N_VARS)
+    np.fill_diagonal(C, 1.0)
+    # Broadcasting matmul版 Higham
     S = np.zeros_like(C)
     Y = C.copy()
-    eps = 1e-4  # 固有値下限を引き上げ (1e-6→1e-4) で数値安定性向上
-    for _ in range(200):
+    eps = 1e-3  # 固有値下限をさらに引き上げ
+    for _ in range(100):
         R = Y - S
         eigvals, eigvecs = np.linalg.eigh(R)
         eigvals = np.maximum(eigvals, eps)
-        X = (eigvecs * eigvals) @ eigvecs.T  # broadcasting (np.diagより高速・安定)
+        # Broadcasting: (eigvecs * eigvals) @ eigvecs.T
+        X = np.matmul(eigvecs * eigvals[np.newaxis, :], eigvecs.T)
         S = X - R
         Y = X.copy()
         np.fill_diagonal(Y, 1.0)
         if np.linalg.eigvalsh(Y).min() >= eps:
             break
-    # Ridge regularization: わずかにI_nを混ぜて条件数改善
-    ridge_alpha = 0.001
-    C = (1 - ridge_alpha) * Y + ridge_alpha * np.eye(N_VARS)
-    # 再度対角を1に戻す
-    np.fill_diagonal(C, 1.0)
-    return C
+    np.fill_diagonal(Y, 1.0)
+    return Y
 
 CORR = _build_corr()
 CHOL = np.linalg.cholesky(CORR)

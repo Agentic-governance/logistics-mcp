@@ -41,3 +41,4 @@ htmlcov/
 
 # レポート（大きいもの）
 reports/*.txt
+data/audit_trail.jsonl
