@@ -280,6 +280,30 @@ class FullMCEngine:
             "by_month": by_month,
         }
 
+    def _compute_bias_correction(self, source_country="ALL"):
+        """過去12ヶ月の予測バイアスを推定して補正係数を返す"""
+        try:
+            months_2024 = [f"2024/{m:02d}" for m in range(1, 13)]
+            actual = self._load_actual_arrivals(months_2024, source_country)
+            if not any(a > 0 for a in actual):
+                return 1.0
+            # 簡易予測（シード固定で再現性確保）
+            saved_state = np.random.get_state()
+            np.random.seed(42)
+            pred = self.run.__wrapped__(self, months_2024, source_country) if hasattr(self.run, '__wrapped__') else None
+            np.random.set_state(saved_state)
+            if pred is None:
+                return 1.0
+            y = np.array(actual, dtype=float)
+            yhat = np.array(pred["median"], dtype=float)
+            mask = y > 0
+            if not mask.any():
+                return 1.0
+            ratio = np.mean(y[mask] / yhat[mask])
+            return float(np.clip(ratio, 0.7, 1.3))  # ±30%上限
+        except Exception:
+            return 1.0
+
     def run(self, months, source_country="ALL"):
         if self.n_samples < 1:
             raise ValueError(f"n_samples must be >= 1, got {self.n_samples}")

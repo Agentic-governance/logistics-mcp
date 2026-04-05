@@ -656,6 +656,15 @@ body {
   </div>
 </div>
 
+<!-- モデル情報 -->
+<div class="chart-section" id="model-info-section" style="border:1px solid rgba(59,130,246,0.15); max-width:1400px; margin:0 auto 20px; padding:20px 24px;">
+  <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleModelInfo()">
+    <div class="chart-section-title" style="margin-bottom:0;">モデル情報・方法論</div>
+    <span id="model-info-toggle" style="font-size:11px; color:#3b82f6; font-family:'SF Mono','Fira Code','Consolas',monospace;">[ + 展開 ]</span>
+  </div>
+  <div id="model-info-panel" style="display:none; margin-top:12px;"></div>
+</div>
+
 <div class="status-bar" id="status-bar"></div>
 
 <script>
@@ -2559,6 +2568,22 @@ function renderStatusBar() {
 
 
 /* =============================================================
+   データソースバッジ表示 (LIVE / STATIC)
+   ============================================================= */
+function renderDataSource(sectionId, isLive) {
+  try {
+    var section = document.getElementById(sectionId);
+    if (!section) return;
+    var title = section.querySelector('.chart-section-title') || section.querySelector('.table-section-title');
+    if (title && title.getAttribute('data-source') !== 'set') {
+      title.setAttribute('data-source', 'set');
+      var badge = isLive ? '<span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:8px;font-weight:400;letter-spacing:0;">LIVE</span>' : '<span style="background:rgba(234,179,8,0.15);color:#facc15;font-size:9px;padding:1px 5px;border-radius:3px;margin-left:8px;font-weight:400;letter-spacing:0;">STATIC</span>';
+      title.innerHTML = title.innerHTML + badge;
+    }
+  } catch(e) {}
+}
+
+/* =============================================================
    API読み込み (フォールバック上書き)
    ============================================================= */
 function loadFromAPI() {
@@ -2613,9 +2638,47 @@ function loadFromAPI() {
           renderPrefTable();
           renderChartStats();
 
+          /* データソースバッジ: シナリオ系セクション */
+          renderDataSource('forecast-section', true);
+          renderDataSource('scenario-section', true);
+          renderDataSource('country-section', true);
+          renderDataSource('pref-section', true);
+
+          /* ステータスバーをLIVEモードに更新 */
+          var statusBar = document.getElementById('status-bar');
+          if (statusBar) {
+            var items = statusBar.querySelectorAll('.status-item');
+            var lastItem = items[items.length - 1];
+            if (lastItem) {
+              lastItem.innerHTML = '<span class="status-label">mode: </span><span class="status-value" style="color:#22c55e;">LIVE</span>';
+            }
+          }
+
         } catch(e) { console.warn('APIデータ処理:', e.message); }
       })
       .catch(function(e) { console.warn('API:', e.message); });
+
+    /* 消費額データもAPI取得 */
+    try {
+      fetch('/api/v1/tourism/spending-forecast?month=4&year=2026', {signal: ctrl.signal})
+        .then(function(r) { return r.json(); })
+        .then(function(json) {
+          try {
+            var sd = json.data || json;
+            if (sd.total_p50_oku) {
+              var sp = document.getElementById('spending-panel');
+              if (sp) {
+                var note = sp.querySelector('div:last-child');
+                if (note) note.innerHTML = '<span style="color:#22c55e;">LIVE</span> ' + note.textContent;
+              }
+              renderDataSource('spending-section', true);
+            }
+          } catch(e) {}
+        }).catch(function(){
+          renderDataSource('spending-section', false);
+        });
+    } catch(e) {}
+
   } catch(e) { console.warn('API接続:', e.message); }
 }
 

@@ -1495,6 +1495,53 @@ async def get_three_scenarios(
     }
 
 
+@router.get("/model-diagnostics")
+async def get_model_diagnostics():
+    """モデル診断情報（バックテスト + 相関行列 + 設定）"""
+    if _full_mc_engine is None:
+        raise HTTPException(status_code=503, detail="MCエンジン未初期化")
+    try:
+        import asyncio
+        from features.tourism.variable_distributions import SPECS, VAR_NAMES, N_VARS
+        from features.tourism.full_mc_engine import FX_ELA, GDP_ELA, FLT_ELA, GEO_COEF, PARAMS
+
+        loop = asyncio.get_event_loop()
+        bt = await loop.run_in_executor(
+            None, lambda: _get_cached("diagnostics_bt", lambda: _full_mc_engine.backtest(
+                [f"2024/{m:02d}" for m in range(1, 13)], "ALL"
+            ))
+        )
+        corr = _full_mc_engine.correlation_health()
+
+        return {
+            "status": "ok",
+            "model": {
+                "name": "FullMCEngine",
+                "type": "29変数相関モンテカルロシミュレーション",
+                "n_samples": _full_mc_engine.n_samples,
+                "n_variables": N_VARS,
+                "correlation_method": "Higham (2002) nearest correlation matrix",
+                "countries": list(PARAMS.keys()),
+            },
+            "elasticities": {
+                "fx": dict(FX_ELA),
+                "gdp": GDP_ELA,
+                "flight": FLT_ELA,
+                "geopolitical": GEO_COEF,
+            },
+            "variables": {v: {"label": SPECS[v].name, "sigma": SPECS[v].sigma} for v in VAR_NAMES},
+            "correlation_health": corr,
+            "backtest_2024": bt,
+            "references": [
+                "Santos Silva & Tenreyro (2006) - PPML gravity model",
+                "Higham (2002) - Nearest correlation matrix",
+                "Crouch (1994) - Tourism demand elasticities",
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/cache-status")
 async def get_cache_status():
     now = _time.time()

@@ -1457,10 +1457,71 @@ function init() {
   } catch(e) { console.error('init:', e); }
 }
 
+function loadDetailAPI() {
+  try {
+    var code = getCountryCode();
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 6000);
+
+    /* Driver sensitivity from API */
+    fetch('/api/v1/tourism/driver-sensitivity?source_country=' + code, {signal: ctrl.signal})
+      .then(function(r) { clearTimeout(timer); if(!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(json) {
+        try {
+          var d = json.data || json;
+          if (d.sensitivities) {
+            var container = document.getElementById('driver-bars');
+            if (!container) return;
+            var entries = [];
+            var keys = Object.keys(d.sensitivities);
+            for (var i = 0; i < keys.length; i++) {
+              var s = d.sensitivities[keys[i]];
+              entries.push({name: s.label, pct: s.total_range_pct, up: s.up_pct, down: s.down_pct});
+            }
+            entries.sort(function(a,b) { return b.pct - a.pct; });
+
+            var html = '';
+            var maxPct = entries.length > 0 ? entries[0].pct : 1;
+            for (var j = 0; j < entries.length; j++) {
+              var e = entries[j];
+              var barW = Math.max(4, e.pct / maxPct * 100);
+              var color = e.pct > 30 ? '#ef4444' : (e.pct > 15 ? '#eab308' : '#3b82f6');
+              html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+              html += '<span style="width:120px;font-size:11px;color:#e2e8f0;flex-shrink:0;">' + esc(e.name) + '</span>';
+              html += '<div style="flex:1;height:16px;background:#1e293b;border-radius:3px;overflow:hidden;">';
+              html += '<div style="width:' + barW.toFixed(0) + '%;height:100%;background:' + color + ';border-radius:3px;"></div></div>';
+              html += '<span style="font-family:SF Mono,monospace;font-size:11px;color:' + color + ';width:50px;text-align:right;">' + e.pct.toFixed(1) + '%</span>';
+              html += '</div>';
+            }
+            html += '<div style="font-size:9px;color:#22c55e;margin-top:4px;">LIVE (MC \u00b11\u03c3 sensitivity)</div>';
+            container.innerHTML = html;
+          }
+        } catch(e) { console.warn('Driver API:', e.message); }
+      })
+      .catch(function(e) { console.warn('Driver:', e.message); });
+
+    /* Correlation health */
+    fetch('/api/v1/tourism/three-scenarios?source_country=' + code, {signal: ctrl.signal})
+      .then(function(r) { return r.json(); })
+      .then(function(json) {
+        var d = json.data || json;
+        if (d.correlation_health) {
+          var sb = document.getElementById('status-bar');
+          if (sb) sb.innerHTML += '<span style="color:' + (d.correlation_health.near_singular ? '#eab308' : '#22c55e') + ';">corr: ' + (d.correlation_health.is_positive_definite ? 'PD' : 'NOT-PD') + '</span>';
+        }
+        if (d.backtest_summary && d.backtest_summary.mape != null) {
+          var sb2 = document.getElementById('status-bar');
+          if (sb2) sb2.innerHTML += '<span>MAPE: ' + d.backtest_summary.mape.toFixed(1) + '%</span>';
+        }
+      }).catch(function(){});
+  } catch(e) {}
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
+  document.addEventListener('DOMContentLoaded', function(){ init(); loadDetailAPI(); });
 } else {
   init();
+  loadDetailAPI();
 }
 </script>
 </body>
